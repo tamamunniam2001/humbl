@@ -201,7 +201,9 @@ export default function ProductsPage() {
 
   function startEdit(p) {
     setForm({ code: p.code || '', name: p.name, price: p.price, stock: p.stock, categoryId: p.categoryId, imageUrl: p.imageUrl || '' })
-    setEditId(p.id); setShowForm(true); setFormIngredients([])
+    setEditId(p.id); setShowForm(true)
+    const mapped = (p.ingredients || []).map(item => ({ ingredientId: item.ingredientId, qty: item.qty }))
+    setFormIngredients(mapped)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -464,8 +466,7 @@ export default function ProductsPage() {
                   </div>
                 </div>
 
-                {!editId && (
-                  <div style={{ marginBottom: '20px' }}>
+                <div style={{ marginBottom: '20px' }}>
                     <div className="divider" />
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
                       <div className="section-label" style={{ margin: 0 }}>Bahan Baku</div>
@@ -484,6 +485,7 @@ export default function ProductsPage() {
                       if (hpp === 0) return null
                       const price = Number(form.price)
                       const margin = price ? ((price - hpp) / price) * 100 : null
+                      const profit = price ? price - hpp : null
                       const color = margin === null ? '#4A7CC7' : margin >= 50 ? '#2A9D6E' : margin >= 30 ? '#C47D1A' : '#C95555'
                       const bg = margin === null ? '#EBF1FB' : margin >= 50 ? '#E8F7F1' : margin >= 30 ? '#FDF4E3' : '#FEF2F2'
                       const border = margin === null ? '#C0D0E8' : margin >= 50 ? '#A7DFC8' : margin >= 30 ? '#F0D090' : '#FECACA'
@@ -495,15 +497,14 @@ export default function ProductsPage() {
                           </div>
                           {margin !== null && (
                             <div style={{ textAlign: 'right' }}>
-                              <div style={{ fontSize: '11px', color: '#64748B', marginBottom: '2px' }}>Margin</div>
-                              <div style={{ fontSize: '15px', fontWeight: '800', color }}>{margin.toFixed(1)}%</div>
+                              <div style={{ fontSize: '11px', color: '#64748B', marginBottom: '2px' }}>Margin · Profit</div>
+                              <div style={{ fontSize: '15px', fontWeight: '800', color }}>{margin.toFixed(1)}% · +Rp {fmtRp(Math.round(profit))}</div>
                             </div>
                           )}
                         </div>
                       )
                     })()}
                   </div>
-                )}
 
                 <div className="divider" />
                 <div style={{ display: 'flex', gap: '10px' }}>
