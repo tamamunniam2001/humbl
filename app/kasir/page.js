@@ -882,14 +882,13 @@ function ManualItemButton({ onAdd, categories }) {
 }
 
 // ── Closing Modal ──
-// â”€â”€ Closing Modal â”€â”€
-const SHIFTS = [\r\n  { key: 'SHIFT_1', label: 'Closing Shift 1', jam: '07.00 - 13.00' },\r\n  { key: 'SHIFT_2', label: 'Closing Shift 2', jam: '13.00 - 18.00' },\r\n  { key: 'SHIFT_3', label: 'Closing Shift 3', jam: '18.00 - 23.00' },\r\n]\r\n\r\nconst SHIFTS = [
+const SHIFTS = [
   { key: 'SHIFT_1', label: 'Closing Shift 1', jam: '07.00 - 13.00' },
   { key: 'SHIFT_2', label: 'Closing Shift 2', jam: '13.00 - 18.00' },
   { key: 'SHIFT_3', label: 'Closing Shift 3', jam: '18.00 - 23.00' },
 ]
 
-function ClosingModal({ orders, onClose, onSaved }) {\r\n  const [shift, setShift] = useState('SHIFT_1')\r\n  const activeShift = SHIFTS.find(s => s.key === shift)
+function ClosingModal({ orders, onClose, onSaved }) {
   const fmt = (n) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(n || 0)
 
   const [shift, setShift] = useState('SHIFT_1')
