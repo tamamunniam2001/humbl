@@ -233,7 +233,9 @@ model Attendance {
 
 enum SopType {
   OPENING
-  CLOSING
+  CLOSING_1
+  CLOSING_2
+  CLOSING_3
 }
 
 model MonthlyKas {

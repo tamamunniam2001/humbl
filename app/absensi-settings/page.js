@@ -46,8 +46,10 @@ export default function AbsensiSettingsPage() {
     await api.delete(`/admin/sop/${id}`); loadAll()
   }
 
-  const openingSop = sopItems.filter(s => s.type === 'OPENING')
-  const closingSop = sopItems.filter(s => s.type === 'CLOSING')
+  const openingSop  = sopItems.filter(s => s.type === 'OPENING')
+  const closing1Sop  = sopItems.filter(s => s.type === 'CLOSING_1')
+  const closing2Sop  = sopItems.filter(s => s.type === 'CLOSING_2')
+  const closing3Sop  = sopItems.filter(s => s.type === 'CLOSING_3')
 
   return (
     <div className="page">
@@ -130,7 +132,9 @@ export default function AbsensiSettingsPage() {
                   <label className="label">Tipe</label>
                   <select className="input" value={sopForm.type} onChange={e => setSopForm({ ...sopForm, type: e.target.value })} style={{ marginBottom: '12px' }}>
                     <option value="OPENING">Opening</option>
-                    <option value="CLOSING">Closing</option>
+                    <option value="CLOSING_1">Closing Shift 1 (07.00 – 13.00)</option>
+                    <option value="CLOSING_2">Closing Shift 2 (13.00 – 18.00)</option>
+                    <option value="CLOSING_3">Closing Shift 3 (18.00 – 23.00)</option>
                   </select>
                   <label className="label">Isi SOP</label>
                   <textarea className="input" rows={3} placeholder="Contoh: Membersihkan area kasir" value={sopForm.text}
@@ -146,10 +150,11 @@ export default function AbsensiSettingsPage() {
 
               {/* List SOP */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {[['OPENING', openingSop, 'var(--accent)'], ['CLOSING', closingSop, 'var(--red)']].map(([type, items, color]) => (
+                {[['OPENING', openingSop, 'var(--accent)', ''], ['CLOSING_1', closing1Sop, 'var(--red)', '07.00 – 13.00'], ['CLOSING_2', closing2Sop, 'var(--red)', '13.00 – 18.00'], ['CLOSING_3', closing3Sop, 'var(--red)', '18.00 – 23.00']].map(([type, items, color, jam]) => (
                   <div key={type} className="card" style={{ overflow: 'hidden' }}>
                     <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <span style={{ fontWeight: '700', fontSize: '14px', color }}>{type}</span>
+                      <span style={{ fontWeight: '700', fontSize: '14px', color }}>{type === 'OPENING' ? 'Opening' : type.replace('_', ' ')}</span>
+                      {jam && <span style={{ fontSize: '12px', color: 'var(--muted)' }}>{jam}</span>}
                       <span className="badge badge-blue">{items.length} item</span>
                     </div>
                     <table className="table">
@@ -169,7 +174,7 @@ export default function AbsensiSettingsPage() {
                           </tr>
                         ))}
                         {items.length === 0 && (
-                          <tr><td colSpan={3} style={{ padding: '24px', textAlign: 'center', color: 'var(--muted)', fontSize: '13px' }}>Belum ada item {type}</td></tr>
+                          <tr><td colSpan={3} style={{ padding: '24px', textAlign: 'center', color: 'var(--muted)', fontSize: '13px' }}>Belum ada item {type === 'OPENING' ? 'Opening' : type.replace('_', ' ')}</td></tr>
                         )}
                       </tbody>
                     </table>
