@@ -435,11 +435,11 @@ export default function ProductsPage() {
                         const hpp = calcHpp(formIngredients, allIngredients)
                         const price = Number(form.price)
                         if (!price || hpp === 0) return null
-                        const margin = ((price - hpp) / price) * 100
+                        const margin = ((price - hpp) / hpp) * 100
                         const profit = price - hpp
-                        const color = margin >= 50 ? '#2A9D6E' : margin >= 30 ? '#C47D1A' : '#C95555'
-                        const bg = margin >= 50 ? '#E8F7F1' : margin >= 30 ? '#FDF4E3' : '#FEF2F2'
-                        const border = margin >= 50 ? '#A7DFC8' : margin >= 30 ? '#F0D090' : '#FECACA'
+                        const color = margin >= 50 ? '#2A9D6E' : margin >= 20 ? '#C47D1A' : '#C95555'
+                        const bg = margin >= 50 ? '#E8F7F1' : margin >= 20 ? '#FDF4E3' : '#FEF2F2'
+                        const border = margin >= 50 ? '#A7DFC8' : margin >= 20 ? '#F0D090' : '#FECACA'
                         return (
                           <div style={{ marginTop: '6px', padding: '8px 12px', background: bg, border: `1px solid ${border}`, borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span style={{ fontSize: '11px', color: '#64748B' }}>Margin · HPP Rp {fmtRp(Math.round(hpp))}</span>
@@ -484,11 +484,11 @@ export default function ProductsPage() {
                       const hpp = calcHpp(formIngredients, allIngredients)
                       if (hpp === 0) return null
                       const price = Number(form.price)
-                      const margin = price ? ((price - hpp) / price) * 100 : null
+                      const margin = price ? ((price - hpp) / hpp) * 100 : null
                       const profit = price ? price - hpp : null
-                      const color = margin === null ? '#4A7CC7' : margin >= 50 ? '#2A9D6E' : margin >= 30 ? '#C47D1A' : '#C95555'
-                      const bg = margin === null ? '#EBF1FB' : margin >= 50 ? '#E8F7F1' : margin >= 30 ? '#FDF4E3' : '#FEF2F2'
-                      const border = margin === null ? '#C0D0E8' : margin >= 50 ? '#A7DFC8' : margin >= 30 ? '#F0D090' : '#FECACA'
+                      const color = margin === null ? '#4A7CC7' : margin >= 50 ? '#2A9D6E' : margin >= 20 ? '#C47D1A' : '#C95555'
+                      const bg = margin === null ? '#EBF1FB' : margin >= 50 ? '#E8F7F1' : margin >= 20 ? '#FDF4E3' : '#FEF2F2'
+                      const border = margin === null ? '#C0D0E8' : margin >= 50 ? '#A7DFC8' : margin >= 20 ? '#F0D090' : '#FECACA'
                       return (
                         <div style={{ marginTop: '10px', padding: '10px 14px', background: bg, border: `1px solid ${border}`, borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <div>
@@ -555,10 +555,10 @@ export default function ProductsPage() {
                     if (!ing?.price || !ing?.packSize) return sum
                     return sum + (ing.price / ing.packSize) * item.qty
                   }, 0)
-                  const margin = hpp > 0 && p.price ? ((p.price - hpp) / p.price) * 100 : null
-                  const mColor = margin === null ? null : margin >= 50 ? '#2A9D6E' : margin >= 30 ? '#C47D1A' : '#C95555'
-                  const mBg = margin === null ? null : margin >= 50 ? '#E8F7F1' : margin >= 30 ? '#FDF4E3' : '#FEF2F2'
-                  const mBorder = margin === null ? null : margin >= 50 ? '#A7DFC8' : margin >= 30 ? '#F0D090' : '#FECACA'
+                  const margin = hpp > 0 && p.price ? ((p.price - hpp) / hpp) * 100 : null
+                  const mColor = margin === null ? null : margin >= 50 ? '#2A9D6E' : margin >= 20 ? '#C47D1A' : '#C95555'
+                  const mBg = margin === null ? null : margin >= 50 ? '#E8F7F1' : margin >= 20 ? '#FDF4E3' : '#FEF2F2'
+                  const mBorder = margin === null ? null : margin >= 50 ? '#A7DFC8' : margin >= 20 ? '#F0D090' : '#FECACA'
                   return (
                   <tr key={p.id}>
                     <td><span className="badge badge-blue" style={{ fontFamily: 'monospace', fontSize: '11px' }}>{p.code}</span></td>
@@ -783,10 +783,10 @@ export default function ProductsPage() {
                         const product = products.find(p => p.id === ingModal.productId)
                         const price = product?.price
                         if (totalHpp === 0) return null
-                        const margin = price ? ((price - totalHpp) / price) * 100 : null
-                        const color = margin === null ? '#4A7CC7' : margin >= 50 ? '#2A9D6E' : margin >= 30 ? '#C47D1A' : '#C95555'
-                        const bg = margin === null ? '#EBF1FB' : margin >= 50 ? '#E8F7F1' : margin >= 30 ? '#FDF4E3' : '#FEF2F2'
-                        const border = margin === null ? '#C0D0E8' : margin >= 50 ? '#A7DFC8' : margin >= 30 ? '#F0D090' : '#FECACA'
+                        const margin = price ? ((price - totalHpp) / totalHpp) * 100 : null
+                        const color = margin === null ? '#4A7CC7' : margin >= 50 ? '#2A9D6E' : margin >= 20 ? '#C47D1A' : '#C95555'
+                        const bg = margin === null ? '#EBF1FB' : margin >= 50 ? '#E8F7F1' : margin >= 20 ? '#FDF4E3' : '#FEF2F2'
+                        const border = margin === null ? '#C0D0E8' : margin >= 50 ? '#A7DFC8' : margin >= 20 ? '#F0D090' : '#FECACA'
                         return (
                           <div style={{ marginTop: '4px', padding: '10px 14px', background: bg, border: `1px solid ${border}`, borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <div>
