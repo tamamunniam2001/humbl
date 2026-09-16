@@ -4,7 +4,8 @@ import Sidebar from '@/components/Sidebar'
 import api from '@/lib/api'
 import * as XLSX from 'xlsx'
 
-const empty = { code: '', name: '', unit: '' }
+const empty = { code: '', name: '', unit: '', price: '', packSize: '' }
+const fmt = (n) => Number(n).toLocaleString('id-ID')
 
 export default function IngredientsPage() {
   const [items, setItems] = useState([])
@@ -32,14 +33,23 @@ export default function IngredientsPage() {
   }
 
   function startEdit(item) {
-    setForm({ code: item.code || '', name: item.name, unit: item.unit })
+    setForm({
+      code: item.code || '',
+      name: item.name,
+      unit: item.unit,
+      price: item.price ?? '',
+      packSize: item.packSize ?? '',
+    })
     setEditId(item.id); setShowForm(true)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   function downloadCSV() {
-    const rows = [['No', 'Kode', 'Nama Bahan Baku', 'Satuan']]
-    sorted.forEach((item, i) => rows.push([i + 1, item.code || '', item.name, item.unit]))
+    const rows = [['No', 'Kode', 'Nama Bahan Baku', 'Satuan', 'Harga/Pack', 'Isi/Pack', 'Harga/Satuan']]
+    sorted.forEach((item, i) => {
+      const perUnit = item.price && item.packSize ? (item.price / item.packSize) : ''
+      rows.push([i + 1, item.code || '', item.name, item.unit, item.price || '', item.packSize || '', perUnit ? perUnit.toFixed(2) : ''])
+    })
     const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
@@ -97,6 +107,11 @@ export default function IngredientsPage() {
     if (!confirm('Hapus bahan baku ini?')) return
     await api.delete(`/admin/ingredients/${id}`); load()
   }
+
+  // Harga per satuan dihitung otomatis: price / packSize
+  const pricePerUnit = form.price && form.packSize && Number(form.packSize) > 0
+    ? (Number(form.price) / Number(form.packSize))
+    : null
 
   return (
     <div className="page">
@@ -159,6 +174,7 @@ export default function IngredientsPage() {
               </button>
             </div>
           )}
+
           {showForm && (
             <div className="card slide-down" style={{ padding: '28px', marginBottom: '24px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '24px' }}>
@@ -167,11 +183,11 @@ export default function IngredientsPage() {
                 </div>
                 <div>
                   <div style={{ fontWeight: '700', fontSize: '15px', color: '#0D1526' }}>{editId ? 'Edit Bahan Baku' : 'Tambah Bahan Baku'}</div>
-                  <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '1px' }}>Isi kode, nama, dan satuan bahan</div>
+                  <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '1px' }}>Isi detail bahan baku dan harga pembelian</div>
                 </div>
               </div>
               <form onSubmit={handleSubmit}>
-                <div className="form-grid" style={{ marginBottom: '20px' }}>
+                <div className="form-grid" style={{ marginBottom: '16px' }}>
                   <div>
                     <label className="label">Kode Bahan <span style={{ color: '#94A3B8', fontWeight: '400' }}>(opsional)</span></label>
                     <input className="input" placeholder="BB-001" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
@@ -185,6 +201,38 @@ export default function IngredientsPage() {
                     <input className="input" placeholder="Kopi Arabika" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
                   </div>
                 </div>
+
+                {/* Harga */}
+                <div style={{ background: 'var(--surface2)', borderRadius: '10px', padding: '16px', border: '1px solid var(--border)', marginBottom: '20px' }}>
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: '12px' }}>Harga Pembelian <span style={{ fontWeight: '400', textTransform: 'none' }}>(opsional)</span></div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div>
+                      <label className="label">Harga Beli per Pack/Kemasan</label>
+                      <div style={{ position: 'relative' }}>
+                        <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '12px', color: 'var(--muted)', fontWeight: '600' }}>Rp</span>
+                        <input className="input" type="number" placeholder="0" value={form.price}
+                          onChange={(e) => setForm({ ...form, price: e.target.value })}
+                          style={{ paddingLeft: '36px' }} />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="label">Isi per Pack ({form.unit || 'satuan'})</label>
+                      <input className="input" type="number" placeholder={`misal: 1000 ${form.unit || 'gram'}`}
+                        value={form.packSize}
+                        onChange={(e) => setForm({ ...form, packSize: e.target.value })} />
+                    </div>
+                  </div>
+                  {/* Preview harga per satuan */}
+                  {pricePerUnit !== null && (
+                    <div style={{ marginTop: '12px', padding: '10px 14px', background: '#EFF4FF', borderRadius: '8px', border: '1px solid #C7D4F0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '12px', color: 'var(--muted)' }}>Harga per {form.unit || 'satuan'}</span>
+                      <span style={{ fontSize: '14px', fontWeight: '800', color: 'var(--accent)' }}>
+                        Rp {pricePerUnit < 1 ? pricePerUnit.toFixed(4) : fmt(Math.round(pricePerUnit))}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
                 <div className="divider" />
                 <div style={{ display: 'flex', gap: '10px' }}>
                   <button type="submit" className="btn btn-primary">
@@ -214,30 +262,53 @@ export default function IngredientsPage() {
                       </span>
                     </th>
                   ))}
+                  <th>Harga/Pack</th>
+                  <th>Isi/Pack</th>
+                  <th style={{ whiteSpace: 'nowrap' }}>Harga/Satuan</th>
                   <th>Aksi</th>
                 </tr>
               </thead>
               <tbody>
-                {sorted.map((item, i) => (
-                  <tr key={item.id}>
-                    <td style={{ color: '#94A3B8', fontSize: '13px', width: '60px' }}>{i + 1}</td>
-                    <td>
-                      {item.code
-                        ? <span className="badge badge-blue" style={{ fontFamily: 'monospace', fontSize: '11px' }}>{item.code}</span>
-                        : <span style={{ color: '#CBD5E1', fontSize: '12px' }}>—</span>}
-                    </td>
-                    <td style={{ fontWeight: '600', color: '#0D1526' }}>{item.name}</td>
-                    <td><span className="badge badge-green">{item.unit}</span></td>
-                    <td>
-                      <div style={{ display: 'flex', gap: '6px' }}>
-                        <button className="btn" style={{ background: '#EFF4FF', color: '#2563EB', border: '1px solid #C7D4F0', padding: '5px 12px', fontSize: '12px' }} onClick={() => startEdit(item)}>Edit</button>
-                        <button className="btn btn-danger" style={{ padding: '5px 12px', fontSize: '12px' }} onClick={() => handleDelete(item.id)}>Hapus</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {sorted.map((item, i) => {
+                  const perUnit = item.price && item.packSize && item.packSize > 0
+                    ? item.price / item.packSize
+                    : null
+                  return (
+                    <tr key={item.id}>
+                      <td style={{ color: '#94A3B8', fontSize: '13px', width: '60px' }}>{i + 1}</td>
+                      <td>
+                        {item.code
+                          ? <span className="badge badge-blue" style={{ fontFamily: 'monospace', fontSize: '11px' }}>{item.code}</span>
+                          : <span style={{ color: '#CBD5E1', fontSize: '12px' }}>—</span>}
+                      </td>
+                      <td style={{ fontWeight: '600', color: '#0D1526' }}>{item.name}</td>
+                      <td><span className="badge badge-green">{item.unit}</span></td>
+                      <td style={{ fontSize: '13px', color: item.price ? 'var(--text)' : '#CBD5E1' }}>
+                        {item.price ? `Rp ${fmt(item.price)}` : '—'}
+                      </td>
+                      <td style={{ fontSize: '13px', color: item.packSize ? 'var(--text)' : '#CBD5E1' }}>
+                        {item.packSize ? `${fmt(item.packSize)} ${item.unit}` : '—'}
+                      </td>
+                      <td>
+                        {perUnit !== null ? (
+                          <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--accent)', background: '#EFF4FF', padding: '3px 8px', borderRadius: '6px', border: '1px solid #C7D4F0', whiteSpace: 'nowrap' }}>
+                            Rp {perUnit < 1 ? perUnit.toFixed(4) : fmt(Math.round(perUnit))}/{item.unit}
+                          </span>
+                        ) : (
+                          <span style={{ color: '#CBD5E1', fontSize: '12px' }}>—</span>
+                        )}
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <button className="btn" style={{ background: '#EFF4FF', color: '#2563EB', border: '1px solid #C7D4F0', padding: '5px 12px', fontSize: '12px' }} onClick={() => startEdit(item)}>Edit</button>
+                          <button className="btn btn-danger" style={{ padding: '5px 12px', fontSize: '12px' }} onClick={() => handleDelete(item.id)}>Hapus</button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
                 {items.length === 0 && (
-                  <tr><td colSpan={5} style={{ padding: '48px', textAlign: 'center', color: '#94A3B8' }}>
+                  <tr><td colSpan={8} style={{ padding: '48px', textAlign: 'center', color: '#94A3B8' }}>
                     <div style={{ fontSize: '32px', marginBottom: '8px' }}>🧪</div>
                     <div>Belum ada bahan baku</div>
                   </td></tr>

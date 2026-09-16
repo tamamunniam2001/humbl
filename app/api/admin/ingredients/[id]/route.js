@@ -8,8 +8,15 @@ export async function PUT(req, { params }) {
   const denied = adminOnly(user)
   if (denied) return denied
   const { id } = await params
-  const { name, unit, code } = await req.json()
-  return NextResponse.json(await prisma.ingredient.update({ where: { id }, data: { name, unit, code: code || null } }))
+  const { name, unit, code, price, packSize } = await req.json()
+  return NextResponse.json(await prisma.ingredient.update({
+    where: { id },
+    data: {
+      name, unit, code: code || null,
+      price: price ? Number(price) : null,
+      packSize: packSize ? Number(packSize) : null,
+    }
+  }))
 }
 
 export async function DELETE(req, { params }) {

@@ -13,6 +13,12 @@ export async function POST(req) {
   if (error) return error
   const denied = adminOnly(user)
   if (denied) return denied
-  const { name, unit, code } = await req.json()
-  return NextResponse.json(await prisma.ingredient.create({ data: { name, unit, code: code || null } }), { status: 201 })
+  const { name, unit, code, price, packSize } = await req.json()
+  return NextResponse.json(await prisma.ingredient.create({
+    data: {
+      name, unit, code: code || null,
+      price: price ? Number(price) : null,
+      packSize: packSize ? Number(packSize) : null,
+    }
+  }), { status: 201 })
 }

@@ -52,11 +52,13 @@ model Product {
 }
 
 model Ingredient {
-  id       String              @id @default(cuid())
-  code     String?             @unique
-  name     String              @unique
-  unit     String
-  products ProductIngredient[]
+  id        String              @id @default(cuid())
+  code      String?             @unique
+  name      String              @unique
+  unit      String
+  price     Float?              // harga beli per pack/kemasan
+  packSize  Float?              // isi per pack (dalam satuan unit)
+  products  ProductIngredient[]
 }
 
 model ProductIngredient {
