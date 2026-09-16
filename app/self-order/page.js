@@ -204,7 +204,7 @@ function OrderTracker({ orderId, paymentMethod = 'QRIS', onBack }) {
       {/* Header */}
       <div style={{ background: WHITE, borderBottom: `1px solid ${BORDER}`, padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '14px', fontWeight: '800', color: TEXT }}>Bumi Kopi</div>
+          <div style={{ fontSize: '14px', fontWeight: '800', color: TEXT }}>Humbl</div>
           <div style={{ fontSize: '11px', color: GRAY, marginTop: '1px' }}>Status Pesanan</div>
         </div>
       </div>
@@ -487,7 +487,7 @@ export default function SelfOrderPage() {
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Inter:wght@400;600;700;800;900&display=swap');*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}input:focus{outline:none;border-color:${A}!important;box-shadow:0 0 0 3px ${A}18}`}</style>
       <div style={{ width: '100%', maxWidth: '380px' }}>
         <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-          <div style={{ fontSize: '24px', fontFamily: SERIF, fontWeight: 600, color: INK }}>Bumi Kopi</div>
+          <div style={{ fontSize: '24px', fontFamily: SERIF, fontWeight: 600, color: INK }}>Humbl</div>
           <div style={{ fontSize: '11px', color: GOLD, letterSpacing: '2px', textTransform: 'uppercase', fontWeight: 700, marginTop: '4px' }}>Self Order</div>
         </div>
 
@@ -592,7 +592,7 @@ export default function SelfOrderPage() {
       {/* Splash */}
       {splash && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: PAPER, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', animation: 'splashOut 2s cubic-bezier(0.4,0,0.2,1) forwards', pointerEvents: 'none' }}>
-          <div style={{ fontSize: '20px', fontFamily: SERIF, fontWeight: 600, letterSpacing: '1px', color: INK, marginBottom: '4px' }}>Bumi Kopi</div>
+          <div style={{ fontSize: '20px', fontFamily: SERIF, fontWeight: 600, letterSpacing: '1px', color: INK, marginBottom: '4px' }}>Humbl</div>
           <div style={{ fontSize: '11px', color: GOLD, letterSpacing: '3px', textTransform: 'uppercase', fontWeight: 700 }}>Self Order</div>
         </div>
       )}
@@ -601,7 +601,7 @@ export default function SelfOrderPage() {
       <div ref={headerRef} style={{ position: 'sticky', top: 0, zIndex: 100, background: 'rgba(246,240,230,0.92)', backdropFilter: 'blur(16px)', borderBottom: `1px solid ${HAIRLINE}`, padding: '14px 20px 12px' }}>
         <div style={{ maxWidth: '640px', margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
           <div>
-            <div style={{ fontSize: '19px', fontWeight: 600, fontFamily: SERIF, color: INK, lineHeight: 1.1 }}>Bumi Kopi</div>
+            <div style={{ fontSize: '19px', fontWeight: 600, fontFamily: SERIF, color: INK, lineHeight: 1.1 }}>Humbl</div>
             <div style={{ fontSize: '10.5px', color: GOLD, marginTop: '2px', letterSpacing: '1.5px', textTransform: 'uppercase', fontWeight: 700 }}>Pilih menu favoritmu</div>
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -752,7 +752,7 @@ export default function SelfOrderPage() {
                 <button onClick={() => setReceiptOrder(null)} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'none', border: 'none', color: A, fontWeight: '700', fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit', marginBottom: '16px', padding: 0 }}>← Kembali ke Riwayat</button>
                 <div style={{ background: WHITE, borderRadius: '18px', border: `1px solid ${HAIRLINE}`, overflow: 'hidden' }}>
                   <div style={{ background: A, padding: '20px', textAlign: 'center' }}>
-                    <div style={{ fontSize: '16px', fontWeight: 800, color: '#fff', fontFamily: SERIF, letterSpacing: '1px' }}>BUMI KOPI</div>
+                    <div style={{ fontSize: '16px', fontWeight: 800, color: '#fff', fontFamily: SERIF, letterSpacing: '1px' }}>HUMBL</div>
                     <div style={{ fontSize: '10px', color: '#fff', opacity: 0.8, marginTop: '2px', letterSpacing: '2px', textTransform: 'uppercase' }}>Struk Digital</div>
                   </div>
                   <div style={{ padding: '16px 20px' }}>
@@ -791,7 +791,7 @@ export default function SelfOrderPage() {
                     </div>
                     <div style={{ marginTop: '20px', textAlign: 'center', fontSize: '11px', color: GRAY2, lineHeight: 1.8 }}>
                       <div>Terima kasih sudah berkunjung! ☕</div>
-                      <div style={{ color: GOLD, fontWeight: '700', marginTop: '2px' }}>Bumi Kopi</div>
+                      <div style={{ color: GOLD, fontWeight: '700', marginTop: '2px' }}>Humbl</div>
                     </div>
                   </div>
                 </div>

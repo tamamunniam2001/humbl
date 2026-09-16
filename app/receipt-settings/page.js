@@ -5,10 +5,10 @@ import api from '@/lib/api'
 import { resetSettingsCache } from '@/lib/thermal'
 
 const DEFAULTS = {
-  storeName: 'BUMI KOPI',
+  storeName: 'HUMBL',
   tagline: 'Struk Pembayaran',
   footer: 'Terima kasih sudah berkunjung!',
-  footer2: 'Bumi Kopi',
+  footer2: 'Humbl',
   footer3: '',
   footer4: '',
   footer5: '',
@@ -100,7 +100,7 @@ export default function ReceiptSettingsPage() {
                   <div className="form-grid" style={{ marginBottom: '20px' }}>
                     <div>
                       <label className="label">Nama Toko</label>
-                      <input className="input" value={form.storeName} onChange={set('storeName')} placeholder="BUMI KOPI" maxLength={24} />
+                      <input className="input" value={form.storeName} onChange={set('storeName')} placeholder="HUMBL" maxLength={24} />
                       <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '4px' }}>Tampil besar di bagian atas struk</div>
                     </div>
                     <div>
@@ -115,8 +115,8 @@ export default function ReceiptSettingsPage() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
                     {[
                       { key: 'footer',  label: 'Footer Baris 1', placeholder: 'Terima kasih sudah berkunjung!' },
-                      { key: 'footer2', label: 'Footer Baris 2', placeholder: 'Bumi Kopi' },
-                      { key: 'footer3', label: 'Footer Baris 3', placeholder: 'Instagram: @bumikopi' },
+                      { key: 'footer2', label: 'Footer Baris 2', placeholder: 'Humble' },
+                      { key: 'footer3', label: 'Footer Baris 3', placeholder: 'Instagram: @humble' },
                       { key: 'footer4', label: 'Footer Baris 4', placeholder: 'WA: 0812-xxxx-xxxx' },
                       { key: 'footer5', label: 'Footer Baris 5', placeholder: 'Jl. Contoh No. 1, Kota' },
                     ].map(({ key, label, placeholder }) => (

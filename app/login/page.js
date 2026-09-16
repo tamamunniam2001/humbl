@@ -38,7 +38,7 @@ export default function LoginPage() {
           {/* Logo */}
           <div style={{ textAlign: 'center', marginBottom: '32px' }}>
             <div style={{ width: '56px', height: '56px', background: 'linear-gradient(135deg, #2563EB, #3B82F6)', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '26px', margin: '0 auto 16px', boxShadow: '0 8px 24px rgba(37,99,235,0.3)' }}>☕</div>
-            <h1 style={{ fontSize: '22px', fontWeight: '700', color: '#0F1729', letterSpacing: '-0.5px' }}>Bumi Kopi</h1>
+            <h1 style={{ fontSize: '22px', fontWeight: '700', color: '#0F1729', letterSpacing: '-0.5px' }}>Humbl</h1>
             <p style={{ color: '#8896B3', fontSize: '13px', marginTop: '4px' }}>Masuk ke panel admin</p>
           </div>
 
@@ -48,7 +48,7 @@ export default function LoginPage() {
               <input
                 type="email" value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
-                placeholder="admin@bumikopi.com"
+                placeholder="admin@humbl.com"
                 style={{ width: '100%', padding: '11px 14px', border: '1.5px solid #E2E8F8', borderRadius: '10px', fontSize: '14px', color: '#0F1729', outline: 'none', background: '#F8FAFF' }}
                 onFocus={(e) => e.target.style.borderColor = '#2563EB'}
                 onBlur={(e) => e.target.style.borderColor = '#E2E8F8'}
@@ -87,7 +87,7 @@ export default function LoginPage() {
         </div>
 
         <p style={{ textAlign: 'center', color: '#8896B3', fontSize: '12px', marginTop: '20px' }}>
-          Bumi Kopi POS System © 2025
+          Humbl POS System © 2025
         </p>
       </div>
     </div>
