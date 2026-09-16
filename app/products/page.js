@@ -548,12 +548,32 @@ export default function ProductsPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((p) => (
+                {filtered.map((p) => {
+                  const hpp = (p.ingredients || []).reduce((sum, item) => {
+                    const ing = item.ingredient
+                    if (!ing?.price || !ing?.packSize) return sum
+                    return sum + (ing.price / ing.packSize) * item.qty
+                  }, 0)
+                  const margin = hpp > 0 && p.price ? ((p.price - hpp) / p.price) * 100 : null
+                  const mColor = margin === null ? null : margin >= 50 ? '#2A9D6E' : margin >= 30 ? '#C47D1A' : '#C95555'
+                  const mBg = margin === null ? null : margin >= 50 ? '#E8F7F1' : margin >= 30 ? '#FDF4E3' : '#FEF2F2'
+                  const mBorder = margin === null ? null : margin >= 50 ? '#A7DFC8' : margin >= 30 ? '#F0D090' : '#FECACA'
+                  return (
                   <tr key={p.id}>
                     <td><span className="badge badge-blue" style={{ fontFamily: 'monospace', fontSize: '11px' }}>{p.code}</span></td>
                     <td style={{ fontWeight: '600', color: '#0D1526' }}>{p.name}</td>
                     <td><span className="badge badge-gray">{p.category?.name}</span></td>
                     <td style={{ fontWeight: '700', color: '#0D1526' }}>Rp {p.price.toLocaleString('id-ID')}</td>
+                    <td>
+                      {hpp > 0
+                        ? <span style={{ fontSize: '12px', fontWeight: '700', color: '#4A7CC7' }}>Rp {fmtRp(Math.round(hpp))}</span>
+                        : <span style={{ color: '#CBD5E1', fontSize: '12px' }}>—</span>}
+                    </td>
+                    <td>
+                      {margin !== null
+                        ? <span style={{ fontSize: '12px', fontWeight: '800', color: mColor, background: mBg, border: `1px solid ${mBorder}`, padding: '3px 8px', borderRadius: '6px', whiteSpace: 'nowrap' }}>{margin.toFixed(1)}%</span>
+                        : <span style={{ color: '#CBD5E1', fontSize: '12px' }}>—</span>}
+                    </td>
                     <td>
                       <span className={`badge ${p.stock < 10 ? 'badge-red' : 'badge-green'}`}>{p.stock}</span>
                     </td>
@@ -570,7 +590,8 @@ export default function ProductsPage() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
                 {filtered.length === 0 && (
                   <tr><td colSpan={7} style={{ padding: '48px', textAlign: 'center', color: '#94A3B8' }}>
                     <div style={{ fontSize: '32px', marginBottom: '8px' }}>📦</div>
