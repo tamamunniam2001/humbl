@@ -531,7 +531,7 @@ export default function ProductsPage() {
             <table className="table">
               <thead>
                 <tr>
-                  {[{ label: 'Kode', key: 'code' }, { label: 'Nama Produk', key: 'name' }, { label: 'Kategori', key: 'category' }, { label: 'Harga', key: 'price' }, { label: 'Stok', key: 'stock' }, { label: 'Bahan Baku', key: null }, { label: 'Aksi', key: null }].map(({ label, key }) => (
+                  {[{ label: 'Kode', key: 'code' }, { label: 'Nama Produk', key: 'name' }, { label: 'Kategori', key: 'category' }, { label: 'Harga Jual', key: 'price' }, { label: 'HPP', key: null }, { label: 'Margin', key: null }, { label: 'Stok', key: 'stock' }, { label: 'Bahan Baku', key: null }, { label: 'Aksi', key: null }].map(({ label, key }) => (
                     <th key={label} onClick={key ? () => handleSort(key) : undefined}
                       style={key ? { cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' } : {}}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
@@ -675,8 +675,11 @@ export default function ProductsPage() {
                             <div style={{ width: '16px', height: '16px', borderRadius: '50%', border: `2px solid ${selected ? '#2563EB' : '#CBD5E1'}`, background: selected ? '#2563EB' : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                               {selected && <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#fff' }} />}
                             </div>
-                            <span style={{ flex: 1, fontSize: '12px', fontWeight: selected ? '600' : '400', color: '#0D1526' }}>{ing.name}</span>
-                            <span style={{ fontSize: '10px', color: '#94A3B8', background: '#F1F5FB', padding: '2px 6px', borderRadius: '6px' }}>{ing.unit}</span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: '12px', fontWeight: selected ? '600' : '400', color: '#0D1526' }}>{ing.name}</div>
+                              {ing.price && ing.packSize && <div style={{ fontSize: '10px', color: '#94A3B8', marginTop: '1px' }}>Rp {(ing.price/ing.packSize < 1 ? (ing.price/ing.packSize).toFixed(4) : Math.round(ing.price/ing.packSize).toLocaleString('id-ID'))}/{ing.unit}</div>}
+                            </div>
+                            <span style={{ fontSize: '10px', color: '#94A3B8', background: '#F1F5FB', padding: '2px 6px', borderRadius: '6px', flexShrink: 0 }}>{ing.unit}</span>
                           </div>
                         )
                       })
@@ -703,6 +706,17 @@ export default function ProductsPage() {
                     </div>
                   </div>
 
+                  {(() => {
+                    const selIng = allIngredients.find(i => i.id === ingForm.ingredientId)
+                    if (!selIng?.price || !selIng?.packSize || !ingForm.qty) return null
+                    const lineHpp = (selIng.price / selIng.packSize) * Number(ingForm.qty)
+                    return (
+                      <div style={{ padding: '8px 10px', background: '#E8F7F1', border: '1px solid #A7DFC8', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                        <span style={{ color: '#64748B' }}>HPP bahan ini</span>
+                        <span style={{ fontWeight: '700', color: '#2A9D6E' }}>Rp {Math.round(lineHpp).toLocaleString('id-ID')}</span>
+                      </div>
+                    )
+                  })()}
                   <button type="submit" className="btn btn-primary"
                     disabled={!ingForm.ingredientId || !ingForm.qty}
                     style={{ width: '100%', justifyContent: 'center', opacity: (!ingForm.ingredientId || !ingForm.qty) ? 0.5 : 1 }}>
