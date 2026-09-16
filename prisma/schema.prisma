@@ -129,6 +129,7 @@ enum TxStatus {
 model DailyReport {
   id            String   @id @default(cuid())
   date          DateTime @default(now())
+  shift         String?  @default("SHIFT_1")
   kasAwal       Int      @default(0)
   penjualan     Int      @default(0)
   uangDisetor   Int      @default(0)

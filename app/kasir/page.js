@@ -883,8 +883,17 @@ function ManualItemButton({ onAdd, categories }) {
 
 // ── Closing Modal ──
 // â”€â”€ Closing Modal â”€â”€
-function ClosingModal({ orders, onClose, onSaved }) {
+const SHIFTS = [\r\n  { key: 'SHIFT_1', label: 'Closing Shift 1', jam: '07.00 - 13.00' },\r\n  { key: 'SHIFT_2', label: 'Closing Shift 2', jam: '13.00 - 18.00' },\r\n  { key: 'SHIFT_3', label: 'Closing Shift 3', jam: '18.00 - 23.00' },\r\n]\r\n\r\nconst SHIFTS = [
+  { key: 'SHIFT_1', label: 'Closing Shift 1', jam: '07.00 - 13.00' },
+  { key: 'SHIFT_2', label: 'Closing Shift 2', jam: '13.00 - 18.00' },
+  { key: 'SHIFT_3', label: 'Closing Shift 3', jam: '18.00 - 23.00' },
+]
+
+function ClosingModal({ orders, onClose, onSaved }) {\r\n  const [shift, setShift] = useState('SHIFT_1')\r\n  const activeShift = SHIFTS.find(s => s.key === shift)
   const fmt = (n) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(n || 0)
+
+  const [shift, setShift] = useState('SHIFT_1')
+  const activeShift = SHIFTS.find(s => s.key === shift)
 
   const [snapshot] = useState(() => {
     const completed = orders.filter(o => o.status === 'COMPLETED')
@@ -915,7 +924,7 @@ function ClosingModal({ orders, onClose, onSaved }) {
     setSaving(true)
     try {
       await api.post('/daily-reports', {
-        kasAwal: Number(kasAwal) || 0, penjualan: totalPenjualan, uangDisetor: totalCash,
+        shift, kasAwal: Number(kasAwal) || 0, penjualan: totalPenjualan, uangDisetor: totalCash,
         qris: totalQris, transfer: totalTransfer,
         pengeluaran: pengeluaran.filter(p => p.barang).map(p => ({ ...p, qty: Number(p.qty) || 1, harga: Number(p.harga) || 0 })),
         piutang: [], catatan,
@@ -934,7 +943,7 @@ function ClosingModal({ orders, onClose, onSaved }) {
         {/* Header */}
         <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(135deg, #D8E4F4, #E8EEF8)', flexShrink: 0 }}>
           <div>
-            <div style={{ fontSize: '14px', fontWeight: '800', color: '#1E2A3B' }}>Closing Kasir</div>
+            <div style={{ fontSize: '14px', fontWeight: '800', color: '#1E2A3B' }}>Closing Kasir (SHIFT)</div>
             <div style={{ fontSize: '11px', color: '#7A8FAF', marginTop: '1px' }}>{new Date().toLocaleDateString('id-ID', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}</div>
           </div>
           <button onClick={onClose} style={{ background: 'rgba(74,124,199,0.1)', border: '1px solid #C0D0E8', borderRadius: '8px', cursor: 'pointer', color: '#5A6E90', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
