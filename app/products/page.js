@@ -7,6 +7,17 @@ import * as XLSX from 'xlsx'
 const empty = { code: '', name: '', price: '', stock: '', categoryId: '', imageUrl: '' }
 const emptyIng = { ingredientId: '', qty: '' }
 
+const fmtRp = (n) => Number(n).toLocaleString('id-ID')
+
+function calcHpp(selectedIngredients, allIngredients) {
+  return selectedIngredients.reduce((sum, sel) => {
+    const ing = allIngredients.find(i => i.id === sel.ingredientId)
+    if (!ing || !ing.price || !ing.packSize || !sel.qty) return sum
+    const perUnit = ing.price / ing.packSize
+    return sum + perUnit * Number(sel.qty)
+  }, 0)
+}
+
 function IngredientSearch({ allIngredients, selectedIngredients, onToggle, onQtyChange }) {
   const [search, setSearch] = useState('')
   const filtered = allIngredients.filter((i) =>
@@ -23,6 +34,8 @@ function IngredientSearch({ allIngredients, selectedIngredients, onToggle, onQty
           <div style={{ padding: '20px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>Bahan tidak ditemukan</div>
         ) : filtered.map((ing) => {
           const sel = selectedIngredients.find((s) => s.ingredientId === ing.id)
+          const perUnit = ing.price && ing.packSize ? ing.price / ing.packSize : null
+          const lineHpp = perUnit && sel?.qty ? perUnit * Number(sel.qty) : null
           return (
             <div key={ing.id}
               style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 14px', borderBottom: '1px solid #F1F5FB', background: sel ? '#EFF4FF' : 'transparent', cursor: 'pointer', transition: 'background 0.1s' }}
@@ -30,17 +43,23 @@ function IngredientSearch({ allIngredients, selectedIngredients, onToggle, onQty
               <div style={{ width: '17px', height: '17px', borderRadius: '5px', border: `2px solid ${sel ? '#2563EB' : '#CBD5E1'}`, background: sel ? '#2563EB' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, transition: 'all 0.15s' }}>
                 {sel && <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
               </div>
-              <span style={{ flex: 1, fontSize: '13px', fontWeight: sel ? '600' : '400', color: '#0D1526' }}>{ing.name}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '13px', fontWeight: sel ? '600' : '400', color: '#0D1526' }}>{ing.name}</div>
+                {perUnit && <div style={{ fontSize: '10px', color: '#94A3B8', marginTop: '1px' }}>Rp {perUnit < 1 ? perUnit.toFixed(4) : fmtRp(Math.round(perUnit))}/{ing.unit}</div>}
+              </div>
               <span className="badge badge-blue" style={{ fontSize: '10px' }}>{ing.unit}</span>
               {sel && (
-                <input
-                  type="number" step="0.01" min="0.01"
-                  value={sel.qty}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) => onQtyChange(ing.id, e.target.value)}
-                  style={{ width: '72px', padding: '4px 8px', border: '1.5px solid #2563EB', borderRadius: '7px', fontSize: '12px', outline: 'none', background: '#fff', fontFamily: 'inherit', color: '#0D1526' }}
-                  placeholder="Qty"
-                />
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+                  <input
+                    type="number" step="0.01" min="0.01"
+                    value={sel.qty}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => onQtyChange(ing.id, e.target.value)}
+                    style={{ width: '72px', padding: '4px 8px', border: '1.5px solid #2563EB', borderRadius: '7px', fontSize: '12px', outline: 'none', background: '#fff', fontFamily: 'inherit', color: '#0D1526' }}
+                    placeholder="Qty"
+                  />
+                  {lineHpp !== null && <span style={{ fontSize: '10px', color: '#2A9D6E', fontWeight: '600' }}>Rp {fmtRp(Math.round(lineHpp))}</span>}
+                </div>
               )}
             </div>
           )
@@ -408,8 +427,24 @@ export default function ProductsPage() {
                       <input className="input" placeholder="Cappuccino" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
                     </div>
                     <div>
-                      <label className="label">Harga (Rp)</label>
+                      <label className="label">Harga Jual (Rp)</label>
                       <input className="input" type="number" placeholder="25000" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} required />
+                      {(() => {
+                        const hpp = calcHpp(formIngredients, allIngredients)
+                        const price = Number(form.price)
+                        if (!price || hpp === 0) return null
+                        const margin = ((price - hpp) / price) * 100
+                        const profit = price - hpp
+                        const color = margin >= 50 ? '#2A9D6E' : margin >= 30 ? '#C47D1A' : '#C95555'
+                        const bg = margin >= 50 ? '#E8F7F1' : margin >= 30 ? '#FDF4E3' : '#FEF2F2'
+                        const border = margin >= 50 ? '#A7DFC8' : margin >= 30 ? '#F0D090' : '#FECACA'
+                        return (
+                          <div style={{ marginTop: '6px', padding: '8px 12px', background: bg, border: `1px solid ${border}`, borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '11px', color: '#64748B' }}>Margin · HPP Rp {fmtRp(Math.round(hpp))}</span>
+                            <span style={{ fontSize: '13px', fontWeight: '800', color }}>{margin.toFixed(1)}% · +Rp {fmtRp(Math.round(profit))}</span>
+                          </div>
+                        )
+                      })()}
                     </div>
                     <div>
                       <label className="label">Stok</label>
@@ -444,6 +479,29 @@ export default function ProductsPage() {
                       onToggle={toggleFormIngredient}
                       onQtyChange={updateFormIngredientQty}
                     />
+                    {(() => {
+                      const hpp = calcHpp(formIngredients, allIngredients)
+                      if (hpp === 0) return null
+                      const price = Number(form.price)
+                      const margin = price ? ((price - hpp) / price) * 100 : null
+                      const color = margin === null ? '#4A7CC7' : margin >= 50 ? '#2A9D6E' : margin >= 30 ? '#C47D1A' : '#C95555'
+                      const bg = margin === null ? '#EBF1FB' : margin >= 50 ? '#E8F7F1' : margin >= 30 ? '#FDF4E3' : '#FEF2F2'
+                      const border = margin === null ? '#C0D0E8' : margin >= 50 ? '#A7DFC8' : margin >= 30 ? '#F0D090' : '#FECACA'
+                      return (
+                        <div style={{ marginTop: '10px', padding: '10px 14px', background: bg, border: `1px solid ${border}`, borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div>
+                            <div style={{ fontSize: '11px', color: '#64748B', marginBottom: '2px' }}>Total HPP Bahan Baku</div>
+                            <div style={{ fontSize: '15px', fontWeight: '800', color }}>Rp {fmtRp(Math.round(hpp))}</div>
+                          </div>
+                          {margin !== null && (
+                            <div style={{ textAlign: 'right' }}>
+                              <div style={{ fontSize: '11px', color: '#64748B', marginBottom: '2px' }}>Margin</div>
+                              <div style={{ fontSize: '15px', fontWeight: '800', color }}>{margin.toFixed(1)}%</div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </div>
                 )}
 
@@ -652,26 +710,62 @@ export default function ProductsPage() {
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      {ingModal.items.map((item, idx) => (
-                        <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', background: '#fff', borderRadius: '10px', border: '1px solid #E8EDF8', transition: 'box-shadow 0.15s' }}>
-                          <div style={{ width: '28px', height: '28px', background: 'linear-gradient(135deg, #EFF4FF, #DBEAFE)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                            <span style={{ fontSize: '11px', fontWeight: '700', color: '#2563EB' }}>{idx + 1}</span>
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontWeight: '600', color: '#0D1526', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.ingredient.name}</div>
-                            <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '1px' }}>
-                              {item.qty % 1 === 0 ? item.qty : item.qty.toFixed(2)} {item.ingredient.unit}
+                      {ingModal.items.map((item, idx) => {
+                        const perUnit = item.ingredient.price && item.ingredient.packSize ? item.ingredient.price / item.ingredient.packSize : null
+                        const lineHpp = perUnit ? perUnit * item.qty : null
+                        return (
+                          <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', background: '#fff', borderRadius: '10px', border: '1px solid #E8EDF8' }}>
+                            <div style={{ width: '28px', height: '28px', background: 'linear-gradient(135deg, #EFF4FF, #DBEAFE)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              <span style={{ fontSize: '11px', fontWeight: '700', color: '#2563EB' }}>{idx + 1}</span>
                             </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontWeight: '600', color: '#0D1526', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.ingredient.name}</div>
+                              <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '1px', display: 'flex', gap: '8px' }}>
+                                <span>{item.qty % 1 === 0 ? item.qty : item.qty.toFixed(2)} {item.ingredient.unit}</span>
+                                {perUnit && <span style={{ color: '#94A3B8' }}>· Rp {perUnit < 1 ? perUnit.toFixed(4) : fmtRp(Math.round(perUnit))}/{item.ingredient.unit}</span>}
+                              </div>
+                            </div>
+                            {lineHpp !== null && (
+                              <span style={{ fontSize: '12px', fontWeight: '700', color: '#2A9D6E', whiteSpace: 'nowrap' }}>Rp {fmtRp(Math.round(lineHpp))}</span>
+                            )}
+                            <button
+                              onClick={() => handleRemoveIngredient(item.id)}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '5px', borderRadius: '6px', color: '#CBD5E1', display: 'flex', transition: 'color 0.15s, background 0.15s' }}
+                              onMouseEnter={(e) => { e.currentTarget.style.color = '#EF4444'; e.currentTarget.style.background = '#FEF2F2' }}
+                              onMouseLeave={(e) => { e.currentTarget.style.color = '#CBD5E1'; e.currentTarget.style.background = 'none' }}>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                            </button>
                           </div>
-                          <button
-                            onClick={() => handleRemoveIngredient(item.id)}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '5px', borderRadius: '6px', color: '#CBD5E1', display: 'flex', transition: 'color 0.15s, background 0.15s' }}
-                            onMouseEnter={(e) => { e.currentTarget.style.color = '#EF4444'; e.currentTarget.style.background = '#FEF2F2' }}
-                            onMouseLeave={(e) => { e.currentTarget.style.color = '#CBD5E1'; e.currentTarget.style.background = 'none' }}>
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-                          </button>
-                        </div>
-                      ))}
+                        )
+                      })}
+                      {/* Total HPP */}
+                      {(() => {
+                        const totalHpp = ingModal.items.reduce((sum, item) => {
+                          const perUnit = item.ingredient.price && item.ingredient.packSize ? item.ingredient.price / item.ingredient.packSize : null
+                          return perUnit ? sum + perUnit * item.qty : sum
+                        }, 0)
+                        const product = products.find(p => p.id === ingModal.productId)
+                        const price = product?.price
+                        if (totalHpp === 0) return null
+                        const margin = price ? ((price - totalHpp) / price) * 100 : null
+                        const color = margin === null ? '#4A7CC7' : margin >= 50 ? '#2A9D6E' : margin >= 30 ? '#C47D1A' : '#C95555'
+                        const bg = margin === null ? '#EBF1FB' : margin >= 50 ? '#E8F7F1' : margin >= 30 ? '#FDF4E3' : '#FEF2F2'
+                        const border = margin === null ? '#C0D0E8' : margin >= 50 ? '#A7DFC8' : margin >= 30 ? '#F0D090' : '#FECACA'
+                        return (
+                          <div style={{ marginTop: '4px', padding: '10px 14px', background: bg, border: `1px solid ${border}`, borderRadius: '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                              <div style={{ fontSize: '10px', color: '#64748B', marginBottom: '2px' }}>Total HPP</div>
+                              <div style={{ fontSize: '14px', fontWeight: '800', color }}>Rp {fmtRp(Math.round(totalHpp))}</div>
+                            </div>
+                            {margin !== null && (
+                              <div style={{ textAlign: 'right' }}>
+                                <div style={{ fontSize: '10px', color: '#64748B', marginBottom: '2px' }}>Margin · Harga Rp {fmtRp(price)}</div>
+                                <div style={{ fontSize: '14px', fontWeight: '800', color }}>{margin.toFixed(1)}%</div>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })()}
                     </div>
                   )}
                 </div>
