@@ -14,6 +14,13 @@ const isToday = (d) => {
     date.getDate() === now.getDate()
 }
 
+const SHIFT_LABELS = { SHIFT_1: 'Shift 1', SHIFT_2: 'Shift 2', SHIFT_3: 'Shift 3' }
+const SHIFT_COLORS = {
+  SHIFT_1: { bg: '#EBF1FB', color: '#4A7CC7', border: '#C0D0E8' },
+  SHIFT_2: { bg: '#E8F7F1', color: '#2A9D6E', border: '#A7DFC8' },
+  SHIFT_3: { bg: '#EEEAF8', color: '#6B5BAF', border: '#C8C0E8' },
+}
+
 export default function LaporanHarianPage() {
   const [reports, setReports] = useState([])
   const [loading, setLoading] = useState(true)
@@ -80,34 +87,45 @@ export default function LaporanHarianPage() {
             ) : (
               <table className="table">
                 <thead>
-                  <tr>{['Tanggal', 'Kasir', 'Total Penjualan', 'Cash', 'QRIS', 'Transfer', 'Pengeluaran', 'Kas Akhir', ''].map((h) => <th key={h}>{h}</th>)}</tr>
+                  <tr>{['Tanggal', 'Shift', 'Kasir / Closer', 'Total Penjualan', 'Cash', 'QRIS', 'Transfer', 'Pengeluaran', 'Kas Akhir', ''].map((h) => <th key={h}>{h}</th>)}</tr>
                 </thead>
                 <tbody>
-                  {reports.map((r) => (
-                    <tr key={r.id} style={{ cursor: 'pointer' }} onClick={() => setSelected(r)}>
-                      <td style={{ fontWeight: '600' }}>{fmtDate(r.date)}</td>
-                      <td style={{ color: 'var(--text2)' }}>{r.cashier?.name || '-'}</td>
-                      <td style={{ color: 'var(--accent)', fontWeight: '700' }}>{fmt(r.penjualan)}</td>
-                      <td style={{ color: 'var(--green)' }}>{fmt(r.uangDisetor)}</td>
-                      <td style={{ color: '#6B5BAF' }}>{fmt(r.qris)}</td>
-                      <td style={{ color: '#C47D1A' }}>{fmt(r.transfer)}</td>
-                      <td style={{ color: 'var(--red)' }}>{fmt(totalPengeluaran(r))}</td>
-                      <td style={{ fontWeight: '700', color: kasAkhir(r) >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(kasAkhir(r))}</td>
-                      <td style={{ display: 'flex', gap: '6px' }}>
-                        <button className="btn" style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid #C0D0E8', padding: '5px 10px', fontSize: '12px' }}
-                          onClick={(e) => { e.stopPropagation(); setSelected(r) }}>Detail</button>
-                        <button className="btn" style={{ background: '#F5F8FE', color: 'var(--text2)', border: '1px solid var(--border)', padding: '5px 10px', fontSize: '12px' }}
-                          onClick={(e) => { e.stopPropagation(); setEditTarget(r) }}>Edit</button>
-                        {isToday(r.date) && (
-                          <button className="btn btn-danger" style={{ padding: '5px 10px', fontSize: '12px' }}
-                            disabled={reopening === r.id}
-                            onClick={(e) => { e.stopPropagation(); handleReopen(r) }}>
-                            {reopening === r.id ? '...' : 'Buka Kembali'}
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {reports.map((r) => {
+                    const sc = SHIFT_COLORS[r.shift] || SHIFT_COLORS.SHIFT_1
+                    return (
+                      <tr key={r.id} style={{ cursor: 'pointer' }} onClick={() => setSelected(r)}>
+                        <td style={{ fontWeight: '600' }}>{fmtDate(r.date)}</td>
+                        <td>
+                          <span style={{ background: sc.bg, color: sc.color, border: `1px solid ${sc.border}`, borderRadius: '6px', padding: '2px 8px', fontSize: '11px', fontWeight: '700' }}>
+                            {SHIFT_LABELS[r.shift] || r.shift || '-'}
+                          </span>
+                        </td>
+                        <td style={{ color: 'var(--text2)' }}>
+                          <div>{r.closerName || r.cashier?.name || '-'}</div>
+                          {r.closerName && r.cashier?.name && <div style={{ fontSize: '10px', color: 'var(--muted)' }}>Login: {r.cashier.name}</div>}
+                        </td>
+                        <td style={{ color: 'var(--accent)', fontWeight: '700' }}>{fmt(r.penjualan)}</td>
+                        <td style={{ color: 'var(--green)' }}>{fmt(r.uangDisetor)}</td>
+                        <td style={{ color: '#6B5BAF' }}>{fmt(r.qris)}</td>
+                        <td style={{ color: '#C47D1A' }}>{fmt(r.transfer)}</td>
+                        <td style={{ color: 'var(--red)' }}>{fmt(totalPengeluaran(r))}</td>
+                        <td style={{ fontWeight: '700', color: kasAkhir(r) >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(kasAkhir(r))}</td>
+                        <td style={{ display: 'flex', gap: '6px' }}>
+                          <button className="btn" style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid #C0D0E8', padding: '5px 10px', fontSize: '12px' }}
+                            onClick={(e) => { e.stopPropagation(); setSelected(r) }}>Detail</button>
+                          <button className="btn" style={{ background: '#F5F8FE', color: 'var(--text2)', border: '1px solid var(--border)', padding: '5px 10px', fontSize: '12px' }}
+                            onClick={(e) => { e.stopPropagation(); setEditTarget(r) }}>Edit</button>
+                          {isToday(r.date) && (
+                            <button className="btn btn-danger" style={{ padding: '5px 10px', fontSize: '12px' }}
+                              disabled={reopening === r.id}
+                              onClick={(e) => { e.stopPropagation(); handleReopen(r) }}>
+                              {reopening === r.id ? '...' : 'Buka Kembali'}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             )}
@@ -160,7 +178,10 @@ function DetailModal({ report: r, onClose, fmt, fmtDate, totalPengeluaran, kasAk
         <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(135deg, #D8E4F4, #E8EEF8)', flexShrink: 0 }}>
           <div>
             <div style={{ fontSize: '14px', fontWeight: '800', color: '#1E2A3B' }}>Laporan Closing — {fmtDate(r.date)}</div>
-            <div style={{ fontSize: '11px', color: '#7A8FAF', marginTop: '1px' }}>Kasir: {r.cashier?.name || '-'}</div>
+            <div style={{ fontSize: '11px', color: '#7A8FAF', marginTop: '1px' }}>
+              {SHIFT_LABELS[r.shift] || r.shift || 'Shift'} &nbsp;&middot;&nbsp;
+              {r.closerName ? `Closer: ${r.closerName}` : `Kasir: ${r.cashier?.name || '-'}`}
+            </div>
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <button onClick={onEdit} style={{ background: 'rgba(74,124,199,0.1)', border: '1px solid #C0D0E8', borderRadius: '8px', cursor: 'pointer', color: '#4A7CC7', fontSize: '12px', fontWeight: '600', padding: '5px 12px', fontFamily: 'inherit' }}>Edit</button>

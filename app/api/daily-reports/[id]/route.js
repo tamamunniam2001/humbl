@@ -21,10 +21,10 @@ export async function PUT(req, { params }) {
   if (!report) return NextResponse.json({ message: 'Laporan tidak ditemukan' }, { status: 404 })
   if (user.role !== 'ADMIN' && report.cashierId !== user.id)
     return NextResponse.json({ message: 'Akses ditolak' }, { status: 403 })
-  const { kasAwal, penjualan, uangDisetor, qris, transfer, pengeluaran, piutang, catatan } = await req.json()
+  const { kasAwal, penjualan, uangDisetor, qris, transfer, pengeluaran, piutang, catatan, closerName } = await req.json()
   const updated = await prisma.dailyReport.update({
     where: { id },
-    data: { kasAwal, penjualan, uangDisetor, qris, transfer, pengeluaran, piutang, catatan },
+    data: { kasAwal, penjualan, uangDisetor, qris, transfer, pengeluaran, piutang, catatan, closerName: closerName ?? undefined },
     include: { cashier: { select: { name: true } } },
   })
   return NextResponse.json(updated)

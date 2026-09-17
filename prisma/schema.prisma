@@ -140,6 +140,7 @@ model DailyReport {
   pengeluaran   Json     @default("[]")
   piutang       Json     @default("[]")
   catatan       String?  @default("")
+  closerName    String?  @default("")
   cashierId     String
   cashier       User     @relation(fields: [cashierId], references: [id])
   createdAt     DateTime @default(now())

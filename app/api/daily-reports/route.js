@@ -21,9 +21,14 @@ export async function GET(req) {
 export async function POST(req) {
   const { error, user } = verifyAuth(req)
   if (error) return error
-  const { kasAwal, penjualan, uangDisetor, qris, transfer, pengeluaran, piutang, catatan } = await req.json()
+  const { shift, kasAwal, penjualan, uangDisetor, qris, transfer, pengeluaran, piutang, catatan, closerName } = await req.json()
+  // Cek apakah shift ini sudah ada hari ini
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const endOfDay = new Date(); endOfDay.setHours(23, 59, 59, 999)
+  const existing = await prisma.dailyReport.findFirst({ where: { shift, date: { gte: today, lte: endOfDay } } })
+  if (existing) return NextResponse.json({ message: `${shift} sudah pernah di-closing hari ini` }, { status: 400 })
   const report = await prisma.dailyReport.create({
-    data: { kasAwal, penjualan, uangDisetor, qris, transfer, pengeluaran, piutang, catatan, cashierId: user.id },
+    data: { shift, kasAwal, penjualan, uangDisetor, qris, transfer, pengeluaran, piutang, catatan, cashierId: user.id, closerName: closerName || null },
     include: { cashier: { select: { name: true } } },
   })
   return NextResponse.json(report, { status: 201 })

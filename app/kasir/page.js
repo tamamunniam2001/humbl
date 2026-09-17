@@ -96,15 +96,18 @@ export default function KasirPage() {
 
   const todayKey = new Date().toLocaleDateString('en-CA')
   const [closed, setClosed] = useState(false)
+  const [todayShifts, setTodayShifts] = useState([]) // shift yang sudah closing hari ini
 
   useEffect(() => {
-    // Cek apakah ada laporan harian hari ini di DB
     const today = new Date(); today.setHours(0, 0, 0, 0)
     const endOfDay = new Date(); endOfDay.setHours(23, 59, 59, 999)
     api.get(`/daily-reports?from=${today.toISOString()}&to=${endOfDay.toISOString()}`)
       .then(res => {
-        const hasReport = (res.data.reports || []).length > 0
-        if (hasReport) {
+        const reports = res.data.reports || []
+        const shifts = reports.map(r => r.shift).filter(Boolean)
+        setTodayShifts(shifts)
+        const allDone = ['SHIFT_1', 'SHIFT_2', 'SHIFT_3'].every(s => shifts.includes(s))
+        if (allDone) {
           localStorage.setItem('closing_date', todayKey)
           setClosed(true)
         } else {
@@ -113,7 +116,6 @@ export default function KasirPage() {
         }
       })
       .catch(() => {
-        // Fallback ke localStorage jika offline
         setClosed(localStorage.getItem('closing_date') === todayKey)
       })
   }, [])
@@ -346,8 +348,16 @@ export default function KasirPage() {
           <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '10px', margin: '16px 24px 0', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
             <span style={{ fontSize: '18px' }}>🔒</span>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: '13px', fontWeight: '700', color: '#C95555' }}>Kasir sudah closing hari ini</div>
+              <div style={{ fontSize: '13px', fontWeight: '700', color: '#C95555' }}>Kasir sudah closing semua shift hari ini</div>
               <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '2px' }}>Untuk membuka kembali, buka <a href="/kasir/laporan" style={{ color: 'var(--accent)', fontWeight: '600' }}>Laporan Harian</a> dan batalkan closing.</div>
+            </div>
+          </div>
+        )}
+        {!closed && todayShifts.length > 0 && (
+          <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '10px', margin: '16px 24px 0', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '16px' }}>📋</span>
+            <div style={{ fontSize: '12px', color: '#92400E' }}>
+              Shift selesai: <strong>{todayShifts.map(s => s.replace('SHIFT_', 'Shift ')).join(', ')}</strong>
             </div>
           </div>
         )}
@@ -607,7 +617,18 @@ export default function KasirPage() {
       )}
 
       {closingOpen && (
-        <ClosingModal orders={orders} onClose={() => setClosingOpen(false)} onSaved={() => { localStorage.setItem('closing_date', todayKey); setOrders([]); setClosed(true); setClosingOpen(false) }} />
+        <ClosingModal
+          orders={orders}
+          todayShifts={todayShifts}
+          onClose={() => setClosingOpen(false)}
+          onSaved={(shift) => {
+            const newShifts = [...todayShifts, shift]
+            setTodayShifts(newShifts)
+            const allDone = ['SHIFT_1', 'SHIFT_2', 'SHIFT_3'].every(s => newShifts.includes(s))
+            if (allDone) { localStorage.setItem('closing_date', todayKey); setClosed(true) }
+            setClosingOpen(false)
+          }}
+        />
       )}
     </div>
   )
@@ -888,10 +909,11 @@ const SHIFTS = [
   { key: 'SHIFT_3', label: 'Closing Shift 3', jam: '18.00 - 23.00' },
 ]
 
-function ClosingModal({ orders, onClose, onSaved }) {
+function ClosingModal({ orders, todayShifts = [], onClose, onSaved }) {
   const fmt = (n) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(n || 0)
 
-  const [shift, setShift] = useState('SHIFT_1')
+  const availableShifts = SHIFTS.filter(s => !todayShifts.includes(s.key))
+  const [shift, setShift] = useState(() => availableShifts[0]?.key || 'SHIFT_1')
   const activeShift = SHIFTS.find(s => s.key === shift)
 
   const [snapshot] = useState(() => {
@@ -910,6 +932,7 @@ function ClosingModal({ orders, onClose, onSaved }) {
   const [kasAwal, setKasAwal] = useState('')
   const [pengeluaran, setPengeluaran] = useState([])
   const [catatan, setCatatan] = useState('')
+  const [closerName, setCloserName] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
@@ -926,7 +949,7 @@ function ClosingModal({ orders, onClose, onSaved }) {
         shift, kasAwal: Number(kasAwal) || 0, penjualan: totalPenjualan, uangDisetor: totalCash,
         qris: totalQris, transfer: totalTransfer,
         pengeluaran: pengeluaran.filter(p => p.barang).map(p => ({ ...p, qty: Number(p.qty) || 1, harga: Number(p.harga) || 0 })),
-        piutang: [], catatan,
+        piutang: [], catatan, closerName,
       })
       setSaved(true)
     } catch (e) {
@@ -942,7 +965,7 @@ function ClosingModal({ orders, onClose, onSaved }) {
         {/* Header */}
         <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(135deg, #D8E4F4, #E8EEF8)', flexShrink: 0 }}>
           <div>
-            <div style={{ fontSize: '14px', fontWeight: '800', color: '#1E2A3B' }}>Closing Kasir (SHIFT)</div>
+            <div style={{ fontSize: '14px', fontWeight: '800', color: '#1E2A3B' }}>Closing Kasir</div>
             <div style={{ fontSize: '11px', color: '#7A8FAF', marginTop: '1px' }}>{new Date().toLocaleDateString('id-ID', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}</div>
           </div>
           <button onClick={onClose} style={{ background: 'rgba(74,124,199,0.1)', border: '1px solid #C0D0E8', borderRadius: '8px', cursor: 'pointer', color: '#5A6E90', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -962,7 +985,7 @@ function ClosingModal({ orders, onClose, onSaved }) {
                   <div style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text)' }}>Laporan Closing Tersimpan</div>
                   <div style={{ fontSize: '11px', color: 'var(--muted)' }}>{new Date().toLocaleDateString('id-ID', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}</div>
                 </div>
-                <button className="btn btn-primary" style={{ marginLeft: 'auto', justifyContent: 'center', padding: '7px 18px', fontSize: '12px' }} onClick={onSaved}>Tutup</button>
+                <button className="btn btn-primary" style={{ marginLeft: 'auto', justifyContent: 'center', padding: '7px 18px', fontSize: '12px' }} onClick={() => onSaved(shift)}>Tutup</button>
               </div>
 
               {/* Body 2 kolom */}
@@ -1078,6 +1101,30 @@ function ClosingModal({ orders, onClose, onSaved }) {
               {/* Kolom Kanan: Laporan Kas */}
               <div style={{ width: '310px', flexShrink: 0, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto' }}>
                 <div style={{ fontSize: '10px', fontWeight: '700', color: 'var(--muted)', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Laporan Kas</div>
+                {/* Pilih Shift */}
+                <div>
+                  <label className="label" style={{ fontSize: '11px' }}>Shift</label>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    {SHIFTS.map(s => {
+                      const done = todayShifts.includes(s.key)
+                      const active = shift === s.key
+                      return (
+                        <button key={s.key} onClick={() => !done && setShift(s.key)}
+                          disabled={done}
+                          style={{ flex: 1, padding: '7px 4px', borderRadius: '8px', border: `1.5px solid ${active ? 'var(--accent)' : done ? '#E2E8F0' : 'var(--border)'}`, background: active ? 'var(--accent)' : done ? '#F1F5F9' : '#fff', color: active ? '#fff' : done ? '#94A3B8' : 'var(--text2)', fontWeight: '700', fontSize: '11px', cursor: done ? 'not-allowed' : 'pointer', fontFamily: 'inherit', position: 'relative' }}>
+                          {s.label.replace('Closing ', '')}
+                          {done && <span style={{ display: 'block', fontSize: '9px', fontWeight: '600', color: '#94A3B8' }}>✓ Selesai</span>}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  {activeShift && <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '4px' }}>{activeShift.jam}</div>}
+                </div>
+                {/* Nama yang closing */}
+                <div>
+                  <label className="label" style={{ fontSize: '11px' }}>Nama yang Closing</label>
+                  <input className="input" placeholder="Nama kasir..." value={closerName} onChange={e => setCloserName(e.target.value)} style={{ fontSize: '13px' }} />
+                </div>
                 <div>
                   <label className="label" style={{ fontSize: '11px' }}>{t('kasAwal')}</label>
                   <input className="input" type="number" placeholder="0" value={kasAwal} onChange={(e) => setKasAwal(e.target.value)} style={{ fontSize: '13px' }} />
