@@ -130,7 +130,7 @@ export default function Sidebar() {
         {/* Logo + toggle */}
         <div style={{ padding: '16px 14px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden', minWidth: 0 }}>
-            <div style={{ width: '34px', height: '34px', flexShrink: 0, background: 'linear-gradient(135deg, var(--accent), var(--accent2))', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', boxShadow: 'var(--shadow-accent)' }}>☕</div>
+            <div style={{ width: '34px', height: '34px', flexShrink: 0, borderRadius: '10px', overflow: 'hidden', boxShadow: 'var(--shadow-accent)' }}><img src="/logo.png" alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /></div>
             {!collapsed && (
               <div style={{ overflow: 'hidden' }}>
                 <div style={{ fontWeight: 700, fontSize: '14px', color: 'var(--text)', whiteSpace: 'nowrap' }}>Hambl</div>

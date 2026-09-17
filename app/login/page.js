@@ -37,7 +37,7 @@ export default function LoginPage() {
         <div style={{ background: '#FFFFFF', borderRadius: '20px', padding: '40px', boxShadow: '0 20px 60px rgba(15,23,41,0.12), 0 4px 16px rgba(15,23,41,0.06)', border: '1px solid #E2E8F8' }}>
           {/* Logo */}
           <div style={{ textAlign: 'center', marginBottom: '32px' }}>
-            <div style={{ width: '56px', height: '56px', background: 'linear-gradient(135deg, #2563EB, #3B82F6)', borderRadius: '16px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '26px', margin: '0 auto 16px', boxShadow: '0 8px 24px rgba(37,99,235,0.3)' }}>☕</div>
+            <div style={{ width: '56px', height: '56px', borderRadius: '16px', overflow: 'hidden', margin: '0 auto 16px', boxShadow: '0 8px 24px rgba(37,99,235,0.3)' }}><img src="/logo.png" alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /></div>
             <h1 style={{ fontSize: '22px', fontWeight: '700', color: '#0F1729', letterSpacing: '-0.5px' }}>Humbl</h1>
             <p style={{ color: '#8896B3', fontSize: '13px', marginTop: '4px' }}>Masuk ke panel admin</p>
           </div>
