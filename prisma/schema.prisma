@@ -129,22 +129,23 @@ enum TxStatus {
 }
 
 model DailyReport {
-  id            String   @id @default(cuid())
-  date          DateTime @default(now())
-  shift         String?  @default("SHIFT_1")
-  kasAwal       Int      @default(0)
-  penjualan     Int      @default(0)
-  uangDisetor   Int      @default(0)
-  qris          Int      @default(0)
-  transfer      Int      @default(0)
-  pengeluaran   Json     @default("[]")
-  piutang       Json     @default("[]")
-  catatan       String?  @default("")
-  closerName    String?  @default("")
-  cashierId     String
-  cashier       User     @relation(fields: [cashierId], references: [id])
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id               String   @id @default(cuid())
+  date             DateTime @default(now())
+  shift            String?  @default("SHIFT_1")
+  kasAwal          Int      @default(0)
+  penjualan        Int      @default(0)
+  uangDisetor      Int      @default(0)
+  qris             Int      @default(0)
+  transfer         Int      @default(0)
+  pengeluaran      Json     @default("[]")
+  piutang          Json     @default("[]")
+  catatan          String?  @default("")
+  closerName       String?  @default("")
+  kasAkhirDisetor  Int      @default(0)
+  cashierId        String
+  cashier          User     @relation(fields: [cashierId], references: [id])
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@index([cashierId])
   @@index([date])

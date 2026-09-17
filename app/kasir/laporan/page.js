@@ -27,6 +27,7 @@ export default function LaporanHarianPage() {
   const [selected, setSelected] = useState(null)
   const [editTarget, setEditTarget] = useState(null)
   const [reopening, setReopening] = useState(null)
+  const [expandedDay, setExpandedDay] = useState(null) // dateKey yang sedang di-expand
 
   const load = useCallback(async () => {
     try {
@@ -64,6 +65,15 @@ export default function LaporanHarianPage() {
   const totalPengeluaran = (r) => (r.pengeluaran || []).reduce((s, p) => s + (p.harga * p.qty), 0)
   const kasAkhir = (r) => (r.kasAwal || 0) + (r.uangDisetor || 0) - totalPengeluaran(r)
 
+  // Group reports by date (YYYY-MM-DD)
+  const grouped = reports.reduce((acc, r) => {
+    const key = new Date(r.date).toLocaleDateString('en-CA')
+    if (!acc[key]) acc[key] = []
+    acc[key].push(r)
+    return acc
+  }, {})
+  const dayKeys = Object.keys(grouped).sort((a, b) => b.localeCompare(a))
+
   return (
     <div className="page">
       <Sidebar />
@@ -87,43 +97,92 @@ export default function LaporanHarianPage() {
             ) : (
               <table className="table">
                 <thead>
-                  <tr>{['Tanggal', 'Shift', 'Kasir / Closer', 'Total Penjualan', 'Cash', 'QRIS', 'Transfer', 'Pengeluaran', 'Kas Akhir', ''].map((h) => <th key={h}>{h}</th>)}</tr>
+                  <tr>{['Tanggal', 'Shift Selesai', 'Total Penjualan', 'Cash', 'QRIS', 'Transfer', 'Pengeluaran', 'Kas Akhir', ''].map(h => <th key={h}>{h}</th>)}</tr>
                 </thead>
                 <tbody>
-                  {reports.map((r) => {
-                    const sc = SHIFT_COLORS[r.shift] || SHIFT_COLORS.SHIFT_1
+                  {dayKeys.map(dayKey => {
+                    const dayReports = grouped[dayKey]
+                    const isExpanded = expandedDay === dayKey
+                    const todayFlag = isToday(dayReports[0].date)
+                    // Ringkasan hari
+                    const sumPenjualan = dayReports.reduce((s, r) => s + (r.penjualan || 0), 0)
+                    const sumCash = dayReports.reduce((s, r) => s + (r.uangDisetor || 0), 0)
+                    const sumQris = dayReports.reduce((s, r) => s + (r.qris || 0), 0)
+                    const sumTransfer = dayReports.reduce((s, r) => s + (r.transfer || 0), 0)
+                    const sumPengeluaran = dayReports.reduce((s, r) => s + totalPengeluaran(r), 0)
+                    const lastReport = dayReports[dayReports.length - 1]
+                    const sumKasAkhir = kasAkhir(lastReport)
                     return (
-                      <tr key={r.id} style={{ cursor: 'pointer' }} onClick={() => setSelected(r)}>
-                        <td style={{ fontWeight: '600' }}>{fmtDate(r.date)}</td>
-                        <td>
-                          <span style={{ background: sc.bg, color: sc.color, border: `1px solid ${sc.border}`, borderRadius: '6px', padding: '2px 8px', fontSize: '11px', fontWeight: '700' }}>
-                            {SHIFT_LABELS[r.shift] || r.shift || '-'}
-                          </span>
-                        </td>
-                        <td style={{ color: 'var(--text2)' }}>
-                          <div>{r.closerName || r.cashier?.name || '-'}</div>
-                          {r.closerName && r.cashier?.name && <div style={{ fontSize: '10px', color: 'var(--muted)' }}>Login: {r.cashier.name}</div>}
-                        </td>
-                        <td style={{ color: 'var(--accent)', fontWeight: '700' }}>{fmt(r.penjualan)}</td>
-                        <td style={{ color: 'var(--green)' }}>{fmt(r.uangDisetor)}</td>
-                        <td style={{ color: '#6B5BAF' }}>{fmt(r.qris)}</td>
-                        <td style={{ color: '#C47D1A' }}>{fmt(r.transfer)}</td>
-                        <td style={{ color: 'var(--red)' }}>{fmt(totalPengeluaran(r))}</td>
-                        <td style={{ fontWeight: '700', color: kasAkhir(r) >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(kasAkhir(r))}</td>
-                        <td style={{ display: 'flex', gap: '6px' }}>
-                          <button className="btn" style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid #C0D0E8', padding: '5px 10px', fontSize: '12px' }}
-                            onClick={(e) => { e.stopPropagation(); setSelected(r) }}>Detail</button>
-                          <button className="btn" style={{ background: '#F5F8FE', color: 'var(--text2)', border: '1px solid var(--border)', padding: '5px 10px', fontSize: '12px' }}
-                            onClick={(e) => { e.stopPropagation(); setEditTarget(r) }}>Edit</button>
-                          {isToday(r.date) && (
-                            <button className="btn btn-danger" style={{ padding: '5px 10px', fontSize: '12px' }}
-                              disabled={reopening === r.id}
-                              onClick={(e) => { e.stopPropagation(); handleReopen(r) }}>
-                              {reopening === r.id ? '...' : 'Buka Kembali'}
-                            </button>
-                          )}
-                        </td>
-                      </tr>
+                      <>
+                        {/* Baris ringkasan per hari */}
+                        <tr key={dayKey} style={{ cursor: 'pointer', background: isExpanded ? '#F0F4FF' : undefined }}
+                          onClick={() => setExpandedDay(isExpanded ? null : dayKey)}>
+                          <td style={{ fontWeight: '700' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
+                                style={{ color: 'var(--accent)', transition: 'transform 0.2s', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', flexShrink: 0 }}>
+                                <polyline points="9 18 15 12 9 6"/>
+                              </svg>
+                              {fmtDate(dayReports[0].date)}
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                              {['SHIFT_1','SHIFT_2','SHIFT_3'].map(sk => {
+                                const done = dayReports.some(r => r.shift === sk)
+                                const sc = SHIFT_COLORS[sk]
+                                return done ? (
+                                  <span key={sk} style={{ background: sc.bg, color: sc.color, border: `1px solid ${sc.border}`, borderRadius: '5px', padding: '1px 6px', fontSize: '10px', fontWeight: '700' }}>
+                                    {SHIFT_LABELS[sk]}
+                                  </span>
+                                ) : null
+                              })}
+                            </div>
+                          </td>
+                          <td style={{ color: 'var(--accent)', fontWeight: '700' }}>{fmt(sumPenjualan)}</td>
+                          <td style={{ color: 'var(--green)' }}>{fmt(sumCash)}</td>
+                          <td style={{ color: '#6B5BAF' }}>{fmt(sumQris)}</td>
+                          <td style={{ color: '#C47D1A' }}>{fmt(sumTransfer)}</td>
+                          <td style={{ color: 'var(--red)' }}>{fmt(sumPengeluaran)}</td>
+                          <td style={{ fontWeight: '700', color: sumKasAkhir >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(sumKasAkhir)}</td>
+                          <td />
+                        </tr>
+                        {/* Baris detail per shift (expanded) */}
+                        {isExpanded && dayReports.map(r => {
+                          const sc = SHIFT_COLORS[r.shift] || SHIFT_COLORS.SHIFT_1
+                          return (
+                            <tr key={r.id} style={{ background: '#F8FAFF', cursor: 'pointer' }} onClick={e => { e.stopPropagation(); setSelected(r) }}>
+                              <td style={{ paddingLeft: '32px', color: 'var(--muted)', fontSize: '12px' }}>
+                                <span style={{ background: sc.bg, color: sc.color, border: `1px solid ${sc.border}`, borderRadius: '5px', padding: '1px 7px', fontSize: '10px', fontWeight: '700' }}>
+                                  {SHIFT_LABELS[r.shift] || r.shift}
+                                </span>
+                              </td>
+                              <td style={{ fontSize: '12px', color: 'var(--text2)' }}>
+                                {r.closerName || r.cashier?.name || '-'}
+                              </td>
+                              <td style={{ color: 'var(--accent)', fontWeight: '600', fontSize: '12px' }}>{fmt(r.penjualan)}</td>
+                              <td style={{ color: 'var(--green)', fontSize: '12px' }}>{fmt(r.uangDisetor)}</td>
+                              <td style={{ color: '#6B5BAF', fontSize: '12px' }}>{fmt(r.qris)}</td>
+                              <td style={{ color: '#C47D1A', fontSize: '12px' }}>{fmt(r.transfer)}</td>
+                              <td style={{ color: 'var(--red)', fontSize: '12px' }}>{fmt(totalPengeluaran(r))}</td>
+                              <td style={{ fontWeight: '600', fontSize: '12px', color: kasAkhir(r) >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(kasAkhir(r))}</td>
+                              <td style={{ display: 'flex', gap: '4px' }}>
+                                <button className="btn" style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid #C0D0E8', padding: '4px 8px', fontSize: '11px' }}
+                                  onClick={e => { e.stopPropagation(); setSelected(r) }}>Detail</button>
+                                <button className="btn" style={{ background: '#F5F8FE', color: 'var(--text2)', border: '1px solid var(--border)', padding: '4px 8px', fontSize: '11px' }}
+                                  onClick={e => { e.stopPropagation(); setEditTarget(r) }}>Edit</button>
+                                {todayFlag && (
+                                  <button className="btn btn-danger" style={{ padding: '4px 8px', fontSize: '11px' }}
+                                    disabled={reopening === r.id}
+                                    onClick={e => { e.stopPropagation(); handleReopen(r) }}>
+                                    {reopening === r.id ? '...' : 'Buka'}
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </>
                     )
                   })}
                 </tbody>

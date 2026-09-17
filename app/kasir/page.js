@@ -96,7 +96,8 @@ export default function KasirPage() {
 
   const todayKey = new Date().toLocaleDateString('en-CA')
   const [closed, setClosed] = useState(false)
-  const [todayShifts, setTodayShifts] = useState([]) // shift yang sudah closing hari ini
+  const [todayShifts, setTodayShifts] = useState([]) // { shift, kasAkhir } dari closing hari ini
+  const [lastShiftKasAkhir, setLastShiftKasAkhir] = useState(0) // kas akhir shift terakhir hari ini
 
   useEffect(() => {
     const today = new Date(); today.setHours(0, 0, 0, 0)
@@ -106,18 +107,17 @@ export default function KasirPage() {
         const reports = res.data.reports || []
         const shifts = reports.map(r => r.shift).filter(Boolean)
         setTodayShifts(shifts)
-        const allDone = ['SHIFT_1', 'SHIFT_2', 'SHIFT_3'].every(s => shifts.includes(s))
-        if (allDone) {
-          localStorage.setItem('closing_date', todayKey)
-          setClosed(true)
-        } else {
-          localStorage.removeItem('closing_date')
-          setClosed(false)
+        // Kas akhir shift terakhir = kasAwal + cash - pengeluaran dari report terakhir
+        if (reports.length > 0) {
+          const last = reports[reports.length - 1]
+          const totP = (last.pengeluaran || []).reduce((s, p) => s + p.harga * p.qty, 0)
+          setLastShiftKasAkhir((last.kasAwal || 0) + (last.uangDisetor || 0) - totP)
         }
+        const allDone = ['SHIFT_1', 'SHIFT_2', 'SHIFT_3'].every(s => shifts.includes(s))
+        if (allDone) { localStorage.setItem('closing_date', todayKey); setClosed(true) }
+        else { localStorage.removeItem('closing_date'); setClosed(false) }
       })
-      .catch(() => {
-        setClosed(localStorage.getItem('closing_date') === todayKey)
-      })
+      .catch(() => { setClosed(localStorage.getItem('closing_date') === todayKey) })
   }, [])
 
   // Set untuk track order yang sedang in-flight PATCH servedAt
@@ -620,10 +620,13 @@ export default function KasirPage() {
         <ClosingModal
           orders={orders}
           todayShifts={todayShifts}
+          kasAwalOtomatis={lastShiftKasAkhir}
           onClose={() => setClosingOpen(false)}
-          onSaved={(shift) => {
+          onSaved={(shift, kasAkhir) => {
             const newShifts = [...todayShifts, shift]
             setTodayShifts(newShifts)
+            setLastShiftKasAkhir(kasAkhir)
+            setOrders([]) // reset order list setelah closing
             const allDone = ['SHIFT_1', 'SHIFT_2', 'SHIFT_3'].every(s => newShifts.includes(s))
             if (allDone) { localStorage.setItem('closing_date', todayKey); setClosed(true) }
             setClosingOpen(false)
@@ -909,7 +912,7 @@ const SHIFTS = [
   { key: 'SHIFT_3', label: 'Closing Shift 3', jam: '18.00 - 23.00' },
 ]
 
-function ClosingModal({ orders, todayShifts = [], onClose, onSaved }) {
+function ClosingModal({ orders, todayShifts = [], kasAwalOtomatis = 0, onClose, onSaved }) {
   const fmt = (n) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(n || 0)
 
   const availableShifts = SHIFTS.filter(s => !todayShifts.includes(s.key))
@@ -929,15 +932,17 @@ function ClosingModal({ orders, todayShifts = [], onClose, onSaved }) {
   })
   const { completed, totalPenjualan, totalCash, totalQris, totalTransfer, pendingCount } = snapshot
 
-  const [kasAwal, setKasAwal] = useState('')
   const [pengeluaran, setPengeluaran] = useState([])
   const [catatan, setCatatan] = useState('')
   const [closerName, setCloserName] = useState('')
+  // Pemindahan kas: ke shift berikutnya atau ke hari berikutnya
+  const [kasAkhirDisetor, setKasAkhirDisetor] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
+  const kasAwal = kasAwalOtomatis // otomatis dari kas akhir shift/hari sebelumnya
   const totalPengeluaran = pengeluaran.reduce((s, p) => s + (Number(p.harga) * Number(p.qty || 1)), 0)
-  const kasAkhir = Number(kasAwal || 0) + totalCash - totalPengeluaran
+  const kasAkhir = kasAwal + totalCash - totalPengeluaran
 
   function addPengeluaran() { setPengeluaran(prev => [...prev, { barang: '', qty: 1, harga: 0 }]) }
   function updatePengeluaran(i, field, val) { setPengeluaran(prev => prev.map((p, n) => n === i ? { ...p, [field]: val } : p)) }
@@ -946,10 +951,10 @@ function ClosingModal({ orders, todayShifts = [], onClose, onSaved }) {
     setSaving(true)
     try {
       await api.post('/daily-reports', {
-        shift, kasAwal: Number(kasAwal) || 0, penjualan: totalPenjualan, uangDisetor: totalCash,
+        shift, kasAwal, penjualan: totalPenjualan, uangDisetor: totalCash,
         qris: totalQris, transfer: totalTransfer,
         pengeluaran: pengeluaran.filter(p => p.barang).map(p => ({ ...p, qty: Number(p.qty) || 1, harga: Number(p.harga) || 0 })),
-        piutang: [], catatan, closerName,
+        piutang: [], catatan, closerName, kasAkhirDisetor: Number(kasAkhirDisetor) || 0,
       })
       setSaved(true)
     } catch (e) {
@@ -985,7 +990,7 @@ function ClosingModal({ orders, todayShifts = [], onClose, onSaved }) {
                   <div style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text)' }}>Laporan Closing Tersimpan</div>
                   <div style={{ fontSize: '11px', color: 'var(--muted)' }}>{new Date().toLocaleDateString('id-ID', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}</div>
                 </div>
-                <button className="btn btn-primary" style={{ marginLeft: 'auto', justifyContent: 'center', padding: '7px 18px', fontSize: '12px' }} onClick={() => onSaved(shift)}>Tutup</button>
+                <button className="btn btn-primary" style={{ marginLeft: 'auto', justifyContent: 'center', padding: '7px 18px', fontSize: '12px' }} onClick={() => onSaved(shift, kasAkhir)}>Tutup</button>
               </div>
 
               {/* Body 2 kolom */}
@@ -1125,9 +1130,16 @@ function ClosingModal({ orders, todayShifts = [], onClose, onSaved }) {
                   <label className="label" style={{ fontSize: '11px' }}>Nama yang Closing</label>
                   <input className="input" placeholder="Nama kasir..." value={closerName} onChange={e => setCloserName(e.target.value)} style={{ fontSize: '13px' }} />
                 </div>
+                {/* Kas Awal otomatis */}
+                <div style={{ background: '#F5F8FE', borderRadius: '8px', padding: '10px 12px', border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: '10px', color: 'var(--muted)', marginBottom: '2px' }}>Kas Awal (dari shift/hari sebelumnya)</div>
+                  <div style={{ fontSize: '15px', fontWeight: '800', color: 'var(--accent)' }}>{fmt(kasAwal)}</div>
+                </div>
+                {/* Pemindahan kas */}
                 <div>
-                  <label className="label" style={{ fontSize: '11px' }}>{t('kasAwal')}</label>
-                  <input className="input" type="number" placeholder="0" value={kasAwal} onChange={(e) => setKasAwal(e.target.value)} style={{ fontSize: '13px' }} />
+                  <label className="label" style={{ fontSize: '11px' }}>Kas Disetor ke Shift/Hari Berikutnya</label>
+                  <input className="input" type="number" placeholder="0" value={kasAkhirDisetor} onChange={e => setKasAkhirDisetor(e.target.value)} style={{ fontSize: '13px' }} />
+                  <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '3px' }}>Kas fisik yang diteruskan ke shift/hari berikutnya</div>
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
