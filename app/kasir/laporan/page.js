@@ -95,16 +95,15 @@ export default function LaporanHarianPage() {
                 <div>Belum ada laporan harian</div>
               </div>
             ) : (
-              <table className="table">
+              <table className="table" style={{ fontSize: '11px' }}>
                 <thead>
-                  <tr>{['Tanggal', 'Shift Selesai', 'Total Penjualan', 'Cash', 'QRIS', 'Transfer', 'Pengeluaran', 'Kas Akhir', ''].map(h => <th key={h}>{h}</th>)}</tr>
+                  <tr style={{ fontSize: '10px' }}>{['Tanggal', 'Shift', 'Penjualan', 'Cash', 'QRIS', 'Transfer', 'Keluar', 'Kas Akhir', ''].map(h => <th key={h} style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>{h}</th>)}</tr>
                 </thead>
                 <tbody>
                   {dayKeys.map(dayKey => {
                     const dayReports = grouped[dayKey]
                     const isExpanded = expandedDay === dayKey
                     const todayFlag = isToday(dayReports[0].date)
-                    // Ringkasan hari
                     const sumPenjualan = dayReports.reduce((s, r) => s + (r.penjualan || 0), 0)
                     const sumCash = dayReports.reduce((s, r) => s + (r.uangDisetor || 0), 0)
                     const sumQris = dayReports.reduce((s, r) => s + (r.qris || 0), 0)
@@ -112,67 +111,65 @@ export default function LaporanHarianPage() {
                     const sumPengeluaran = dayReports.reduce((s, r) => s + totalPengeluaran(r), 0)
                     const lastReport = dayReports[dayReports.length - 1]
                     const sumKasAkhir = kasAkhir(lastReport)
+                    const tdS = { padding: '5px 8px' }
                     return (
                       <>
-                        {/* Baris ringkasan per hari */}
                         <tr key={dayKey} style={{ cursor: 'pointer', background: isExpanded ? '#F0F4FF' : undefined }}
                           onClick={() => setExpandedDay(isExpanded ? null : dayKey)}>
-                          <td style={{ fontWeight: '700' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
+                          <td style={{ ...tdS, fontWeight: '700', whiteSpace: 'nowrap' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
                                 style={{ color: 'var(--accent)', transition: 'transform 0.2s', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)', flexShrink: 0 }}>
                                 <polyline points="9 18 15 12 9 6"/>
                               </svg>
                               {fmtDate(dayReports[0].date)}
                             </div>
                           </td>
-                          <td>
-                            <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                          <td style={tdS}>
+                            <div style={{ display: 'flex', gap: '3px' }}>
                               {['SHIFT_1','SHIFT_2','SHIFT_3'].map(sk => {
                                 const done = dayReports.some(r => r.shift === sk)
                                 const sc = SHIFT_COLORS[sk]
                                 return done ? (
-                                  <span key={sk} style={{ background: sc.bg, color: sc.color, border: `1px solid ${sc.border}`, borderRadius: '5px', padding: '1px 6px', fontSize: '10px', fontWeight: '700' }}>
-                                    {SHIFT_LABELS[sk]}
+                                  <span key={sk} style={{ background: sc.bg, color: sc.color, border: `1px solid ${sc.border}`, borderRadius: '4px', padding: '1px 5px', fontSize: '9px', fontWeight: '700' }}>
+                                    {sk.replace('SHIFT_', 'S')}
                                   </span>
                                 ) : null
                               })}
                             </div>
                           </td>
-                          <td style={{ color: 'var(--accent)', fontWeight: '700' }}>{fmt(sumPenjualan)}</td>
-                          <td style={{ color: 'var(--green)' }}>{fmt(sumCash)}</td>
-                          <td style={{ color: '#6B5BAF' }}>{fmt(sumQris)}</td>
-                          <td style={{ color: '#C47D1A' }}>{fmt(sumTransfer)}</td>
-                          <td style={{ color: 'var(--red)' }}>{fmt(sumPengeluaran)}</td>
-                          <td style={{ fontWeight: '700', color: sumKasAkhir >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(sumKasAkhir)}</td>
-                          <td />
+                          <td style={{ ...tdS, color: 'var(--accent)', fontWeight: '700' }}>{fmt(sumPenjualan)}</td>
+                          <td style={{ ...tdS, color: 'var(--green)' }}>{fmt(sumCash)}</td>
+                          <td style={{ ...tdS, color: '#6B5BAF' }}>{fmt(sumQris)}</td>
+                          <td style={{ ...tdS, color: '#C47D1A' }}>{fmt(sumTransfer)}</td>
+                          <td style={{ ...tdS, color: 'var(--red)' }}>{fmt(sumPengeluaran)}</td>
+                          <td style={{ ...tdS, fontWeight: '700', color: sumKasAkhir >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(sumKasAkhir)}</td>
+                          <td style={tdS} />
                         </tr>
-                        {/* Baris detail per shift (expanded) */}
                         {isExpanded && dayReports.map(r => {
                           const sc = SHIFT_COLORS[r.shift] || SHIFT_COLORS.SHIFT_1
                           return (
                             <tr key={r.id} style={{ background: '#F8FAFF', cursor: 'pointer' }} onClick={e => { e.stopPropagation(); setSelected(r) }}>
-                              <td style={{ paddingLeft: '32px', color: 'var(--muted)', fontSize: '12px' }}>
-                                <span style={{ background: sc.bg, color: sc.color, border: `1px solid ${sc.border}`, borderRadius: '5px', padding: '1px 7px', fontSize: '10px', fontWeight: '700' }}>
+                              <td style={{ ...tdS, paddingLeft: '24px' }}>
+                                <span style={{ background: sc.bg, color: sc.color, border: `1px solid ${sc.border}`, borderRadius: '4px', padding: '1px 6px', fontSize: '9px', fontWeight: '700' }}>
                                   {SHIFT_LABELS[r.shift] || r.shift}
                                 </span>
+                                <span style={{ fontSize: '10px', color: 'var(--muted)', marginLeft: '5px' }}>{r.closerName || r.cashier?.name || ''}</span>
                               </td>
-                              <td style={{ fontSize: '12px', color: 'var(--text2)' }}>
-                                {r.closerName || r.cashier?.name || '-'}
-                              </td>
-                              <td style={{ color: 'var(--accent)', fontWeight: '600', fontSize: '12px' }}>{fmt(r.penjualan)}</td>
-                              <td style={{ color: 'var(--green)', fontSize: '12px' }}>{fmt(r.uangDisetor)}</td>
-                              <td style={{ color: '#6B5BAF', fontSize: '12px' }}>{fmt(r.qris)}</td>
-                              <td style={{ color: '#C47D1A', fontSize: '12px' }}>{fmt(r.transfer)}</td>
-                              <td style={{ color: 'var(--red)', fontSize: '12px' }}>{fmt(totalPengeluaran(r))}</td>
-                              <td style={{ fontWeight: '600', fontSize: '12px', color: kasAkhir(r) >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(kasAkhir(r))}</td>
-                              <td style={{ display: 'flex', gap: '4px' }}>
-                                <button className="btn" style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid #C0D0E8', padding: '4px 8px', fontSize: '11px' }}
+                              <td style={tdS} />
+                              <td style={{ ...tdS, color: 'var(--accent)', fontWeight: '600' }}>{fmt(r.penjualan)}</td>
+                              <td style={{ ...tdS, color: 'var(--green)' }}>{fmt(r.uangDisetor)}</td>
+                              <td style={{ ...tdS, color: '#6B5BAF' }}>{fmt(r.qris)}</td>
+                              <td style={{ ...tdS, color: '#C47D1A' }}>{fmt(r.transfer)}</td>
+                              <td style={{ ...tdS, color: 'var(--red)' }}>{fmt(totalPengeluaran(r))}</td>
+                              <td style={{ ...tdS, fontWeight: '600', color: kasAkhir(r) >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(kasAkhir(r))}</td>
+                              <td style={{ ...tdS, display: 'flex', gap: '3px' }}>
+                                <button className="btn" style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid #C0D0E8', padding: '3px 7px', fontSize: '10px' }}
                                   onClick={e => { e.stopPropagation(); setSelected(r) }}>Detail</button>
-                                <button className="btn" style={{ background: '#F5F8FE', color: 'var(--text2)', border: '1px solid var(--border)', padding: '4px 8px', fontSize: '11px' }}
+                                <button className="btn" style={{ background: '#F5F8FE', color: 'var(--text2)', border: '1px solid var(--border)', padding: '3px 7px', fontSize: '10px' }}
                                   onClick={e => { e.stopPropagation(); setEditTarget(r) }}>Edit</button>
                                 {todayFlag && (
-                                  <button className="btn btn-danger" style={{ padding: '4px 8px', fontSize: '11px' }}
+                                  <button className="btn btn-danger" style={{ padding: '3px 7px', fontSize: '10px' }}
                                     disabled={reopening === r.id}
                                     onClick={e => { e.stopPropagation(); handleReopen(r) }}>
                                     {reopening === r.id ? '...' : 'Buka'}

@@ -152,13 +152,14 @@ export default function KasirPage() {
   const loadOrders = useCallback(async () => {
     const today = new Date().toLocaleDateString('en-CA')
     const closingDate = localStorage.getItem('closing_date')
-    // Hapus closing_date lama jika sudah hari baru
     if (closingDate && closingDate !== today) localStorage.removeItem('closing_date')
     if (closingDate === today) return
     try {
-      const today = new Date(); today.setHours(0, 0, 0, 0)
+      // Mulai dari timestamp closing shift terakhir (atau awal hari jika belum ada)
+      const shiftFrom = localStorage.getItem('last_shift_close_ts')
+      const fromDate = shiftFrom ? new Date(shiftFrom) : (() => { const d = new Date(); d.setHours(0,0,0,0); return d })()
       const endOfDay = new Date(); endOfDay.setHours(23, 59, 59, 999)
-      const res = await api.get(`/transactions?slim=1&from=${today.toISOString()}&to=${endOfDay.toISOString()}&page=1`)
+      const res = await api.get(`/transactions?slim=1&from=${fromDate.toISOString()}&to=${endOfDay.toISOString()}&page=1`)
       const incoming = res.data.transactions || []
       const incomingIds = new Set(incoming.map((o) => o.id))
       setOrders((prev) => {
@@ -627,6 +628,7 @@ export default function KasirPage() {
             setTodayShifts(newShifts)
             setLastShiftKasAkhir(kasAkhir)
             setOrders([]) // reset order list setelah closing
+            localStorage.setItem('last_shift_close_ts', new Date().toISOString())
             const allDone = ['SHIFT_1', 'SHIFT_2', 'SHIFT_3'].every(s => newShifts.includes(s))
             if (allDone) { localStorage.setItem('closing_date', todayKey); setClosed(true) }
             setClosingOpen(false)
@@ -936,7 +938,6 @@ function ClosingModal({ orders, todayShifts = [], kasAwalOtomatis = 0, onClose, 
   const [catatan, setCatatan] = useState('')
   const [closerName, setCloserName] = useState('')
   // Pemindahan kas: ke shift berikutnya atau ke hari berikutnya
-  const [kasAkhirDisetor, setKasAkhirDisetor] = useState('')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
@@ -954,7 +955,7 @@ function ClosingModal({ orders, todayShifts = [], kasAwalOtomatis = 0, onClose, 
         shift, kasAwal, penjualan: totalPenjualan, uangDisetor: totalCash,
         qris: totalQris, transfer: totalTransfer,
         pengeluaran: pengeluaran.filter(p => p.barang).map(p => ({ ...p, qty: Number(p.qty) || 1, harga: Number(p.harga) || 0 })),
-        piutang: [], catatan, closerName, kasAkhirDisetor: Number(kasAkhirDisetor) || 0,
+        piutang: [], catatan, closerName,
       })
       setSaved(true)
     } catch (e) {
@@ -1134,12 +1135,6 @@ function ClosingModal({ orders, todayShifts = [], kasAwalOtomatis = 0, onClose, 
                 <div style={{ background: '#F5F8FE', borderRadius: '8px', padding: '10px 12px', border: '1px solid var(--border)' }}>
                   <div style={{ fontSize: '10px', color: 'var(--muted)', marginBottom: '2px' }}>Kas Awal (dari shift/hari sebelumnya)</div>
                   <div style={{ fontSize: '15px', fontWeight: '800', color: 'var(--accent)' }}>{fmt(kasAwal)}</div>
-                </div>
-                {/* Pemindahan kas */}
-                <div>
-                  <label className="label" style={{ fontSize: '11px' }}>Kas Disetor ke Shift/Hari Berikutnya</label>
-                  <input className="input" type="number" placeholder="0" value={kasAkhirDisetor} onChange={e => setKasAkhirDisetor(e.target.value)} style={{ fontSize: '13px' }} />
-                  <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '3px' }}>Kas fisik yang diteruskan ke shift/hari berikutnya</div>
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
