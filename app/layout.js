@@ -1,8 +1,8 @@
 import './globals.css'
 
 export const metadata = {
-  title: 'Humbl - Admin',
-  description: 'Backoffice Humbl',
+  title: 'Hambl - Admin',
+  description: 'Backoffice Hambl',
 }
 
 // Script ini dijalankan sebelum render untuk mencegah flash of wrong theme

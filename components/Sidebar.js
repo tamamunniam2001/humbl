@@ -133,7 +133,7 @@ export default function Sidebar() {
             <div style={{ width: '34px', height: '34px', flexShrink: 0, background: 'linear-gradient(135deg, var(--accent), var(--accent2))', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', boxShadow: 'var(--shadow-accent)' }}>☕</div>
             {!collapsed && (
               <div style={{ overflow: 'hidden' }}>
-                <div style={{ fontWeight: 700, fontSize: '14px', color: 'var(--text)', whiteSpace: 'nowrap' }}>Humbl</div>
+                <div style={{ fontWeight: 700, fontSize: '14px', color: 'var(--text)', whiteSpace: 'nowrap' }}>Hambl</div>
                 <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '1px' }}>Admin Panel</div>
               </div>
             )}
