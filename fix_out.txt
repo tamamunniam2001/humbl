@@ -1,0 +1,8 @@
+Start of block: 54618
+Real SHIFTS marker at: 54920
+Second real SHIFTS marker at: -1
+Fixed: kept only clean comment + real SHIFTS
+Done. File size: 87006
+
+Verification:
+"/ ── Closing Modal ──\nconst SHIFTS = [\n  { key: 'SHIFT_1', label: 'Closing Shift 1', jam: '07.00 - 13.00' },\n  { key: 'SHIFT_2', label: 'Closing Shift 2', jam: '13.00 - 18.00' },\n  { key: 'SHIFT_3', label: 'Closing Shift 3', jam: '18.00 - 23.00' },\n]\n\nfunction ClosingModal({ orders, onClose, onSaved }) {\n  const fmt = (n) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFr"
