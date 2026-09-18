@@ -485,16 +485,18 @@ export default function KasirPage() {
                   return (
                     <div key={p.id} onClick={() => addToCart(p)}
                       style={{ background: '#fff', borderRadius: '12px', border: `2px solid ${qty > 0 ? 'var(--accent)' : 'var(--border)'}`, cursor: outOfStock ? 'not-allowed' : 'pointer', opacity: outOfStock ? 0.5 : 1, overflow: 'hidden', transition: 'border-color 0.15s, box-shadow 0.15s', boxShadow: qty > 0 ? '0 0 0 3px rgba(37,99,235,0.1)' : '0 1px 4px rgba(13,21,38,0.06)' }}>
-                      <div style={{ height: '100px', background: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+                      <div style={{ height: '100px', background: '#F1F5F9', position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         {p.imageUrl ? <img src={p.imageUrl} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none' }} /> : <span style={{ fontSize: '28px' }}>☕</span>}
+                        {p.category && (
+                          <span style={{ position: 'absolute', top: '6px', left: '6px', fontSize: '9px', fontWeight: '700', background: 'rgba(0,0,0,0.45)', color: '#fff', padding: '2px 6px', borderRadius: '5px', backdropFilter: 'blur(2px)', letterSpacing: '0.2px' }}>{p.category.name}</span>
+                        )}
+                        {qty > 0 && (
+                          <span style={{ position: 'absolute', top: '6px', right: '6px', fontSize: '10px', fontWeight: '800', background: 'var(--accent)', color: '#fff', width: '20px', height: '20px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{qty}</span>
+                        )}
                       </div>
-                      <div style={{ padding: '10px' }}>
-                        <div style={{ fontWeight: '700', fontSize: '13px', color: 'var(--text)', marginBottom: '4px', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{p.name}</div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          {p.category && <span style={{ fontSize: '10px', background: '#F1F5F9', color: '#64748B', padding: '2px 6px', borderRadius: '6px' }}>{p.category.name}</span>}
-                          <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text)', marginLeft: 'auto' }}>Rp {fmt(p.price)}</span>
-                        </div>
-                        {qty > 0 && <div style={{ marginTop: '6px', background: 'var(--accent)', color: '#fff', borderRadius: '6px', textAlign: 'center', fontSize: '11px', fontWeight: '700', padding: '2px 0' }}>{qty} dipilih</div>}
+                      <div style={{ padding: '8px 10px' }}>
+                        <div style={{ fontWeight: '700', fontSize: '12px', color: 'var(--text)', marginBottom: '4px', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: '1.35' }}>{p.name}</div>
+                        <div style={{ fontSize: '13px', fontWeight: '800', color: 'var(--accent)' }}>Rp {fmt(p.price)}</div>
                       </div>
                     </div>
                   )
