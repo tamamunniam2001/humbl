@@ -35,7 +35,7 @@ export async function GET(req) {
           id: true, invoiceNo: true, customerName: true, note: true, total: true,
           payment: true, change: true, payMethod: true, status: true, servedAt: true, createdAt: true,
           cashier: { select: { name: true } },
-          items: { select: { id: true, qty: true, price: true, subtotal: true, productId: true, name: true, category: true, product: { select: { name: true, imageUrl: true } } } },
+          items: { select: { id: true, qty: true, price: true, subtotal: true, productId: true, name: true, category: true, product: { select: { name: true, imageUrl: true, category: { select: { name: true } } } } } },
         }
       } : {
         include: { cashier: { select: { name: true } }, items: { include: { product: true } } }
@@ -98,9 +98,12 @@ export async function POST(req) {
 
     const cashier = await cashierPromise
     // Bangun items dari data yang sudah ada di memory (tidak perlu query ulang)
-    const responseItems = orderItems.filter(i => i.productId).map((i, idx) => ({
-      id: `tmp_${idx}`, qty: i.qty, price: i.price, subtotal: i.subtotal, productId: i.productId,
-      product: { name: items[idx]?.name || '', imageUrl: null },
+    const responseItems = orderItems.map((i, idx) => ({
+      id: `tmp_${idx}`, qty: i.qty, price: i.price, subtotal: i.subtotal,
+      productId: i.productId || null,
+      name: i.name,
+      category: i.category || '',
+      product: { name: i.name, imageUrl: null, category: i.category ? { name: i.category } : null },
     }))
 
     return NextResponse.json({ ...transaction, cashier, items: responseItems }, { status: 201 })

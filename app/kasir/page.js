@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import api from '@/lib/api'
-import { printThermal, printKitchen, printBar, connectPrinter, disconnectPrinter, getPrinterStatus } from '@/lib/thermal'
+import { printThermal, printAll, printKitchen, printBar, connectPrinter, disconnectPrinter, getPrinterStatus } from '@/lib/thermal'
 import Cookies from 'js-cookie'
 
 const fmt = (n) => Number(n).toLocaleString('id-ID')
@@ -1278,7 +1278,7 @@ function CheckoutModal({ cart, total, onClose, onSuccess, existingOrderId }) {
       servedAt: null, createdAt: new Date().toISOString(),
       customerName, note,
       cashier: { name: '' },
-      items: cart.map((i) => ({ qty: i.qty, price: i.product.price, subtotal: i.product.price * i.qty, product: { name: i.product.name, imageUrl: i.product.imageUrl } })),
+      items: cart.map((i) => ({ qty: i.qty, price: i.product.price, subtotal: i.product.price * i.qty, category: i.product.category?.name || '', product: { name: i.product.name, imageUrl: i.product.imageUrl, category: i.product.category } })),
     }
     if (!existingOrderId) setTx(optimisticTx)
     setLoading(true)
@@ -1319,6 +1319,13 @@ function CheckoutModal({ cart, total, onClose, onSuccess, existingOrderId }) {
   const [printingBar, setPrintingBar] = useState(false)
 
   async function handlePrint() {
+    if (!tx) return
+    setPrinting(true)
+    try { await printAll(tx) } catch (e) { alert('Gagal cetak: ' + e.message) }
+    finally { setPrinting(false) }
+  }
+
+  async function handlePrintCustomer() {
     if (!tx) return
     setPrinting(true)
     try { await printThermal(tx) } catch (e) { alert('Gagal cetak: ' + e.message) }
@@ -1362,14 +1369,18 @@ function CheckoutModal({ cart, total, onClose, onSuccess, existingOrderId }) {
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={() => onSuccess(tx)}>Selesai</button>
           <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} disabled={printing} onClick={handlePrint}>
-            {printing ? '⏳...' : '🖨️ Pelanggan'}
+            {printing ? '⏳...' : '🖨️ Print Semua'}
+          </button>
+          <button onClick={handlePrintCustomer} disabled={printing}
+            style={{ flex: 1, padding: '10px', borderRadius: '9px', border: '1px solid #C7D4F0', background: '#EFF4FF', color: '#1D4ED8', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+            👤 Pelanggan
           </button>
           <button onClick={handlePrintKitchen} disabled={printingKitchen}
-            style={{ flex: 1, padding: '10px', borderRadius: '9px', border: '1px solid #FDE68A', background: '#FFFBEB', color: '#92400E', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit', justifyContent: 'center' }}>
+            style={{ flex: 1, padding: '10px', borderRadius: '9px', border: '1px solid #FDE68A', background: '#FFFBEB', color: '#92400E', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
             {printingKitchen ? '⏳...' : '🍳 Dapur'}
           </button>
           <button onClick={handlePrintBar} disabled={printingBar}
-            style={{ flex: 1, padding: '10px', borderRadius: '9px', border: '1px solid #C7D4F0', background: '#EFF4FF', color: '#1D4ED8', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit', justifyContent: 'center' }}>
+            style={{ flex: 1, padding: '10px', borderRadius: '9px', border: '1px solid #C7D4F0', background: '#EFF4FF', color: '#1D4ED8', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
             {printingBar ? '⏳...' : '☕ Bar'}
           </button>
         </div>
