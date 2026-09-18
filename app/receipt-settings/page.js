@@ -11,17 +11,24 @@ const DEFAULTS = {
   printWidth: 32,
   lineSpacing: 1,
   footerLineSpacing: 1,
+  barCategories: [],
+  kitchenCategories: [],
 }
 
 export default function ReceiptSettingsPage() {
   const [form, setForm] = useState(DEFAULTS)
+  const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
-    api.get('/admin/receipt-settings').then(r => {
+    Promise.all([
+      api.get('/admin/receipt-settings'),
+      api.get('/admin/categories'),
+    ]).then(([r, c]) => {
       setForm({ ...DEFAULTS, ...r.data })
+      setCategories(c.data.map(x => x.name))
       setLoading(false)
     }).catch(() => setLoading(false))
   }, [])
@@ -59,6 +66,13 @@ export default function ReceiptSettingsPage() {
   }
 
   const footerLines = (form.footer || '').split('\n').map(l => l.trim()).filter(Boolean)
+
+  function toggleCategory(field, name) {
+    setForm(prev => {
+      const arr = prev[field] || []
+      return { ...prev, [field]: arr.includes(name) ? arr.filter(x => x !== name) : [...arr, name] }
+    })
+  }
 
   const set = (field) => (e) => setForm(prev => ({ ...prev, [field]: e.target.value }))
 
@@ -141,6 +155,33 @@ export default function ReceiptSettingsPage() {
                         style={{ flex: 1, accentColor: 'var(--accent)' }} />
                       <span style={{ fontSize: '14px', fontWeight: '700', color: 'var(--accent)', minWidth: '20px', textAlign: 'center' }}>{form.lineSpacing ?? 1}</span>
                     </div>
+                  </div>
+
+                  {/* Struk Dapur & Bar */}
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px' }}>Struk Dapur & Bar</div>
+                  <div style={{ fontSize: '11px', color: '#94A3B8', marginBottom: '12px' }}>Pilih kategori produk untuk menentukan struk mana yang dicetak. Struk pelanggan selalu berisi semua item.</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
+                    {[{ field: 'kitchenCategories', label: '🍳 Dapur', color: '#D97706', bg: '#FFFBEB', border: '#FDE68A', active: '#D97706' },
+                      { field: 'barCategories', label: '☕ Bar', color: '#2563EB', bg: '#EFF4FF', border: '#C7D4F0', active: '#2563EB' }]
+                      .map(({ field, label, color, bg, border }) => (
+                        <div key={field}>
+                          <label className="label">{label}</label>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            {categories.map(cat => {
+                              const checked = (form[field] || []).includes(cat)
+                              return (
+                                <div key={cat} onClick={() => toggleCategory(field, cat)}
+                                  style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '7px 10px', borderRadius: '8px', border: `1px solid ${checked ? border : 'var(--border)'}`, background: checked ? bg : '#fff', cursor: 'pointer', transition: 'all 0.1s' }}>
+                                  <div style={{ width: '16px', height: '16px', borderRadius: '4px', border: `2px solid ${checked ? color : '#CBD5E1'}`, background: checked ? color : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                    {checked && <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                                  </div>
+                                  <span style={{ fontSize: '12px', fontWeight: checked ? '600' : '400', color: checked ? color : 'var(--text2)' }}>{cat}</span>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      ))}
                   </div>
 
                   {/* Lebar kertas */}

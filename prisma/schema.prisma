@@ -318,6 +318,8 @@ model ReceiptSettings {
   printWidth        Int      @default(32)
   lineSpacing       Int      @default(1)
   footerLineSpacing Int      @default(1)
+  barCategories     Json     @default("[]")
+  kitchenCategories Json     @default("[]")
   updatedAt         DateTime @updatedAt
 }
 

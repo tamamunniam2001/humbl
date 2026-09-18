@@ -9,6 +9,8 @@ const DEFAULTS = {
   printWidth: 32,
   lineSpacing: 1,
   footerLineSpacing: 1,
+  barCategories: [],
+  kitchenCategories: [],
 }
 
 // GET boleh diakses semua role (kasir perlu untuk print struk)
@@ -34,6 +36,8 @@ export async function PUT(req) {
     printWidth: Number(body.printWidth) || DEFAULTS.printWidth,
     lineSpacing: Number(body.lineSpacing) ?? DEFAULTS.lineSpacing,
     footerLineSpacing: Number(body.footerLineSpacing) ?? DEFAULTS.footerLineSpacing,
+    barCategories: Array.isArray(body.barCategories) ? body.barCategories : DEFAULTS.barCategories,
+    kitchenCategories: Array.isArray(body.kitchenCategories) ? body.kitchenCategories : DEFAULTS.kitchenCategories,
   }
   const settings = await prisma.receiptSettings.upsert({
     where: { id: 'singleton' },
