@@ -5,12 +5,9 @@ import { verifyAuth, adminOnly } from '@/lib/auth'
 const DEFAULTS = {
   storeName: 'BUMI KOPI',
   tagline: 'Struk Pembayaran',
-  footer: 'Terima kasih sudah berkunjung!',
-  footer2: 'Bumi Kopi',
-  footer3: '',
-  footer4: '',
-  footer5: '',
+  footer: 'Terima kasih sudah berkunjung!\nBumi Kopi',
   printWidth: 32,
+  lineSpacing: 1,
 }
 
 // GET boleh diakses semua role (kasir perlu untuk print struk)
@@ -33,11 +30,8 @@ export async function PUT(req) {
     storeName: body.storeName ?? DEFAULTS.storeName,
     tagline: body.tagline ?? DEFAULTS.tagline,
     footer: body.footer ?? DEFAULTS.footer,
-    footer2: body.footer2 ?? DEFAULTS.footer2,
-    footer3: body.footer3 ?? DEFAULTS.footer3,
-    footer4: body.footer4 ?? DEFAULTS.footer4,
-    footer5: body.footer5 ?? DEFAULTS.footer5,
     printWidth: Number(body.printWidth) || DEFAULTS.printWidth,
+    lineSpacing: Number(body.lineSpacing) ?? DEFAULTS.lineSpacing,
   }
   const settings = await prisma.receiptSettings.upsert({
     where: { id: 'singleton' },

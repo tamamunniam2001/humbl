@@ -7,12 +7,9 @@ import { resetSettingsCache } from '@/lib/thermal'
 const DEFAULTS = {
   storeName: 'HUMBL',
   tagline: 'Struk Pembayaran',
-  footer: 'Terima kasih sudah berkunjung!',
-  footer2: 'Humbl',
-  footer3: '',
-  footer4: '',
-  footer5: '',
+  footer: 'Terima kasih sudah berkunjung!\nHumbl',
   printWidth: 32,
+  lineSpacing: 1,
 }
 
 export default function ReceiptSettingsPage() {
@@ -60,8 +57,7 @@ export default function ReceiptSettingsPage() {
     return str.padStart(Math.floor((w + str.length) / 2)).padEnd(w)
   }
 
-  const footerLines = [form.footer, form.footer2, form.footer3, form.footer4, form.footer5]
-    .filter(f => f && f.trim())
+  const footerLines = (form.footer || '').split('\n').map(l => l.trim()).filter(Boolean)
 
   const set = (field) => (e) => setForm(prev => ({ ...prev, [field]: e.target.value }))
 
@@ -111,23 +107,33 @@ export default function ReceiptSettingsPage() {
                   </div>
 
                   {/* Footer */}
-                  <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px' }}>Footer Struk (baris kosong tidak dicetak)</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
-                    {[
-                      { key: 'footer',  label: 'Footer Baris 1', placeholder: 'Terima kasih sudah berkunjung!' },
-                      { key: 'footer2', label: 'Footer Baris 2', placeholder: 'Humble' },
-                      { key: 'footer3', label: 'Footer Baris 3', placeholder: 'Instagram: @humble' },
-                      { key: 'footer4', label: 'Footer Baris 4', placeholder: 'WA: 0812-xxxx-xxxx' },
-                      { key: 'footer5', label: 'Footer Baris 5', placeholder: 'Jl. Contoh No. 1, Kota' },
-                    ].map(({ key, label, placeholder }) => (
-                      <div key={key}>
-                        <label className="label">{label}</label>
-                        <input className="input" value={form[key]} onChange={set(key)} placeholder={placeholder} maxLength={48} />
-                      </div>
-                    ))}
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px' }}>Footer Struk</div>
+                  <div style={{ marginBottom: '20px' }}>
+                    <label className="label">Teks Footer</label>
+                    <textarea
+                      className="input"
+                      rows={5}
+                      value={form.footer}
+                      onChange={set('footer')}
+                      placeholder={'Terima kasih sudah berkunjung!\nHumbl\nIG: @humbl'}
+                      style={{ resize: 'vertical', fontSize: '13px', lineHeight: '1.6', fontFamily: 'inherit' }}
+                    />
+                    <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '4px' }}>Tekan Enter untuk baris baru. Setiap baris dicetak di tengah struk.</div>
                   </div>
 
-                  {/* Lebar kertas */}
+                  {/* Jarak Baris */}
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px' }}>Jarak Baris</div>
+                  <div style={{ marginBottom: '20px' }}>
+                    <label className="label">Spasi antar baris item (0 = rapat, 3 = longgar)</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <input type="range" min="0" max="3" value={form.lineSpacing ?? 1}
+                        onChange={e => setForm(prev => ({ ...prev, lineSpacing: Number(e.target.value) }))}
+                        style={{ flex: 1, accentColor: 'var(--accent)' }} />
+                      <span style={{ fontSize: '14px', fontWeight: '700', color: 'var(--accent)', minWidth: '20px', textAlign: 'center' }}>{form.lineSpacing ?? 1}</span>
+                    </div>
+                  </div>
+
+                  {/* Lebar kertas */}}
                   <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px' }}>Ukuran Kertas</div>
                   <div style={{ marginBottom: '20px' }}>
                     <label className="label">Lebar Kertas (karakter)</label>
@@ -172,7 +178,7 @@ export default function ReceiptSettingsPage() {
                     center(form.storeName.toUpperCase()),
                     center(form.tagline),
                     hr,
-                    `Invoice : BK-20250101`,
+                    `Invoice : 20250101-001`,
                     `Kasir   : Admin`,
                     `Pembeli : Pelanggan`,
                     `Waktu   : 01/01/2025 10:00`,
@@ -180,9 +186,11 @@ export default function ReceiptSettingsPage() {
                     ...demoItems.flatMap(item => [
                       item.name,
                       padRow(`  ${item.qty} x Rp ${fmtDemo(item.price)}`, `Rp ${fmtDemo(item.subtotal)}`),
+                      ...Array.from({ length: form.lineSpacing ?? 1 }, () => ''),
                     ]),
                     hr,
                     padRow('TOTAL', `Rp ${fmtDemo(demoTotal)}`),
+                    ...Array.from({ length: form.lineSpacing ?? 1 }, () => ''),
                     padRow('Bayar (CASH)', `Rp ${fmtDemo(60000)}`),
                     padRow('Kembalian', `Rp ${fmtDemo(2000)}`),
                     hr,
@@ -190,7 +198,7 @@ export default function ReceiptSettingsPage() {
                   ].join('\n')}
                 </div>
                 <div style={{ marginTop: '12px', fontSize: '11px', color: '#94A3B8', textAlign: 'center' }}>
-                  {footerLines.length} baris footer aktif
+                  {footerLines.length} baris footer · spasi {form.lineSpacing ?? 1}
                 </div>
               </div>
 
