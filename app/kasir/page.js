@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import api from '@/lib/api'
-import { printThermal, connectPrinter, disconnectPrinter, getPrinterStatus } from '@/lib/thermal'
+import { printThermal, printKitchen, printBar, connectPrinter, disconnectPrinter, getPrinterStatus } from '@/lib/thermal'
 import Cookies from 'js-cookie'
 
 const fmt = (n) => Number(n).toLocaleString('id-ID')
@@ -677,6 +677,8 @@ export default function KasirPage() {
 // ── Order Detail Modal ──
 function OrderDetailModal({ order, products = [], onClose, onToggleServed, onPayNow, onRefresh }) {
   const [printing, setPrinting] = useState(false)
+  const [printingKitchen, setPrintingKitchen] = useState(false)
+  const [printingBar, setPrintingBar] = useState(false)
   const [toggling, setToggling] = useState(false)
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -694,6 +696,18 @@ function OrderDetailModal({ order, products = [], onClose, onToggleServed, onPay
     setPrinting(true)
     try { await printThermal(order) } catch (e) { alert('Gagal cetak: ' + e.message) }
     finally { setPrinting(false) }
+  }
+
+  async function handlePrintKitchen() {
+    setPrintingKitchen(true)
+    try { await printKitchen(order) } catch (e) { alert(e.message) }
+    finally { setPrintingKitchen(false) }
+  }
+
+  async function handlePrintBar() {
+    setPrintingBar(true)
+    try { await printBar(order) } catch (e) { alert(e.message) }
+    finally { setPrintingBar(false) }
   }
 
   function handleToggle() {
@@ -883,7 +897,15 @@ function OrderDetailModal({ order, products = [], onClose, onToggleServed, onPay
               </button>
               <button onClick={handlePrint} disabled={printing}
                 style={{ flex: 1, padding: '10px', borderRadius: '9px', border: '1px solid #C7D4F0', background: '#EFF4FF', color: 'var(--accent)', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
-                {printing ? '⏳ Mencetak...' : '🖨️ Print Ulang'}
+                {printing ? '⏳...' : '🖨️ Pelanggan'}
+              </button>
+              <button onClick={handlePrintKitchen} disabled={printingKitchen}
+                style={{ flex: 1, padding: '10px', borderRadius: '9px', border: '1px solid #FDE68A', background: '#FFFBEB', color: '#92400E', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+                {printingKitchen ? '⏳...' : '🍳 Dapur'}
+              </button>
+              <button onClick={handlePrintBar} disabled={printingBar}
+                style={{ flex: 1, padding: '10px', borderRadius: '9px', border: '1px solid #C7D4F0', background: '#EFF4FF', color: '#1D4ED8', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+                {printingBar ? '⏳...' : '☕ Bar'}
               </button>
             </>
           )}
@@ -1293,11 +1315,28 @@ function CheckoutModal({ cart, total, onClose, onSuccess, existingOrderId }) {
     } finally { setLoading(false) }
   }
 
+  const [printingKitchen, setPrintingKitchen] = useState(false)
+  const [printingBar, setPrintingBar] = useState(false)
+
   async function handlePrint() {
     if (!tx) return
     setPrinting(true)
     try { await printThermal(tx) } catch (e) { alert('Gagal cetak: ' + e.message) }
     finally { setPrinting(false) }
+  }
+
+  async function handlePrintKitchen() {
+    if (!tx) return
+    setPrintingKitchen(true)
+    try { await printKitchen(tx) } catch (e) { alert(e.message) }
+    finally { setPrintingKitchen(false) }
+  }
+
+  async function handlePrintBar() {
+    if (!tx) return
+    setPrintingBar(true)
+    try { await printBar(tx) } catch (e) { alert(e.message) }
+    finally { setPrintingBar(false) }
   }
 
   const numKeys = ['7','8','9','4','5','6','1','2','3','000','0','⌫']
@@ -1320,10 +1359,18 @@ function CheckoutModal({ cart, total, onClose, onSuccess, existingOrderId }) {
           </div>
           {payMethod === 'CASH' && tx.change > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginTop: '4px', color: 'var(--green)' }}><span>Kembalian</span><span style={{ fontWeight: '700' }}>Rp {fmt(tx.change)}</span></div>}
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={() => onSuccess(tx)}>Selesai</button>
           <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} disabled={printing} onClick={handlePrint}>
-            {printing ? '⏳ Mencetak...' : '🖨️ Print Struk'}
+            {printing ? '⏳...' : '🖨️ Pelanggan'}
+          </button>
+          <button onClick={handlePrintKitchen} disabled={printingKitchen}
+            style={{ flex: 1, padding: '10px', borderRadius: '9px', border: '1px solid #FDE68A', background: '#FFFBEB', color: '#92400E', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit', justifyContent: 'center' }}>
+            {printingKitchen ? '⏳...' : '🍳 Dapur'}
+          </button>
+          <button onClick={handlePrintBar} disabled={printingBar}
+            style={{ flex: 1, padding: '10px', borderRadius: '9px', border: '1px solid #C7D4F0', background: '#EFF4FF', color: '#1D4ED8', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit', justifyContent: 'center' }}>
+            {printingBar ? '⏳...' : '☕ Bar'}
           </button>
         </div>
       </div>
