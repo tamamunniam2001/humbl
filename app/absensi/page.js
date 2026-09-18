@@ -65,7 +65,7 @@ export default function AbsensiPage() {
       try {
         const form = new FormData()
         form.append('file', blob, 'selfie.jpg')
-        const res = await fetch('/api/attendance/selfie', { method: 'POST', headers: { 'x-requested-with': 'XMLHttpRequest' }, body: form })
+        const res = await fetch('/api/attendance/selfie', { method: 'POST', body: form })
         const data = await res.json()
         setSelfieUrl(data.url || '')
       } catch { setSelfieUrl('') }
@@ -224,9 +224,9 @@ export default function AbsensiPage() {
 
             {/* Tombol Simpan */}
             <button
-              onClick={handleSave} disabled={saving || !employeeId}
-              style={{ width: '100%', marginTop: '20px', padding: '15px', borderRadius: '12px', border: 'none', background: saving || !employeeId ? '#94A3B8' : 'var(--text)', color: '#fff', fontSize: '14px', fontWeight: '800', cursor: saving || !employeeId ? 'not-allowed' : 'pointer', fontFamily: 'inherit', letterSpacing: '0.5px', transition: 'all 0.15s' }}>
-              {saving ? 'Menyimpan...' : 'SIMPAN LAPORAN ABSEN'}
+              onClick={handleSave} disabled={saving || !employeeId || uploading}
+              style={{ width: '100%', marginTop: '20px', padding: '15px', borderRadius: '12px', border: 'none', background: saving || !employeeId || uploading ? '#94A3B8' : 'var(--text)', color: '#fff', fontSize: '14px', fontWeight: '800', cursor: saving || !employeeId || uploading ? 'not-allowed' : 'pointer', fontFamily: 'inherit', letterSpacing: '0.5px', transition: 'all 0.15s' }}>
+              {saving ? 'Menyimpan...' : uploading ? 'Mengunggah foto...' : 'SIMPAN LAPORAN ABSEN'}
             </button>
           </div>
         </div>

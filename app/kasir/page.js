@@ -920,6 +920,8 @@ function ClosingModal({ orders, todayShifts = [], kasAwalOtomatis = 0, onClose, 
   const availableShifts = SHIFTS.filter(s => !todayShifts.includes(s.key))
   const [shift, setShift] = useState(() => availableShifts[0]?.key || 'SHIFT_1')
   const activeShift = SHIFTS.find(s => s.key === shift)
+  const [employees, setEmployees] = useState([])
+  useEffect(() => { api.get('/admin/employees').then(r => setEmployees(r.data.filter(e => e.isActive))).catch(() => {}) }, [])
 
   const [snapshot] = useState(() => {
     const completed = orders.filter(o => o.status === 'COMPLETED')
@@ -989,7 +991,10 @@ function ClosingModal({ orders, todayShifts = [], kasAwalOtomatis = 0, onClose, 
                 </div>
                 <div>
                   <div style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text)' }}>Laporan Closing Tersimpan</div>
-                  <div style={{ fontSize: '11px', color: 'var(--muted)' }}>{new Date().toLocaleDateString('id-ID', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                    {new Date().toLocaleDateString('id-ID', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+                    {closerName && <> &nbsp;&middot;&nbsp; <span style={{ fontWeight: '600', color: 'var(--text2)' }}>{closerName}</span></>}
+                  </div>
                 </div>
                 <button className="btn btn-primary" style={{ marginLeft: 'auto', justifyContent: 'center', padding: '7px 18px', fontSize: '12px' }} onClick={() => onSaved(shift, kasAkhir)}>Tutup</button>
               </div>
@@ -1129,7 +1134,10 @@ function ClosingModal({ orders, todayShifts = [], kasAwalOtomatis = 0, onClose, 
                 {/* Nama yang closing */}
                 <div>
                   <label className="label" style={{ fontSize: '11px' }}>Nama yang Closing</label>
-                  <input className="input" placeholder="Nama kasir..." value={closerName} onChange={e => setCloserName(e.target.value)} style={{ fontSize: '13px' }} />
+                  <select className="input" value={closerName} onChange={e => setCloserName(e.target.value)} style={{ fontSize: '13px' }}>
+                    <option value="">Pilih nama staff...</option>
+                    {employees.map(e => <option key={e.id} value={e.name}>{e.name}</option>)}
+                  </select>
                 </div>
                 {/* Kas Awal otomatis */}
                 <div style={{ background: '#F5F8FE', borderRadius: '8px', padding: '10px 12px', border: '1px solid var(--border)' }}>

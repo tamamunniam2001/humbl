@@ -1,10 +1,7 @@
 import { NextResponse } from 'next/server'
 import { put } from '@vercel/blob'
-import { verifyAuth } from '@/lib/auth'
 
 export async function POST(req) {
-  const { error } = verifyAuth(req)
-  if (error) return error
   try {
     const formData = await req.formData()
     const file = formData.get('file')

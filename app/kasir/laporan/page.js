@@ -432,6 +432,8 @@ function EditModal({ report: r, onClose, onSaved, fmt, fmtDate, isAdmin }) {
   const [pengeluaran, setPengeluaran] = useState((r.pengeluaran || []).map(p => ({ ...p })))
   const [catatan, setCatatan] = useState(r.catatan || '')
   const [saving, setSaving] = useState(false)
+  const [employees, setEmployees] = useState([])
+  useEffect(() => { api.get('/admin/employees').then(res => setEmployees(res.data.filter(e => e.isActive))).catch(() => {}) }, [])
 
   const totPengeluaran = pengeluaran.reduce((s, p) => s + (Number(p.harga) * Number(p.qty || 1)), 0)
   const kasAkhirPreview = (Number(kasAwal) || 0) + (Number(cash) || 0) - totPengeluaran
@@ -499,7 +501,10 @@ function EditModal({ report: r, onClose, onSaved, fmt, fmtDate, isAdmin }) {
                 </div>
                 <div>
                   <label className="label" style={{ fontSize: '11px' }}>Nama Closer</label>
-                  <input className="input" style={inputS} value={closerName} onChange={e => setCloserName(e.target.value)} placeholder="Nama kasir yang closing..." />
+                  <select className="input" style={inputS} value={closerName} onChange={e => setCloserName(e.target.value)}>
+                    <option value="">Pilih nama staff...</option>
+                    {employees.map(e => <option key={e.id} value={e.name}>{e.name}</option>)}
+                  </select>
                 </div>
               </div>
             )}
