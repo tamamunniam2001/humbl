@@ -133,7 +133,7 @@ export default function ReceiptSettingsPage() {
                     </div>
                   </div>
 
-                  {/* Lebar kertas */}}
+                  {/* Lebar kertas */}
                   <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px' }}>Ukuran Kertas</div>
                   <div style={{ marginBottom: '20px' }}>
                     <label className="label">Lebar Kertas (karakter)</label>
