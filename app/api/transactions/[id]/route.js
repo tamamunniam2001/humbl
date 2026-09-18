@@ -79,11 +79,22 @@ export async function DELETE(req, { params }) {
   const { error, user } = verifyAuth(req)
   if (error) return error
   const { id } = await params
-  // Kasir hanya bisa hapus transaksi miliknya
-  const tx = await prisma.transaction.findUnique({ where: { id }, select: { cashierId: true } })
+  const tx = await prisma.transaction.findUnique({
+    where: { id },
+    select: { cashierId: true, status: true, items: { select: { productId: true, qty: true } } },
+  })
   if (!tx) return NextResponse.json({ message: 'Transaksi tidak ditemukan' }, { status: 404 })
   if (user.role !== 'ADMIN' && tx.cashierId !== user.id)
     return NextResponse.json({ message: 'Akses ditolak' }, { status: 403 })
+  // Kembalikan stock produk jika transaksi sudah COMPLETED
+  if (tx.status === 'COMPLETED') {
+    const productItems = tx.items.filter(i => i.productId)
+    if (productItems.length) {
+      await Promise.all(productItems.map(i =>
+        prisma.product.update({ where: { id: i.productId }, data: { stock: { increment: i.qty } } })
+      ))
+    }
+  }
   await prisma.orderItem.deleteMany({ where: { transactionId: id } })
   await prisma.transaction.delete({ where: { id } })
   return NextResponse.json({ success: true })

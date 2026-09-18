@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { usePathname } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import api from '@/lib/api'
+import Cookies from 'js-cookie'
 
 const fmt = (n) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(n || 0)
 const fmtDate = (d) => new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -27,7 +28,10 @@ export default function LaporanHarianPage() {
   const [selected, setSelected] = useState(null)
   const [editTarget, setEditTarget] = useState(null)
   const [reopening, setReopening] = useState(null)
-  const [expandedDay, setExpandedDay] = useState(null) // dateKey yang sedang di-expand
+  const [expandedDay, setExpandedDay] = useState(null)
+  const [deletingDay, setDeletingDay] = useState(null)
+  const user = (() => { try { return JSON.parse(Cookies.get('user') || '{}') } catch { return {} } })()
+  const isAdmin = user.role === 'ADMIN'
 
   const load = useCallback(async () => {
     try {
@@ -60,6 +64,17 @@ export default function LaporanHarianPage() {
       alert('Closing dibatalkan. Silakan kembali ke halaman Kasir.')
     } catch (e) { alert(e.response?.data?.message || 'Gagal membuka kembali') }
     finally { setReopening(null) }
+  }
+
+  async function handleDeleteDay(dayKey, dayReports) {
+    if (!confirm(`Hapus semua laporan tanggal ${fmtDate(dayReports[0].date)}? (${dayReports.length} shift) Tindakan ini tidak bisa dibatalkan.`)) return
+    setDeletingDay(dayKey)
+    try {
+      await Promise.all(dayReports.map(r => api.delete(`/daily-reports/${r.id}`)))
+      setReports(prev => prev.filter(x => !dayReports.find(r => r.id === x.id)))
+      if (expandedDay === dayKey) setExpandedDay(null)
+    } catch (e) { alert(e.response?.data?.message || 'Gagal menghapus') }
+    finally { setDeletingDay(null) }
   }
 
   const totalPengeluaran = (r) => (r.pengeluaran || []).reduce((s, p) => s + (p.harga * p.qty), 0)
@@ -144,7 +159,15 @@ export default function LaporanHarianPage() {
                           <td style={{ ...tdS, color: '#C47D1A' }}>{fmt(sumTransfer)}</td>
                           <td style={{ ...tdS, color: 'var(--red)' }}>{fmt(sumPengeluaran)}</td>
                           <td style={{ ...tdS, fontWeight: '700', color: sumKasAkhir >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(sumKasAkhir)}</td>
-                          <td style={tdS} />
+                          <td style={tdS}>
+                            {isAdmin && (
+                              <button className="btn btn-danger" style={{ padding: '3px 8px', fontSize: '10px' }}
+                                disabled={deletingDay === dayKey}
+                                onClick={e => { e.stopPropagation(); handleDeleteDay(dayKey, dayReports) }}>
+                                {deletingDay === dayKey ? '...' : '🗑 Hapus'}
+                              </button>
+                            )}
+                          </td>
                         </tr>
                         {isExpanded && dayReports.map(r => {
                           const sc = SHIFT_COLORS[r.shift] || SHIFT_COLORS.SHIFT_1
@@ -166,13 +189,22 @@ export default function LaporanHarianPage() {
                               <td style={{ ...tdS, display: 'flex', gap: '3px' }}>
                                 <button className="btn" style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid #C0D0E8', padding: '3px 7px', fontSize: '10px' }}
                                   onClick={e => { e.stopPropagation(); setSelected(r) }}>Detail</button>
-                                <button className="btn" style={{ background: '#F5F8FE', color: 'var(--text2)', border: '1px solid var(--border)', padding: '3px 7px', fontSize: '10px' }}
-                                  onClick={e => { e.stopPropagation(); setEditTarget(r) }}>Edit</button>
+                                {(isAdmin || todayFlag) && (
+                                  <button className="btn" style={{ background: '#F5F8FE', color: 'var(--text2)', border: '1px solid var(--border)', padding: '3px 7px', fontSize: '10px' }}
+                                    onClick={e => { e.stopPropagation(); setEditTarget(r) }}>Edit</button>
+                                )}
                                 {todayFlag && (
                                   <button className="btn btn-danger" style={{ padding: '3px 7px', fontSize: '10px' }}
                                     disabled={reopening === r.id}
                                     onClick={e => { e.stopPropagation(); handleReopen(r) }}>
                                     {reopening === r.id ? '...' : 'Buka'}
+                                  </button>
+                                )}
+                                {isAdmin && !todayFlag && (
+                                  <button className="btn btn-danger" style={{ padding: '3px 7px', fontSize: '10px' }}
+                                    disabled={reopening === r.id}
+                                    onClick={e => { e.stopPropagation(); handleReopen(r) }}>
+                                    {reopening === r.id ? '...' : 'Hapus'}
                                   </button>
                                 )}
                               </td>
@@ -188,8 +220,8 @@ export default function LaporanHarianPage() {
           </div>
         </div>
 
-        {selected && <DetailModal report={selected} onClose={() => setSelected(null)} fmt={fmt} fmtDate={fmtDate} totalPengeluaran={totalPengeluaran} kasAkhir={kasAkhir} onEdit={() => { setEditTarget(selected); setSelected(null) }} onReopen={handleReopen} reopening={reopening} />}
-        {editTarget && <EditModal report={editTarget} onClose={() => setEditTarget(null)} onSaved={() => { setEditTarget(null); load() }} fmt={fmt} fmtDate={fmtDate} />}
+        {selected && <DetailModal report={selected} onClose={() => setSelected(null)} fmt={fmt} fmtDate={fmtDate} totalPengeluaran={totalPengeluaran} kasAkhir={kasAkhir} onEdit={() => { setEditTarget(selected); setSelected(null) }} onReopen={handleReopen} reopening={reopening} isAdmin={isAdmin} />}
+        {editTarget && <EditModal report={editTarget} onClose={() => setEditTarget(null)} onSaved={() => { setEditTarget(null); load() }} fmt={fmt} fmtDate={fmtDate} isAdmin={isAdmin} />}
       </main>
     </div>
   )
@@ -202,7 +234,7 @@ const PAY_TABS = [
   { key: 'NONTUNAI', label: 'Non-Tunai', color: '#0891B2', bg: '#E0F7FA', border: '#A5D8E6' },
 ]
 
-function DetailModal({ report: r, onClose, fmt, fmtDate, totalPengeluaran, kasAkhir, onEdit, onReopen, reopening }) {
+function DetailModal({ report: r, onClose, fmt, fmtDate, totalPengeluaran, kasAkhir, onEdit, onReopen, reopening, isAdmin }) {
   const kAkhir = kasAkhir(r)
   const totPengeluaran = totalPengeluaran(r)
   const [activeTab, setActiveTab] = useState(null)
@@ -240,11 +272,13 @@ function DetailModal({ report: r, onClose, fmt, fmtDate, totalPengeluaran, kasAk
             </div>
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <button onClick={onEdit} style={{ background: 'rgba(74,124,199,0.1)', border: '1px solid #C0D0E8', borderRadius: '8px', cursor: 'pointer', color: '#4A7CC7', fontSize: '12px', fontWeight: '600', padding: '5px 12px', fontFamily: 'inherit' }}>Edit</button>
-            {isToday(r.date) && (
+            {(isAdmin || isToday(r.date)) && (
+              <button onClick={onEdit} style={{ background: 'rgba(74,124,199,0.1)', border: '1px solid #C0D0E8', borderRadius: '8px', cursor: 'pointer', color: '#4A7CC7', fontSize: '12px', fontWeight: '600', padding: '5px 12px', fontFamily: 'inherit' }}>Edit</button>
+            )}
+            {(isAdmin || isToday(r.date)) && (
               <button onClick={() => onReopen(r)} disabled={reopening === r.id}
                 style={{ background: 'rgba(201,85,85,0.08)', border: '1px solid #FECACA', borderRadius: '8px', cursor: 'pointer', color: '#C95555', fontSize: '12px', fontWeight: '600', padding: '5px 12px', fontFamily: 'inherit' }}>
-                {reopening === r.id ? '...' : 'Buka Kembali'}
+                {reopening === r.id ? '...' : isToday(r.date) ? 'Buka Kembali' : 'Hapus'}
               </button>
             )}
             <button onClick={onClose} style={{ background: 'rgba(74,124,199,0.1)', border: '1px solid #C0D0E8', borderRadius: '8px', cursor: 'pointer', color: '#5A6E90', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -381,11 +415,26 @@ function DetailModal({ report: r, onClose, fmt, fmtDate, totalPengeluaran, kasAk
   )
 }
 
-function EditModal({ report: r, onClose, onSaved, fmt, fmtDate }) {
+const SHIFTS_LIST = [
+  { key: 'SHIFT_1', label: 'Shift 1' },
+  { key: 'SHIFT_2', label: 'Shift 2' },
+  { key: 'SHIFT_3', label: 'Shift 3' },
+]
+
+function EditModal({ report: r, onClose, onSaved, fmt, fmtDate, isAdmin }) {
   const [kasAwal, setKasAwal] = useState(String(r.kasAwal || ''))
+  const [penjualan, setPenjualan] = useState(String(r.penjualan || ''))
+  const [cash, setCash] = useState(String(r.uangDisetor || ''))
+  const [qris, setQris] = useState(String(r.qris || ''))
+  const [transfer, setTransfer] = useState(String(r.transfer || ''))
+  const [shift, setShift] = useState(r.shift || 'SHIFT_1')
+  const [closerName, setCloserName] = useState(r.closerName || '')
   const [pengeluaran, setPengeluaran] = useState((r.pengeluaran || []).map(p => ({ ...p })))
   const [catatan, setCatatan] = useState(r.catatan || '')
   const [saving, setSaving] = useState(false)
+
+  const totPengeluaran = pengeluaran.reduce((s, p) => s + (Number(p.harga) * Number(p.qty || 1)), 0)
+  const kasAkhirPreview = (Number(kasAwal) || 0) + (Number(cash) || 0) - totPengeluaran
 
   function addPengeluaran() { setPengeluaran(prev => [...prev, { barang: '', qty: 1, harga: 0 }]) }
   function updateP(i, field, val) { setPengeluaran(prev => prev.map((p, n) => n === i ? { ...p, [field]: val } : p)) }
@@ -395,7 +444,12 @@ function EditModal({ report: r, onClose, onSaved, fmt, fmtDate }) {
     try {
       await api.put(`/daily-reports/${r.id}`, {
         kasAwal: Number(kasAwal) || 0,
-        penjualan: r.penjualan, uangDisetor: r.uangDisetor, qris: r.qris, transfer: r.transfer,
+        penjualan: Number(penjualan) || 0,
+        uangDisetor: Number(cash) || 0,
+        qris: Number(qris) || 0,
+        transfer: Number(transfer) || 0,
+        shift: isAdmin ? shift : r.shift,
+        closerName: isAdmin ? closerName : r.closerName,
         pengeluaran: pengeluaran.filter(p => p.barang).map(p => ({ ...p, qty: Number(p.qty) || 1, harga: Number(p.harga) || 0 })),
         piutang: r.piutang || [], catatan,
       })
@@ -404,51 +458,123 @@ function EditModal({ report: r, onClose, onSaved, fmt, fmtDate }) {
     finally { setSaving(false) }
   }
 
+  const inputS = { fontSize: '12px', padding: '7px 10px' }
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(30,42,59,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500, backdropFilter: 'blur(4px)' }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="card fade-in" style={{ width: '480px', maxWidth: '96vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div className="card fade-in" style={{ width: isAdmin ? '680px' : '480px', maxWidth: '96vw', maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+        {/* Header */}
         <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(135deg, #D8E4F4, #E8EEF8)', flexShrink: 0 }}>
           <div>
             <div style={{ fontSize: '14px', fontWeight: '800', color: '#1E2A3B' }}>Edit Laporan — {fmtDate(r.date)}</div>
-            <div style={{ fontSize: '11px', color: '#7A8FAF' }}>Kasir: {r.cashier?.name || '-'}</div>
+            <div style={{ fontSize: '11px', color: '#7A8FAF', marginTop: '1px' }}>
+              {isAdmin ? <span style={{ background: '#FEF3C7', color: '#92400E', border: '1px solid #FDE68A', borderRadius: '5px', padding: '1px 7px', fontSize: '10px', fontWeight: '700' }}>⚡ Mode Admin</span> : `Kasir: ${r.cashier?.name || '-'}`}
+            </div>
           </div>
           <button onClick={onClose} style={{ background: 'rgba(74,124,199,0.1)', border: '1px solid #C0D0E8', borderRadius: '8px', cursor: 'pointer', color: '#5A6E90', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div>
-            <label className="label">Kas Awal</label>
-            <input className="input" type="number" placeholder="0" value={kasAwal} onChange={(e) => setKasAwal(e.target.value)} />
-          </div>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', gap: '16px' }}>
+          {/* Kolom kiri */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
 
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-              <label className="label" style={{ margin: 0 }}>Pengeluaran</label>
-              <button type="button" onClick={addPengeluaran}
-                style={{ fontSize: '12px', color: 'var(--accent)', background: 'var(--accent-light)', border: '1px solid #C0D0E8', borderRadius: '6px', padding: '3px 10px', cursor: 'pointer', fontFamily: 'inherit', fontWeight: '600' }}>+ Tambah</button>
+            {/* Shift & Closer — admin only */}
+            {isAdmin && (
+              <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '10px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ fontSize: '10px', fontWeight: '700', color: '#92400E', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Data Shift (Admin)</div>
+                <div>
+                  <label className="label" style={{ fontSize: '11px' }}>Shift</label>
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    {SHIFTS_LIST.map(s => (
+                      <button key={s.key} onClick={() => setShift(s.key)}
+                        style={{ flex: 1, padding: '6px 4px', borderRadius: '7px', border: `1.5px solid ${shift === s.key ? 'var(--accent)' : 'var(--border)'}`, background: shift === s.key ? 'var(--accent)' : '#fff', color: shift === s.key ? '#fff' : 'var(--text2)', fontWeight: '700', fontSize: '11px', cursor: 'pointer', fontFamily: 'inherit' }}>
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="label" style={{ fontSize: '11px' }}>Nama Closer</label>
+                  <input className="input" style={inputS} value={closerName} onChange={e => setCloserName(e.target.value)} placeholder="Nama kasir yang closing..." />
+                </div>
+              </div>
+            )}
+
+            {/* Kas Awal */}
+            <div>
+              <label className="label">Kas Awal</label>
+              <input className="input" type="number" style={inputS} placeholder="0" value={kasAwal} onChange={e => setKasAwal(e.target.value)} />
             </div>
-            {pengeluaran.length === 0 && <div style={{ fontSize: '12px', color: 'var(--muted)', padding: '4px 0' }}>Belum ada pengeluaran</div>}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {pengeluaran.map((p, i) => (
-                <div key={i} style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                  <input className="input" placeholder="Nama barang" value={p.barang} onChange={(e) => updateP(i, 'barang', e.target.value)} style={{ flex: 2, fontSize: '12px', padding: '7px 10px' }} />
-                  <input className="input" type="number" placeholder="Qty" value={p.qty} onChange={(e) => updateP(i, 'qty', e.target.value)} style={{ flex: '0 0 52px', fontSize: '12px', padding: '7px 8px' }} />
-                  <input className="input" type="number" placeholder="Harga" value={p.harga} onChange={(e) => updateP(i, 'harga', e.target.value)} style={{ flex: 2, fontSize: '12px', padding: '7px 10px' }} />
-                  <button onClick={() => setPengeluaran(prev => prev.filter((_, n) => n !== i))}
-                    style={{ background: 'var(--red-light)', border: '1px solid #FECACA', borderRadius: '6px', color: 'var(--red)', cursor: 'pointer', padding: '7px 9px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                  </button>
+
+            {/* Penjualan — admin only */}
+            {isAdmin && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div>
+                  <label className="label" style={{ fontSize: '11px' }}>Total Penjualan</label>
+                  <input className="input" type="number" style={inputS} placeholder="0" value={penjualan} onChange={e => setPenjualan(e.target.value)} />
+                </div>
+                <div>
+                  <label className="label" style={{ fontSize: '11px', color: '#2A9D6E' }}>Cash</label>
+                  <input className="input" type="number" style={{ ...inputS, borderColor: '#A7DFC8' }} placeholder="0" value={cash} onChange={e => setCash(e.target.value)} />
+                </div>
+                <div>
+                  <label className="label" style={{ fontSize: '11px', color: '#6B5BAF' }}>QRIS</label>
+                  <input className="input" type="number" style={{ ...inputS, borderColor: '#C8C0E8' }} placeholder="0" value={qris} onChange={e => setQris(e.target.value)} />
+                </div>
+                <div>
+                  <label className="label" style={{ fontSize: '11px', color: '#C47D1A' }}>Transfer</label>
+                  <input className="input" type="number" style={{ ...inputS, borderColor: '#F0D090' }} placeholder="0" value={transfer} onChange={e => setTransfer(e.target.value)} />
+                </div>
+              </div>
+            )}
+
+            {/* Preview kas akhir */}
+            <div style={{ background: 'linear-gradient(135deg, #D8E4F4, #E8EEF8)', borderRadius: '10px', border: '1px solid #C0D0E8', padding: '10px 14px' }}>
+              <div style={{ fontSize: '10px', color: '#7A8FAF', marginBottom: '6px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Preview Kas Akhir</div>
+              {[['Kas Awal', Number(kasAwal)||0, 'var(--text2)'], ['+ Cash', Number(cash)||0, '#2A9D6E'], ['- Pengeluaran', -totPengeluaran, '#C95555']].map(([label, val, color]) => (
+                <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '3px' }}>
+                  <span style={{ color: '#7A8FAF' }}>{label}</span>
+                  <span style={{ color, fontWeight: '600' }}>{fmt(val)}</span>
                 </div>
               ))}
+              <div style={{ borderTop: '1px solid #C0D0E8', paddingTop: '6px', marginTop: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: '12px', fontWeight: '700', color: '#1E2A3B' }}>Kas Akhir</span>
+                <span style={{ fontSize: '16px', fontWeight: '800', color: kasAkhirPreview >= 0 ? '#2A9D6E' : '#C95555' }}>{fmt(kasAkhirPreview)}</span>
+              </div>
             </div>
           </div>
 
-          <div>
-            <label className="label">Catatan <span style={{ color: 'var(--muted)', fontWeight: '400' }}>(opsional)</span></label>
-            <textarea className="input" rows={3} placeholder="Catatan tambahan..." value={catatan} onChange={(e) => setCatatan(e.target.value)} style={{ resize: 'none' }} />
+          {/* Kolom kanan */}
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                <label className="label" style={{ margin: 0 }}>Pengeluaran</label>
+                <button type="button" onClick={addPengeluaran}
+                  style={{ fontSize: '11px', color: 'var(--accent)', background: 'var(--accent-light)', border: '1px solid #C0D0E8', borderRadius: '6px', padding: '3px 10px', cursor: 'pointer', fontFamily: 'inherit', fontWeight: '600' }}>+ Tambah</button>
+              </div>
+              {pengeluaran.length === 0 && <div style={{ fontSize: '12px', color: 'var(--muted)', padding: '4px 0' }}>Belum ada pengeluaran</div>}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto' }}>
+                {pengeluaran.map((p, i) => (
+                  <div key={i} style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                    <input className="input" placeholder="Nama barang" value={p.barang} onChange={e => updateP(i, 'barang', e.target.value)} style={{ flex: 2, ...inputS }} />
+                    <input className="input" type="number" placeholder="Qty" value={p.qty} onChange={e => updateP(i, 'qty', e.target.value)} style={{ flex: '0 0 46px', ...inputS }} />
+                    <input className="input" type="number" placeholder="Harga" value={p.harga} onChange={e => updateP(i, 'harga', e.target.value)} style={{ flex: 2, ...inputS }} />
+                    <button onClick={() => setPengeluaran(prev => prev.filter((_, n) => n !== i))}
+                      style={{ background: 'var(--red-light)', border: '1px solid #FECACA', borderRadius: '6px', color: 'var(--red)', cursor: 'pointer', padding: '7px 8px', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="label">Catatan <span style={{ color: 'var(--muted)', fontWeight: '400' }}>(opsional)</span></label>
+              <textarea className="input" rows={4} placeholder="Catatan tambahan..." value={catatan} onChange={e => setCatatan(e.target.value)} style={{ resize: 'none', fontSize: '12px' }} />
+            </div>
           </div>
         </div>
 

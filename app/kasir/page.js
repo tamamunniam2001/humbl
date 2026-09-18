@@ -489,7 +489,7 @@ export default function KasirPage() {
                         {p.imageUrl ? <img src={p.imageUrl} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none' }} /> : <span style={{ fontSize: '28px' }}>☕</span>}
                       </div>
                       <div style={{ padding: '10px' }}>
-                        <div style={{ fontWeight: '700', fontSize: '13px', color: 'var(--text)', marginBottom: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                        <div style={{ fontWeight: '700', fontSize: '13px', color: 'var(--text)', marginBottom: '4px', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>{p.name}</div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           {p.category && <span style={{ fontSize: '10px', background: '#F1F5F9', color: '#64748B', padding: '2px 6px', borderRadius: '6px' }}>{p.category.name}</span>}
                           <span style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text)', marginLeft: 'auto' }}>Rp {fmt(p.price)}</span>

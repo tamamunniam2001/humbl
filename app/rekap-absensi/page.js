@@ -62,7 +62,7 @@ export default function RekapAbsensiPage() {
             <table className="table">
               <thead>
                 <tr>
-                  {['Tanggal', 'Waktu', 'Staff 1', 'Staff 2', 'Tipe', 'Kas Awal', 'Checklist', ''].map(h => <th key={h}>{h}</th>)}
+                  {['Tanggal', 'Waktu', 'Staff', 'Shift', 'Kas Awal Laci', 'Selfie', 'Checklist', ''].map(h => <th key={h}>{h}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -83,11 +83,16 @@ export default function RekapAbsensiPage() {
                       <td style={{ fontWeight: '600' }}>{fmtDate(r.date)}</td>
                       <td style={{ color: 'var(--muted)', fontSize: '12px' }}>{fmtTime(r.date)}</td>
                       <td style={{ fontWeight: '600', color: 'var(--text)' }}>{r.employee?.name || '-'}</td>
-                      <td style={{ color: 'var(--text2)' }}>{r.helper?.name || <span style={{ color: 'var(--muted)' }}>-</span>}</td>
                       <td>
-                        <span className={`badge ${r.type === 'OPENING' ? 'badge-blue' : 'badge-orange'}`}>{r.type}</span>
+                        <span className="badge badge-orange">{r.type.replace('CLOSING_', 'Shift ')}</span>
                       </td>
-                      <td>{r.type === 'OPENING' ? fmt(r.kasAwal) : <span style={{ color: 'var(--muted)' }}>-</span>}</td>
+                      <td style={{ fontWeight: '600', color: 'var(--green)' }}>{fmt(r.kasAwal)}</td>
+                      <td>
+                        {r.selfieUrl ? (
+                          <img src={r.selfieUrl} alt="selfie" style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--accent)', cursor: 'pointer' }}
+                            onClick={() => setSelected(r)} />
+                        ) : <span style={{ color: 'var(--muted)', fontSize: '12px' }}>-</span>}
+                      </td>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <div style={{ width: '80px', height: '6px', background: 'var(--border)', borderRadius: '99px', overflow: 'hidden' }}>
@@ -134,8 +139,7 @@ function DetailModal({ record: r, onClose, fmt, fmtDate, fmtTime }) {
       <div className="card fade-in" style={{ width: '480px', maxWidth: '96vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(135deg, #D8E4F4, #E8EEF8)' }}>
           <div>
-            <div style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text)' }}>{r.employee?.name} — {r.type}</div>
-            {r.helper && <div style={{ fontSize: '12px', color: 'var(--accent)', marginTop: '2px' }}>Staff 2: {r.helper.name}</div>}
+            <div style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text)' }}>{r.employee?.name} — {r.type.replace('CLOSING_', 'Shift ')}</div>
             <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>{fmtDate(r.date)} · {fmtTime(r.date)}</div>
           </div>
           <button onClick={onClose} style={{ background: 'rgba(74,124,199,0.1)', border: '1px solid #C0D0E8', borderRadius: '8px', cursor: 'pointer', color: 'var(--text2)', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -143,18 +147,22 @@ function DetailModal({ record: r, onClose, fmt, fmtDate, fmtTime }) {
           </button>
         </div>
 
+        {r.selfieUrl && (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '16px 20px 0' }}>
+            <img src={r.selfieUrl} alt="selfie"
+              style={{ width: '100px', height: '100px', objectFit: 'cover', borderRadius: '50%', border: '3px solid var(--accent)', boxShadow: '0 4px 16px rgba(37,99,235,0.2)' }} />
+          </div>
+        )}
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
           <div style={{ display: 'flex', gap: '10px' }}>
-            <div style={{ flex: 1, background: r.type === 'OPENING' ? 'var(--accent-light)' : 'var(--orange-light)', borderRadius: '10px', padding: '12px', border: `1px solid ${r.type === 'OPENING' ? '#C7D4F0' : '#FDE68A'}` }}>
-              <div style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '4px' }}>TIPE</div>
-              <div style={{ fontSize: '14px', fontWeight: '700', color: r.type === 'OPENING' ? 'var(--accent)' : 'var(--orange)' }}>{r.type}</div>
+            <div style={{ flex: 1, background: 'var(--orange-light)', borderRadius: '10px', padding: '12px', border: '1px solid #FDE68A' }}>
+              <div style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '4px' }}>SHIFT</div>
+              <div style={{ fontSize: '14px', fontWeight: '700', color: 'var(--orange)' }}>{r.type.replace('CLOSING_', 'Shift ')}</div>
             </div>
-            {r.type === 'OPENING' && (
-              <div style={{ flex: 1, background: 'var(--green-light)', borderRadius: '10px', padding: '12px', border: '1px solid #A7DFC8' }}>
-                <div style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '4px' }}>KAS AWAL</div>
-                <div style={{ fontSize: '14px', fontWeight: '700', color: 'var(--green)' }}>{fmt(r.kasAwal)}</div>
-              </div>
-            )}
+            <div style={{ flex: 1, background: 'var(--green-light)', borderRadius: '10px', padding: '12px', border: '1px solid #A7DFC8' }}>
+              <div style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '4px' }}>KAS AWAL LACI</div>
+              <div style={{ fontSize: '14px', fontWeight: '700', color: 'var(--green)' }}>{fmt(r.kasAwal)}</div>
+            </div>
             <div style={{ flex: 1, background: 'var(--surface2)', borderRadius: '10px', padding: '12px', border: '1px solid var(--border)' }}>
               <div style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '4px' }}>CHECKLIST</div>
               <div style={{ fontSize: '14px', fontWeight: '700', color: done === checklist.length && checklist.length > 0 ? 'var(--green)' : 'var(--text)' }}>{done}/{checklist.length}</div>
