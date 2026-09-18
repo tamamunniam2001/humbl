@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import api from '@/lib/api'
-import { printThermal } from '@/lib/thermal'
+import { printThermal, connectPrinter, disconnectPrinter, getPrinterStatus } from '@/lib/thermal'
 import Cookies from 'js-cookie'
 
 const fmt = (n) => Number(n).toLocaleString('id-ID')
@@ -33,6 +33,8 @@ export default function KasirPage() {
   const [checkoutOpen, setCheckoutOpen] = useState(false)
   const [pendingOrder, setPendingOrder] = useState(null)
   const [closingOpen, setClosingOpen] = useState(false)
+  const [printer, setPrinter] = useState({ connected: false, name: null })
+  const [connecting, setConnecting] = useState(false)
   const router = useRouter()
   const [orders, setOrders] = useState([])
   const [ordersExpanded, setOrdersExpanded] = useState(true)
@@ -92,6 +94,27 @@ export default function KasirPage() {
 
   // Bersihkan saat unmount
   useEffect(() => () => stopNotifLoop(), [stopNotifLoop])
+
+  // Sync status printer
+  useEffect(() => {
+    const interval = setInterval(() => setPrinter(getPrinterStatus()), 2000)
+    return () => clearInterval(interval)
+  }, [])
+
+  async function handleConnectPrinter() {
+    if (printer.connected) {
+      disconnectPrinter()
+      setPrinter({ connected: false, name: null })
+      return
+    }
+    setConnecting(true)
+    try {
+      const name = await connectPrinter()
+      setPrinter({ connected: true, name })
+    } catch (e) {
+      alert('Gagal connect printer: ' + e.message)
+    } finally { setConnecting(false) }
+  }
   const user = (() => { try { return JSON.parse(Cookies.get('user') || '{}') } catch { return {} } })()
 
   const todayKey = new Date().toLocaleDateString('en-CA')
@@ -331,6 +354,16 @@ export default function KasirPage() {
             <div className="topbar-sub">{user.name || 'Kasir'}</div>
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            {/* Status Printer */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '20px', border: `1px solid ${printer.connected ? '#A7F3D0' : '#E2E8F0'}`, background: printer.connected ? '#ECFDF5' : '#F8FAFC', cursor: 'pointer' }} onClick={handleConnectPrinter} title={printer.connected ? 'Klik untuk disconnect' : 'Klik untuk connect printer'}>
+              <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: printer.connected ? '#10B981' : '#CBD5E1', flexShrink: 0 }} />
+              <span style={{ fontSize: '12px', fontWeight: '600', color: printer.connected ? '#065F46' : '#94A3B8', whiteSpace: 'nowrap' }}>
+                {connecting ? 'Menghubungkan...' : printer.connected ? (printer.name || 'Printer') : 'Printer'}
+              </span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={printer.connected ? '#10B981' : '#94A3B8'} strokeWidth="2" strokeLinecap="round">
+                <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>
+              </svg>
+            </div>
             <div style={{ position: 'relative' }}>
               <svg style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
               <input className="input" style={{ paddingLeft: '32px', width: '220px' }} placeholder="Cari produk..." value={search} onChange={(e) => setSearch(e.target.value)} />
