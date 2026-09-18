@@ -311,13 +311,14 @@ model StockOpnameItem {
 }
 
 model ReceiptSettings {
-  id          String   @id @default("singleton")
-  storeName   String   @default("HUMBL")
-  tagline     String   @default("Struk Pembayaran")
-  footer      String   @default("Terima kasih sudah berkunjung!\nHumbl") @db.Text
-  printWidth  Int      @default(32)
-  lineSpacing Int      @default(1)
-  updatedAt   DateTime @updatedAt
+  id                String   @id @default("singleton")
+  storeName         String   @default("HUMBL")
+  tagline           String   @default("Struk Pembayaran")
+  footer            String   @default("Terima kasih sudah berkunjung!\nHumbl") @db.Text
+  printWidth        Int      @default(32)
+  lineSpacing       Int      @default(1)
+  footerLineSpacing Int      @default(1)
+  updatedAt         DateTime @updatedAt
 }
 
 model Resi {

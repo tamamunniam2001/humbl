@@ -8,6 +8,7 @@ const DEFAULTS = {
   footer: 'Terima kasih sudah berkunjung!\nBumi Kopi',
   printWidth: 32,
   lineSpacing: 1,
+  footerLineSpacing: 1,
 }
 
 // GET boleh diakses semua role (kasir perlu untuk print struk)
@@ -32,6 +33,7 @@ export async function PUT(req) {
     footer: body.footer ?? DEFAULTS.footer,
     printWidth: Number(body.printWidth) || DEFAULTS.printWidth,
     lineSpacing: Number(body.lineSpacing) ?? DEFAULTS.lineSpacing,
+    footerLineSpacing: Number(body.footerLineSpacing) ?? DEFAULTS.footerLineSpacing,
   }
   const settings = await prisma.receiptSettings.upsert({
     where: { id: 'singleton' },

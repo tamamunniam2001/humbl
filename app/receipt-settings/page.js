@@ -10,6 +10,7 @@ const DEFAULTS = {
   footer: 'Terima kasih sudah berkunjung!\nHumbl',
   printWidth: 32,
   lineSpacing: 1,
+  footerLineSpacing: 1,
 }
 
 export default function ReceiptSettingsPage() {
@@ -108,7 +109,7 @@ export default function ReceiptSettingsPage() {
 
                   {/* Footer */}
                   <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px' }}>Footer Struk</div>
-                  <div style={{ marginBottom: '20px' }}>
+                  <div style={{ marginBottom: '12px' }}>
                     <label className="label">Teks Footer</label>
                     <textarea
                       className="input"
@@ -119,6 +120,15 @@ export default function ReceiptSettingsPage() {
                       style={{ resize: 'vertical', fontSize: '13px', lineHeight: '1.6', fontFamily: 'inherit' }}
                     />
                     <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '4px' }}>Tekan Enter untuk baris baru. Setiap baris dicetak di tengah struk.</div>
+                  </div>
+                  <div style={{ marginBottom: '20px' }}>
+                    <label className="label">Jarak antar baris footer (0 = rapat, 3 = longgar)</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <input type="range" min="0" max="3" value={form.footerLineSpacing ?? 1}
+                        onChange={e => setForm(prev => ({ ...prev, footerLineSpacing: Number(e.target.value) }))}
+                        style={{ flex: 1, accentColor: 'var(--accent)' }} />
+                      <span style={{ fontSize: '14px', fontWeight: '700', color: 'var(--accent)', minWidth: '20px', textAlign: 'center' }}>{form.footerLineSpacing ?? 1}</span>
+                    </div>
                   </div>
 
                   {/* Jarak Baris */}
@@ -194,11 +204,14 @@ export default function ReceiptSettingsPage() {
                     padRow('Bayar (CASH)', `Rp ${fmtDemo(60000)}`),
                     padRow('Kembalian', `Rp ${fmtDemo(2000)}`),
                     hr,
-                    ...footerLines.map(f => center(f)),
+                    ...footerLines.flatMap(f => [
+                      center(f),
+                      ...Array.from({ length: form.footerLineSpacing ?? 1 }, () => ''),
+                    ]),
                   ].join('\n')}
                 </div>
                 <div style={{ marginTop: '12px', fontSize: '11px', color: '#94A3B8', textAlign: 'center' }}>
-                  {footerLines.length} baris footer · spasi {form.lineSpacing ?? 1}
+                  {footerLines.length} baris footer · spasi item {form.lineSpacing ?? 1} · spasi footer {form.footerLineSpacing ?? 1}
                 </div>
               </div>
 
