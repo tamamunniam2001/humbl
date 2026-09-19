@@ -52,13 +52,28 @@ model Product {
 }
 
 model Ingredient {
-  id        String              @id @default(cuid())
-  code      String?             @unique
-  name      String              @unique
-  unit      String
-  price     Float?              // harga beli per pack/kemasan
-  packSize  Float?              // isi per pack (dalam satuan unit)
-  products  ProductIngredient[]
+  id           String               @id @default(cuid())
+  code         String?              @unique
+  name         String               @unique
+  unit         String
+  price        Float?               // harga beli per pack/kemasan (auto-calc jika isComposite)
+  packSize     Float?               // isi per pack (dalam satuan unit)
+  isComposite  Boolean              @default(false) // bahan baku jadi
+  products     ProductIngredient[]
+  components   IngredientComponent[] @relation("CompositeIngredient")
+  usedIn       IngredientComponent[] @relation("ComponentIngredient")
+}
+
+model IngredientComponent {
+  id             String     @id @default(cuid())
+  compositeId    String
+  composite      Ingredient @relation("CompositeIngredient", fields: [compositeId], references: [id], onDelete: Cascade)
+  ingredientId   String
+  ingredient     Ingredient @relation("ComponentIngredient", fields: [ingredientId], references: [id])
+  qty            Float
+
+  @@unique([compositeId, ingredientId])
+  @@index([compositeId])
 }
 
 model ProductIngredient {
