@@ -52,7 +52,7 @@ export async function POST(req) {
   const { error, user } = verifyAuth(req)
   if (error) return error
   try {
-    const { items, payment, payMethod, payLater, customerName, note } = await req.json()
+    const { items, payment, payMethod, payLater, customerName, note, discount = 0, tax = 0, discountAmount = 0, taxAmount = 0 } = await req.json()
     if (!items?.length) return NextResponse.json({ message: 'Items tidak boleh kosong' }, { status: 400 })
     if (!payMethod) return NextResponse.json({ message: 'payMethod wajib diisi' }, { status: 400 })
 
@@ -69,7 +69,8 @@ export async function POST(req) {
         qty: item.qty, price, subtotal: price * item.qty,
       }
     })
-    const total = orderItems.reduce((s, i) => s + i.subtotal, 0)
+    const subtotal = orderItems.reduce((s, i) => s + i.subtotal, 0)
+    const total = subtotal - (discountAmount || 0) + (taxAmount || 0)
     const actualPayment = payLater ? 0 : (payment || 0)
     const invoiceNo = `BK-${Date.now()}`
 
@@ -106,7 +107,7 @@ export async function POST(req) {
       product: { name: i.name, imageUrl: null, category: i.category ? { name: i.category } : null },
     }))
 
-    return NextResponse.json({ ...transaction, cashier, items: responseItems }, { status: 201 })
+    return NextResponse.json({ ...transaction, cashier, items: responseItems, subtotal, discount, tax, discountAmount, taxAmount }, { status: 201 })
   } catch (err) {
     return NextResponse.json({ message: err.message || 'Gagal menyimpan transaksi' }, { status: 500 })
   }
