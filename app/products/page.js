@@ -96,6 +96,7 @@ export default function ProductsPage() {
 
   const [ingModal, setIngModal] = useState(null)
   const [ingForm, setIngForm] = useState(emptyIng)
+  const [selectedCat, setSelectedCat] = useState(null)
   const [sort, setSort] = useState({ key: 'name', dir: 'asc' })
 
   function handleSort(key) {
@@ -253,8 +254,9 @@ export default function ProductsPage() {
 
   const filtered = products
     .filter((p) =>
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      (p.code || '').toLowerCase().includes(search.toLowerCase())
+      (p.name.toLowerCase().includes(search.toLowerCase()) ||
+      (p.code || '').toLowerCase().includes(search.toLowerCase())) &&
+      (!selectedCat || p.category?.name === selectedCat)
     )
     .sort((a, b) => {
       let av, bv
@@ -518,13 +520,23 @@ export default function ProductsPage() {
             </div>
           )}
 
-          {/* Search */}
-          <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <div style={{ position: 'relative', maxWidth: '320px', flex: 1 }}>
-              <svg style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-              <input className="input" style={{ paddingLeft: '36px' }} placeholder="Cari produk..." value={search} onChange={(e) => setSearch(e.target.value)} />
+          {/* Search + Filter Kategori */}
+          <div style={{ marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ position: 'relative', maxWidth: '320px', flex: 1 }}>
+                <svg style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input className="input" style={{ paddingLeft: '36px' }} placeholder="Cari produk..." value={search} onChange={(e) => setSearch(e.target.value)} />
+              </div>
+              <span style={{ fontSize: '13px', color: '#94A3B8' }}>{filtered.length} hasil</span>
             </div>
-            <span style={{ fontSize: '13px', color: '#94A3B8' }}>{filtered.length} hasil</span>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              {[{ label: 'Semua', value: null }, ...categories.map(c => ({ label: c.name, value: c.name }))].map(({ label, value }) => (
+                <button key={label} onClick={() => setSelectedCat(value)}
+                  style={{ padding: '5px 14px', borderRadius: '20px', border: `1px solid ${selectedCat === value ? 'var(--accent)' : 'var(--border)'}`, background: selectedCat === value ? 'var(--accent)' : '#fff', color: selectedCat === value ? '#fff' : 'var(--text2)', fontSize: '12px', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Table */}
@@ -532,7 +544,7 @@ export default function ProductsPage() {
             <table className="table">
               <thead>
                 <tr>
-                  {[{ label: 'Kode', key: 'code' }, { label: 'Nama Produk', key: 'name' }, { label: 'Kategori', key: 'category' }, { label: 'Harga Jual', key: 'price' }, { label: 'HPP', key: null }, { label: 'Margin', key: null }, { label: 'Stok', key: 'stock' }, { label: 'Bahan Baku', key: null }, { label: 'Aksi', key: null }].map(({ label, key }) => (
+                  {[{ label: 'Kode', key: 'code' }, { label: 'Nama Produk', key: 'name' }, { label: 'Kategori', key: 'category' }, { label: 'Harga Jual', key: 'price' }, { label: 'HPP', key: null }, { label: 'Pajak (0.5%)', key: null }, { label: 'Profit', key: null }, { label: 'Margin', key: null }, { label: 'Stok', key: 'stock' }, { label: 'Bahan Baku', key: null }, { label: 'Aksi', key: null }].map(({ label, key }) => (
                     <th key={label} onClick={key ? () => handleSort(key) : undefined}
                       style={key ? { cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' } : {}}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
@@ -555,6 +567,8 @@ export default function ProductsPage() {
                     if (!ing?.price || !ing?.packSize) return sum
                     return sum + (ing.price / ing.packSize) * item.qty
                   }, 0)
+                  const pajak = Math.round(p.price * 0.005)
+                  const profit = hpp > 0 ? Math.round(p.price - hpp - pajak) : null
                   const margin = hpp > 0 && p.price ? ((p.price - hpp) / hpp) * 100 : null
                   const mColor = margin === null ? null : margin >= 50 ? '#2A9D6E' : margin >= 20 ? '#C47D1A' : '#C95555'
                   const mBg = margin === null ? null : margin >= 50 ? '#E8F7F1' : margin >= 20 ? '#FDF4E3' : '#FEF2F2'
@@ -568,6 +582,14 @@ export default function ProductsPage() {
                     <td>
                       {hpp > 0
                         ? <span style={{ fontSize: '12px', fontWeight: '700', color: '#4A7CC7' }}>Rp {fmtRp(Math.round(hpp))}</span>
+                        : <span style={{ color: '#CBD5E1', fontSize: '12px' }}>—</span>}
+                    </td>
+                    <td>
+                      <span style={{ fontSize: '12px', fontWeight: '700', color: '#C47D1A' }}>Rp {fmtRp(pajak)}</span>
+                    </td>
+                    <td>
+                      {profit !== null
+                        ? <span style={{ fontSize: '12px', fontWeight: '700', color: profit >= 0 ? '#2A9D6E' : '#C95555' }}>Rp {fmtRp(profit)}</span>
                         : <span style={{ color: '#CBD5E1', fontSize: '12px' }}>—</span>}
                     </td>
                     <td>
@@ -594,7 +616,7 @@ export default function ProductsPage() {
                   )
                 })}
                 {filtered.length === 0 && (
-                  <tr><td colSpan={7} style={{ padding: '48px', textAlign: 'center', color: '#94A3B8' }}>
+                  <tr><td colSpan={11} style={{ padding: '48px', textAlign: 'center', color: '#94A3B8' }}>
                     <div style={{ fontSize: '32px', marginBottom: '8px' }}>📦</div>
                     <div>Tidak ada produk ditemukan</div>
                   </td></tr>
