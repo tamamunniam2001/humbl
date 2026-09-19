@@ -1334,6 +1334,7 @@ function CheckoutModal({ cart, total, subtotal = total, tax = 0, discount = 0, t
       payMethod, status: later ? 'PENDING' : 'COMPLETED',
       servedAt: null, createdAt: new Date().toISOString(),
       customerName, note,
+      discount, tax, discountAmount, taxAmount,
       cashier: { name: '' },
       items: cart.map((i) => ({ qty: i.qty, price: i.product.price, subtotal: i.product.price * i.qty, category: i.product.category?.name || '', product: { name: i.product.name, imageUrl: i.product.imageUrl, category: i.product.category } })),
     }
