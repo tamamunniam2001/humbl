@@ -347,11 +347,11 @@ export default function IngredientsPage() {
                         {item.isComposite ? <span style={{ fontSize: '11px', color: '#94A3B8', fontStyle: 'italic' }}>auto</span> : (item.price ? `Rp ${fmt(item.price)}` : '—')}
                       </td>
                       <td style={{ fontSize: '13px', color: item.packSize ? 'var(--text)' : '#CBD5E1' }}>
-                        {item.isComposite ? <span style={{ fontSize: '11px', color: '#94A3B8', fontStyle: 'italic' }}>1 {item.unit}</span> : (item.packSize ? `${fmt(item.packSize)} ${item.unit}` : '—')}
+                        {item.packSize ? `${fmt(item.packSize)} ${item.unit}` : '—'}
                       </td>
                       <td>
                         {perUnit !== null
-                          ? <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--accent)', background: '#EFF4FF', padding: '3px 8px', borderRadius: '6px', border: '1px solid #C7D4F0', whiteSpace: 'nowrap' }}>Rp {perUnit < 1 ? perUnit.toFixed(4) : fmt(Math.round(perUnit))}/{item.unit}</span>
+                          ? <span style={{ fontSize: '13px', fontWeight: '700', color: item.isComposite ? '#059669' : 'var(--accent)', background: item.isComposite ? '#ECFDF5' : '#EFF4FF', padding: '3px 8px', borderRadius: '6px', border: `1px solid ${item.isComposite ? '#A7F3D0' : '#C7D4F0'}`, whiteSpace: 'nowrap' }}>Rp {perUnit < 1 ? perUnit.toFixed(4) : fmt(Math.round(perUnit))}/{item.unit}</span>
                           : <span style={{ color: '#CBD5E1', fontSize: '12px' }}>—</span>}
                       </td>
                       <td>
