@@ -1329,7 +1329,7 @@ function CheckoutModal({ cart, total, subtotal = total, tax = 0, discount = 0, t
     const optimisticTx = {
       id: `opt_${Date.now()}`,
       invoiceNo: `BK-${Date.now()}`,
-      total, change: payMethod === 'CASH' && !later ? paid - total : 0,
+      total, subtotal, change: payMethod === 'CASH' && !later ? paid - total : 0,
       payment: later ? 0 : (payMethod === 'CASH' ? paid : total),
       payMethod, status: later ? 'PENDING' : 'COMPLETED',
       servedAt: null, createdAt: new Date().toISOString(),
@@ -1419,8 +1419,27 @@ function CheckoutModal({ cart, total, subtotal = total, tax = 0, discount = 0, t
               <span style={{ fontWeight: '600' }}>Rp {fmt(item.product.price * item.qty)}</span>
             </div>
           ))}
-          <div style={{ borderTop: '1px solid var(--border)', marginTop: '8px', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', fontWeight: '800', fontSize: '15px' }}>
-            <span>Total</span><span style={{ color: 'var(--accent)' }}>Rp {fmt(tx.total)}</span>
+          <div style={{ borderTop: '1px solid var(--border)', marginTop: '8px', paddingTop: '8px' }}>
+            {(tx.discountAmount > 0 || tx.taxAmount > 0) && (
+              <div style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '3px', marginBottom: '6px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text2)' }}>
+                  <span>Subtotal</span><span>Rp {fmt(subtotal)}</span>
+                </div>
+                {tx.discountAmount > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--green)' }}>
+                    <span>Diskon ({tx.discount}%)</span><span>- Rp {fmt(tx.discountAmount)}</span>
+                  </div>
+                )}
+                {tx.taxAmount > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--orange)' }}>
+                    <span>Pajak ({tx.tax}%)</span><span>+ Rp {fmt(tx.taxAmount)}</span>
+                  </div>
+                )}
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '800', fontSize: '15px' }}>
+              <span>Total</span><span style={{ color: 'var(--accent)' }}>Rp {fmt(tx.total)}</span>
+            </div>
           </div>
           {payMethod === 'CASH' && tx.change > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginTop: '4px', color: 'var(--green)' }}><span>Kembalian</span><span style={{ fontWeight: '700' }}>Rp {fmt(tx.change)}</span></div>}
         </div>
