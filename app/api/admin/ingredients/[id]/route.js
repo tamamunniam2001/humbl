@@ -36,7 +36,7 @@ export async function PUT(req, { params }) {
       data: {
         name, unit, code: code || null,
         price: calcPrice,
-        packSize: 1,
+        packSize: packSize ? Number(packSize) : 1,
         isComposite: true,
         components: compData.length > 0 ? {
           create: compData.map(c => ({ ingredientId: c.ingredientId, qty: Number(c.qty) }))

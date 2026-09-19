@@ -4,7 +4,7 @@ import Sidebar from '@/components/Sidebar'
 import api from '@/lib/api'
 import * as XLSX from 'xlsx'
 
-const emptyForm = { code: '', name: '', unit: '', price: '', packSize: '', isComposite: false, components: [] }
+const emptyForm = { code: '', name: '', unit: '', price: '', packSize: '', yield: '', isComposite: false, components: [] }
 const fmt = (n) => Number(n).toLocaleString('id-ID')
 
 function calcCompositePrice(components, allItems) {
@@ -30,13 +30,25 @@ export default function IngredientsPage() {
   async function load() {
     const res = await api.get('/admin/ingredients')
     setItems(res.data)
+    return res.data
   }
   useEffect(() => { load() }, [])
 
+  function generateIngredientCode(itemList) {
+    const nums = itemList
+      .map(i => i.code?.match(/^BB-?(\d+)$/i)?.[1])
+      .filter(Boolean)
+      .map(Number)
+    const next = nums.length > 0 ? Math.max(...nums) + 1 : 1
+    return `BB-${String(next).padStart(3, '0')}`
+  }
+
   async function handleSubmit(e) {
     e.preventDefault()
-    if (editId) await api.put(`/admin/ingredients/${editId}`, form)
-    else await api.post('/admin/ingredients', form)
+    const payload = { ...form }
+    if (form.isComposite) payload.packSize = form.yield ? Number(form.yield) : 1
+    if (editId) await api.put(`/admin/ingredients/${editId}`, payload)
+    else await api.post('/admin/ingredients', payload)
     setForm(emptyForm); setEditId(null); setShowForm(false); setCompSearch(''); load()
   }
 
@@ -45,6 +57,7 @@ export default function IngredientsPage() {
       code: item.code || '', name: item.name, unit: item.unit,
       price: item.price ?? '', packSize: item.packSize ?? '',
       isComposite: item.isComposite || false,
+      yield: item.isComposite ? (item.packSize ?? '') : '',
       components: (item.components || []).map(c => ({ ingredientId: c.ingredientId, qty: c.qty })),
     })
     setEditId(item.id); setShowForm(true); setCompSearch('')
@@ -137,7 +150,15 @@ export default function IngredientsPage() {
             <button className="btn" style={{ background: '#F0FDF4', color: '#10B981', border: '1px solid #A7F3D0' }} onClick={() => fileRef.current.click()} disabled={importing}>
               {importing ? 'Mengimpor...' : 'Import Excel'}
             </button>
-            <button className="btn btn-primary" onClick={() => { setForm(emptyForm); setEditId(null); setShowForm(!showForm); setCompSearch('') }}>
+            <button className="btn btn-primary" onClick={async () => {
+              if (!showForm) {
+                const list = items.length > 0 ? items : (await load())
+                setForm({ ...emptyForm, code: generateIngredientCode(list) })
+              } else {
+                setForm(emptyForm)
+              }
+              setEditId(null); setShowForm(!showForm); setCompSearch('')
+            }}>
               {showForm ? 'Tutup' : '+ Tambah Bahan'}
             </button>
           </div>
@@ -251,10 +272,22 @@ export default function IngredientsPage() {
                           )
                         })}
                     </div>
+                    <div style={{ marginTop: '12px' }}>
+                      <label className="label">Hasil / Yield ({form.unit || 'satuan'}) <span style={{ color: '#94A3B8', fontWeight: '400' }}>(opsional)</span></label>
+                      <input className="input" type="number" placeholder={`misal: 500 (${form.unit || 'satuan'} yang dihasilkan)`} value={form.yield} onChange={e => setForm({ ...form, yield: e.target.value })} style={{ fontSize: '13px' }} />
+                    </div>
                     {compositePreviewPrice !== null && compositePreviewPrice > 0 && (
-                      <div style={{ padding: '10px 14px', background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '12px', color: '#065F46' }}>Estimasi harga per {form.unit || 'unit'}</span>
-                        <span style={{ fontSize: '15px', fontWeight: '800', color: '#10B981' }}>Rp {fmt(Math.round(compositePreviewPrice))}</span>
+                      <div style={{ marginTop: '10px', padding: '10px 14px', background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: '8px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '12px', color: '#065F46' }}>Total HPP Komponen</span>
+                          <span style={{ fontSize: '15px', fontWeight: '800', color: '#10B981' }}>Rp {fmt(Math.round(compositePreviewPrice))}</span>
+                        </div>
+                        {form.yield && Number(form.yield) > 0 && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px', paddingTop: '6px', borderTop: '1px solid #A7F3D0' }}>
+                            <span style={{ fontSize: '12px', color: '#065F46' }}>HPP per {form.unit || 'satuan'}</span>
+                            <span style={{ fontSize: '15px', fontWeight: '800', color: '#059669' }}>Rp {(compositePreviewPrice / Number(form.yield)) < 1 ? (compositePreviewPrice / Number(form.yield)).toFixed(4) : fmt(Math.round(compositePreviewPrice / Number(form.yield)))}</span>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

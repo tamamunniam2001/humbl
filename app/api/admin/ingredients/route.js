@@ -42,7 +42,7 @@ export async function POST(req) {
       data: {
         name, unit, code: code || null,
         price: calcPrice,
-        packSize: 1, // composite selalu packSize=1 (1 unit = 1 sajian)
+        packSize: packSize ? Number(packSize) : 1,
         isComposite: true,
         components: compData.length > 0 ? {
           create: compData.map(c => ({ ingredientId: c.ingredientId, qty: Number(c.qty) }))
