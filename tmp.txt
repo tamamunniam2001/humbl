@@ -1,0 +1,1412 @@
+1:'use client'
+2:import { useEffect, useState, useCallback, useRef } from 'react'
+3:import { useRouter, usePathname } from 'next/navigation'
+4:import Sidebar from '@/components/Sidebar'
+5:import api from '@/lib/api'
+6:import { printThermal, printAll, printKitchen, printBar, connectPrinter, disconnectPrinter, getPrinterStatus } from '@/lib/thermal'
+7:import Cookies from 'js-cookie'
+9:const fmt = (n) => Number(n).toLocaleString('id-ID')
+10:const fmtTime = (d) => new Date(d).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+12:const translations = {
+13:  namaItem: 'Nama Item',
+14:  harga: 'Harga',
+15:  kategori: 'Kategori',
+16:  opsional: '(opsional)',
+17:  namaPembeli: 'Nama Pembeli',
+18:  catatan: 'Catatan',
+19:  kasAwal: 'Kas Awal',
+20:  pengeluaran: 'Pengeluaran',
+21:  tambahItemManual: 'Tambah Item Manual',
+22:}
+23:const t = (key) => translations[key]
+25:export default function KasirPage() {
+26:  const [products, setProducts] = useState([])
+27:  const [categories, setCategories] = useState([])
+28:  const [selectedCat, setSelectedCat] = useState(null)
+29:  const [search, setSearch] = useState('')
+30:  const [loading, setLoading] = useState(true)
+31:  const [cart, setCart] = useState([])
+32:  const [cartOpen, setCartOpen] = useState(false)
+33:  const [checkoutOpen, setCheckoutOpen] = useState(false)
+34:  const [pendingOrder, setPendingOrder] = useState(null)
+35:  const [closingOpen, setClosingOpen] = useState(false)
+36:  const [printer, setPrinter] = useState({ connected: false, name: null })
+37:  const [connecting, setConnecting] = useState(false)
+38:  const router = useRouter()
+39:  const [orders, setOrders] = useState([])
+40:  const [ordersExpanded, setOrdersExpanded] = useState(true)
+41:  const [selectedOrder, setSelectedOrder] = useState(null)
+42:  const [paidOrders, setPaidOrders] = useState([])
+43:  const [paidOrderAlert, setPaidOrderAlert] = useState(null)
+44:  const notifIntervalRef = useRef(null)
+46:  const playNotif = useCallback(() => {
+47:    try {
+48:      const ctx = new (window.AudioContext || window.webkitAudioContext)()
+49:      const gain = ctx.createGain()
+50:      gain.connect(ctx.destination)
+52:      // Ringtone melodi — pola 8 nada (mirip classic phone ringtone)
+53:      const notes = [
+54:        [1318, 0.00], // E6
+55:        [1174, 0.12], // D6
+56:        [740,  0.24], // F#5
+57:        [830,  0.36], // Ab5
+58:        [1108, 0.48], // C#6
+59:        [987,  0.60], // B5
+60:        [622,  0.72], // Eb5
+61:        [698,  0.84], // F5
+62:      ]
+63:      notes.forEach(([freq, delay]) => {
+64:        const osc = ctx.createOscillator()
+65:        osc.connect(gain)
+66:        osc.type = 'sine'
+67:        osc.frequency.setValueAtTime(freq, ctx.currentTime + delay)
+68:        gain.gain.setValueAtTime(0.9, ctx.currentTime + delay)
+69:        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.11)
+70:        osc.start(ctx.currentTime + delay)
+71:        osc.stop(ctx.currentTime + delay + 0.11)
+72:      })
+73:    } catch {}
+74:  }, [])
+76:  const startNotifLoop = useCallback(() => {
+77:    if (notifIntervalRef.current) clearInterval(notifIntervalRef.current)
+78:    playNotif()
+79:    notifIntervalRef.current = setInterval(playNotif, 3000)
+80:  }, [playNotif])
+82:  const stopNotifLoop = useCallback(() => {
+83:    if (notifIntervalRef.current) {
+84:      clearInterval(notifIntervalRef.current)
+85:      notifIntervalRef.current = null
+86:    }
+87:  }, [])
+89:  // Restart loop jika masih ada paid alert yang belum dikonfirmasi
+90:  const restartIfNeeded = useCallback((remainingPaidOrders) => {
+91:    if (remainingPaidOrders.length > 0) startNotifLoop()
+92:    else stopNotifLoop()
+93:  }, [startNotifLoop, stopNotifLoop])
+95:  // Bersihkan saat unmount
+96:  useEffect(() => () => stopNotifLoop(), [stopNotifLoop])
+98:  // Sync status printer
+99:  useEffect(() => {
+100:    const interval = setInterval(() => setPrinter(getPrinterStatus()), 2000)
+101:    return () => clearInterval(interval)
+102:  }, [])
+104:  async function handleConnectPrinter() {
+105:    if (printer.connected) {
+106:      disconnectPrinter()
+107:      setPrinter({ connected: false, name: null })
+108:      return
+109:    }
+110:    setConnecting(true)
+111:    try {
+112:      const name = await connectPrinter()
+113:      setPrinter({ connected: true, name })
+114:    } catch (e) {
+115:      alert('Gagal connect printer: ' + e.message)
+116:    } finally { setConnecting(false) }
+117:  }
+118:  const user = (() => { try { return JSON.parse(Cookies.get('user') || '{}') } catch { return {} } })()
+120:  const todayKey = new Date().toLocaleDateString('en-CA')
+121:  const [closed, setClosed] = useState(false)
+122:  const [todayShifts, setTodayShifts] = useState([]) // { shift, kasAkhir } dari closing hari ini
+123:  const [lastShiftKasAkhir, setLastShiftKasAkhir] = useState(0) // kas akhir shift terakhir hari ini
+125:  useEffect(() => {
+126:    const today = new Date(); today.setHours(0, 0, 0, 0)
+127:    const endOfDay = new Date(); endOfDay.setHours(23, 59, 59, 999)
+128:    api.get(`/daily-reports?from=${today.toISOString()}&to=${endOfDay.toISOString()}`)
+129:      .then(res => {
+130:        const reports = res.data.reports || []
+131:        const shifts = reports.map(r => r.shift).filter(Boolean)
+132:        setTodayShifts(shifts)
+133:        // Kas akhir shift terakhir = kasAwal + cash - pengeluaran dari report terakhir
+134:        if (reports.length > 0) {
+135:          const last = reports[reports.length - 1]
+136:          const totP = (last.pengeluaran || []).reduce((s, p) => s + p.harga * p.qty, 0)
+137:          setLastShiftKasAkhir((last.kasAwal || 0) + (last.uangDisetor || 0) - totP)
+138:        }
+139:        const allDone = ['SHIFT_1', 'SHIFT_2', 'SHIFT_3'].every(s => shifts.includes(s))
+140:        if (allDone) { localStorage.setItem('closing_date', todayKey); setClosed(true) }
+141:        else { localStorage.removeItem('closing_date'); setClosed(false) }
+142:      })
+143:      .catch(() => { setClosed(localStorage.getItem('closing_date') === todayKey) })
+144:  }, [])
+146:  // Set untuk track order yang sedang in-flight PATCH servedAt
+147:  const pendingServed = useState(() => new Set())[0]
+149:  const load = useCallback(async (silent = false) => {
+150:    // Tampil dari cache dulu agar instan
+151:    if (!silent) {
+152:      const cached = localStorage.getItem('kasir_products_cache')
+153:      if (cached) {
+154:        try {
+155:          const { products: cp, categories: cc } = JSON.parse(cached)
+156:          setProducts(cp); setCategories(cc); setLoading(false)
+157:        } catch { }
+158:      } else {
+159:        setLoading(true)
+160:      }
+161:    }
+162:    try {
+163:      const [prodsRes, catsRes] = await Promise.all([
+164:        api.get('/products?slim=1'),
+165:        api.get('/admin/categories'),
+166:      ])
+167:      const cats = catsRes.data.map((c) => c.name).sort()
+168:      setProducts(prodsRes.data)
+169:      setCategories(cats)
+170:      localStorage.setItem('kasir_products_cache', JSON.stringify({ products: prodsRes.data, categories: cats, ts: Date.now() }))
+171:    } catch { }
+172:    setLoading(false)
+173:  }, [])
+175:  const loadOrders = useCallback(async () => {
+176:    const today = new Date().toLocaleDateString('en-CA')
+177:    const closingDate = localStorage.getItem('closing_date')
+178:    if (closingDate && closingDate !== today) localStorage.removeItem('closing_date')
+179:    if (closingDate === today) return
+180:    try {
+181:      // Mulai dari timestamp closing shift terakhir (atau awal hari jika belum ada)
+182:      const shiftFrom = localStorage.getItem('last_shift_close_ts')
+183:      const fromDate = shiftFrom ? new Date(shiftFrom) : (() => { const d = new Date(); d.setHours(0,0,0,0); return d })()
+184:      const endOfDay = new Date(); endOfDay.setHours(23, 59, 59, 999)
+185:      const res = await api.get(`/transactions?slim=1&from=${fromDate.toISOString()}&to=${endOfDay.toISOString()}&page=1`)
+186:      const incoming = res.data.transactions || []
+187:      const incomingIds = new Set(incoming.map((o) => o.id))
+188:      setOrders((prev) => {
+189:        const prevMap = Object.fromEntries(prev.map((o) => [o.id, o]))
+190:        // Pertahankan self-order (yang tidak ada di transactions)
+191:        const selfOrders = prev.filter((o) => !incomingIds.has(o.id) && o.orderNo)
+192:        const merged = incoming.map((o) => pendingServed.has(o.id) ? { ...o, servedAt: prevMap[o.id]?.servedAt } : o)
+193:        return [...selfOrders, ...merged]
+194:      })
+195:    } catch { }
+196:  }, [pendingServed])
+198:  const pathname = usePathname()
+200:  useEffect(() => {
+201:    Promise.all([load(), loadOrders()])
+202:  }, [load, loadOrders, pathname])
+204:  useEffect(() => {
+205:    const tOrders = setInterval(() => loadOrders(), 5000)
+206:    const tProducts = setInterval(() => load(true), 300000)
+207:    return () => { clearInterval(tOrders); clearInterval(tProducts) }
+208:  }, [load, loadOrders])
+210:  // SSE real-time self-order
+211:  useEffect(() => {
+212:    let es
+213:    let reconnectTimer
+214:    function connect() {
+215:      es = new EventSource('/api/self-orders/stream')
+216:      es.onmessage = (e) => {
+217:        try {
+218:          const data = JSON.parse(e.data)
+219:          if (data.type === 'PAID_ORDERS' && data.orders?.length) {
+220:            setPaidOrders(prev => {
+221:              const ids = new Set(prev.map(o => o.id))
+222:              const newOnes = data.orders.filter(o => !ids.has(o.id))
+223:              if (!newOnes.length) return prev
+224:              startNotifLoop()
+225:              setPaidOrderAlert(newOnes[0])
+226:              // Masukkan ke list card order hari ini
+227:              setOrders(prevOrders => {
+228:                const existingIds = new Set(prevOrders.map(o => o.id))
+229:                const toAdd = newOnes
+230:                  .filter(o => !existingIds.has(o.id))
+231:                  .map(o => ({
+232:                    ...o,
+233:                    invoiceNo: o.orderNo,
+234:                    // Jika ada dokuInvoiceNo berarti bayar via QRIS, selain itu CASH
+235:                    payMethod: o.dokuInvoiceNo ? 'QRIS' : 'CASH',
+236:                    servedAt: o.servedAt || null,
+237:                  }))
+238:                if (!toAdd.length) return prevOrders
+239:                return [...toAdd, ...prevOrders]
+240:              })
+241:              return [...newOnes, ...prev]
+242:            })
+243:          }
+244:        } catch {}
+245:      }
+246:      es.onerror = () => { es.close(); reconnectTimer = setTimeout(connect, 5000) }
+247:    }
+248:    connect()
+249:    return () => { es?.close(); clearTimeout(reconnectTimer) }
+250:  }, [])
+252:  function dismissPaidOrder(id) {
+253:    setPaidOrders(prev => {
+254:      const remaining = prev.filter(o => o.id !== id)
+255:      restartIfNeeded(remaining)
+256:      return remaining
+257:    })
+258:    if (paidOrderAlert?.id === id) setPaidOrderAlert(null)
+259:  }
+261:  function toggleServed(orderId, currentServedAt) {
+262:    const newServedAt = currentServedAt ? null : new Date().toISOString()
+263:    pendingServed.add(orderId)
+264:    setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, servedAt: newServedAt } : o))
+265:    setSelectedOrder((prev) => prev?.id === orderId ? { ...prev, servedAt: newServedAt } : prev)
+266:    api.patch(`/transactions/${orderId}`, { servedAt: newServedAt }).then((res) => {
+267:      pendingServed.delete(orderId)
+268:      setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, servedAt: res.data.servedAt } : o))
+269:      setSelectedOrder((prev) => prev?.id === orderId ? { ...prev, servedAt: res.data.servedAt } : prev)
+270:    }).catch(() => {
+271:      pendingServed.delete(orderId)
+272:      setOrders((prev) => prev.map((o) => o.id === orderId ? { ...o, servedAt: currentServedAt } : o))
+273:      setSelectedOrder((prev) => prev?.id === orderId ? { ...prev, servedAt: currentServedAt } : prev)
+274:    })
+275:  }
+277:  async function deleteOrder(orderId) {
+278:    if (!confirm('Hapus transaksi ini? Tindakan ini tidak bisa dibatalkan.')) return
+279:    try {
+280:      await api.delete(`/transactions/${orderId}`)
+281:      setOrders((prev) => prev.filter((o) => o.id !== orderId))
+282:    } catch (e) { alert(e.response?.data?.message || 'Gagal menghapus') }
+283:  }
+285:  const filtered = products.filter((p) => {
+286:    const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) || (p.code || '').toLowerCase().includes(search.toLowerCase())
+287:    const matchCat = !selectedCat || p.category?.name === selectedCat
+288:    return matchSearch && matchCat
+289:  })
+291:  function addToCart(product) {
+292:    if (product.stock <= 0) return
+293:    setCart((prev) => {
+294:      const idx = prev.findIndex((i) => i.product.id === product.id)
+295:      if (idx >= 0) return prev.map((i, n) => n === idx ? { ...i, qty: i.qty + 1 } : i)
+296:      return [...prev, { product, qty: 1 }]
+297:    })
+298:  }
+300:  function updateQty(productId, delta) {
+301:    setCart((prev) => prev
+302:      .map((i) => i.product.id === productId ? { ...i, qty: i.qty + delta } : i)
+303:      .filter((i) => i.qty > 0)
+304:    )
+305:  }
+307:  function clearCart() { setCart([]) }
+309:  const total = cart.reduce((s, i) => s + i.product.price * i.qty, 0)
+310:  const qtyOf = (id) => cart.find((i) => i.product.id === id)?.qty || 0
+311:  const totalQty = cart.reduce((s, i) => s + i.qty, 0)
+313:  // hitung summary orders
+314:  const ordersToday = orders.length
+315:  const ordersServed = orders.filter((o) => o.servedAt).length
+316:  const ordersPending = ordersToday - ordersServed
+317:  const completedOrders = orders.filter(o => o.status === 'COMPLETED')
+318:  const totalPendapatan = completedOrders.reduce((s, o) => s + o.total, 0)
+319:  const totalCash = completedOrders.filter(o => o.payMethod === 'CASH').reduce((s, o) => s + o.total, 0)
+320:  const totalQris = completedOrders.filter(o => o.payMethod === 'QRIS').reduce((s, o) => s + o.total, 0)
+321:  const totalTransfer = completedOrders.filter(o => o.payMethod === 'TRANSFER' || o.payMethod === 'NONTUNAI').reduce((s, o) => s + o.total, 0)
+323:  return (
+324:    <div className="page">
+325:      {/* Alert popup order sudah dibayar */}
+326:      {paidOrderAlert && (
+327:        <div style={{ position: 'fixed', top: '16px', right: '16px', zIndex: 9999, width: '320px', background: '#fff', borderRadius: '16px', boxShadow: '0 8px 40px rgba(0,0,0,0.18)', border: '2px solid #059669', overflow: 'hidden' }}>
+328:          <div style={{ background: 'linear-gradient(135deg,#059669,#047857)', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+329:            <div style={{ color: '#fff' }}>
+330:              <div style={{ fontSize: '13px', fontWeight: '800' }}>Pembayaran Diterima!</div>
+331:              <div style={{ fontSize: '11px', opacity: 0.85 }}>#{paidOrderAlert.orderNo}</div>
+332:            </div>
+333:            <button onClick={() => dismissPaidOrder(paidOrderAlert.id)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '8px', color: '#fff', cursor: 'pointer', padding: '4px 8px', fontSize: '16px' }}>×</button>
+334:          </div>
+335:          <div style={{ padding: '12px 16px' }}>
+336:            <div style={{ fontSize: '13px', fontWeight: '700', color: '#1A0F00', marginBottom: '4px' }}>
+337:              {paidOrderAlert.customerName || 'Pelanggan'}{paidOrderAlert.tableNo ? ` · Meja ${paidOrderAlert.tableNo}` : ''}
+338:            </div>
+339:            <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '10px' }}>
+340:              {paidOrderAlert.items?.length} item · Rp {fmt(paidOrderAlert.total)}
+341:            </div>
+342:            <button onClick={() => dismissPaidOrder(paidOrderAlert.id)}
+343:              style={{ width: '100%', padding: '8px', borderRadius: '9px', border: 'none', background: 'linear-gradient(135deg,#059669,#047857)', color: '#fff', fontSize: '12px', fontWeight: '800', cursor: 'pointer', fontFamily: 'inherit' }}>✓ Siap Diproses</button>
+344:          </div>
+345:        </div>
+346:      )}
+348:      <Sidebar />
+349:      <main className="main" style={{ overflow: 'hidden', position: 'relative' }}>
+350:        {/* Topbar */}
+351:        <div className="topbar">
+352:          <div>
+353:            <div className="topbar-title">Kasir</div>
+354:            <div className="topbar-sub">{user.name || 'Kasir'}</div>
+355:          </div>
+356:          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+357:            {/* Status Printer */}
+358:            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '20px', border: `1px solid ${printer.connected ? '#A7F3D0' : '#E2E8F0'}`, background: printer.connected ? '#ECFDF5' : '#F8FAFC', cursor: 'pointer' }} onClick={handleConnectPrinter} title={printer.connected ? 'Klik untuk disconnect' : 'Klik untuk connect printer'}>
+359:              <div style={{ width: '7px', height: '7px', borderRadius: '50%', background: printer.connected ? '#10B981' : '#CBD5E1', flexShrink: 0 }} />
+360:              <span style={{ fontSize: '12px', fontWeight: '600', color: printer.connected ? '#065F46' : '#94A3B8', whiteSpace: 'nowrap' }}>
+361:                {connecting ? 'Menghubungkan...' : printer.connected ? (printer.name || 'Printer') : 'Printer'}
+362:              </span>
+363:              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={printer.connected ? '#10B981' : '#94A3B8'} strokeWidth="2" strokeLinecap="round">
+364:                <polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>
+365:              </svg>
+366:            </div>
+367:            <div style={{ position: 'relative' }}>
+368:              <svg style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+369:              <input className="input" style={{ paddingLeft: '32px', width: '220px' }} placeholder="Cari produk..." value={search} onChange={(e) => setSearch(e.target.value)} />
+370:            </div>
+371:            <button className="btn btn-ghost" onClick={load}>
+372:              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56" /></svg>
+373:            </button>
+374:            <button className="btn" style={{ background: '#FEF2F2', color: '#EF4444', border: '1px solid #FECACA', fontWeight: '700' }} onClick={() => setClosingOpen(true)}>
+375:              Closing
+376:            </button>
+377:          </div>
+378:        </div>
+380:        {/* Banner Kasir Tutup */}
+381:        {closed && (
+382:          <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '10px', margin: '16px 24px 0', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+383:            <span style={{ fontSize: '18px' }}>🔒</span>
+384:            <div style={{ flex: 1 }}>
+385:              <div style={{ fontSize: '13px', fontWeight: '700', color: '#C95555' }}>Kasir sudah closing semua shift hari ini</div>
+386:              <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '2px' }}>Untuk membuka kembali, buka <a href="/kasir/laporan" style={{ color: 'var(--accent)', fontWeight: '600' }}>Laporan Harian</a> dan batalkan closing.</div>
+387:            </div>
+388:          </div>
+389:        )}
+390:        {!closed && todayShifts.length > 0 && (
+391:          <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '10px', margin: '16px 24px 0', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+392:            <span style={{ fontSize: '16px' }}>📋</span>
+393:            <div style={{ fontSize: '12px', color: '#92400E' }}>
+394:              Shift selesai: <strong>{todayShifts.map(s => s.replace('SHIFT_', 'Shift ')).join(', ')}</strong>
+395:            </div>
+396:          </div>
+397:        )}
+399:        {/* Produk area — full width */}
+400:        <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 60px)', overflow: 'hidden' }}>
+402:          {/* ── Order List ── */}
+403:          <div style={{ background: '#fff', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+404:            {/* Header */}
+405:            <div style={{ display: 'flex', alignItems: 'stretch', borderBottom: ordersExpanded ? '1px solid var(--border)' : 'none' }}>
+406:              {/* Kiri: toggle order list */}
+407:              <div onClick={() => setOrdersExpanded(!ordersExpanded)}
+408:                style={{ flex: 1, padding: '10px 20px', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', userSelect: 'none' }}>
+409:                <span style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text)' }}>Order Hari Ini</span>
+410:                <span style={{ fontSize: '11px', fontWeight: '700', background: '#EFF4FF', color: 'var(--accent)', padding: '2px 8px', borderRadius: '20px', border: '1px solid #C7D4F0' }}>{ordersToday} order</span>
+411:                {ordersPending > 0 && <span style={{ fontSize: '11px', fontWeight: '700', background: 'var(--orange-light)', color: 'var(--orange)', padding: '2px 8px', borderRadius: '20px', border: '1px solid #FDE68A' }}>{ordersPending} belum disajikan</span>}
+412:                {orders.filter(o => o.status !== 'COMPLETED').length > 0 && <span style={{ fontSize: '11px', fontWeight: '700', background: 'var(--red-light)', color: 'var(--red)', padding: '2px 8px', borderRadius: '20px', border: '1px solid #FECACA' }}>{orders.filter(o => o.status !== 'COMPLETED').length} belum bayar</span>}
+413:                <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
+414:                  <button onClick={(e) => { e.stopPropagation(); loadOrders() }}
+415:                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', display: 'flex', padding: '2px' }}>
+416:                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+417:                  </button>
+418:                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ color: '#94A3B8', transition: 'transform 0.2s', transform: ordersExpanded ? 'rotate(0deg)' : 'rotate(-90deg)' }}>
+419:                    <polyline points="6 9 12 15 18 9"/>
+420:                  </svg>
+421:                </div>
+422:              </div>
+423:              {/* Kanan: ringkasan pendapatan */}
+424:              <div style={{ borderLeft: '1px solid var(--border)', padding: '8px 20px', display: 'flex', gap: '16px', alignItems: 'center', background: '#FAFBFF', flexShrink: 0 }}>
+425:                <div style={{ textAlign: 'center' }}>
+426:                  <div style={{ fontSize: '10px', color: 'var(--muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Total</div>
+427:                  <div style={{ fontSize: '14px', fontWeight: '800', color: 'var(--accent)' }}>Rp {fmt(totalPendapatan)}</div>
+428:                </div>
+429:                <div style={{ width: '1px', background: 'var(--border)', alignSelf: 'stretch' }} />
+430:                {[
+431:                  { label: 'Cash', value: totalCash, color: '#2A9D6E' },
+432:                  { label: 'QRIS', value: totalQris, color: '#6B5BAF' },
+433:                  { label: 'Transfer', value: totalTransfer, color: '#C47D1A' },
+434:                ].map(({ label, value, color }) => (
+435:                  <div key={label} style={{ textAlign: 'center' }}>
+436:                    <div style={{ fontSize: '10px', color: 'var(--muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.4px' }}>{label}</div>
+437:                    <div style={{ fontSize: '13px', fontWeight: '700', color: value > 0 ? color : 'var(--muted)' }}>Rp {fmt(value)}</div>
+438:                  </div>
+439:                ))}
+440:              </div>
+441:            </div>
+443:            {/* Cards */}
+444:            {ordersExpanded && (
+445:              <div style={{ overflowX: 'auto', padding: '0 20px 12px', display: 'flex', gap: '10px' }}>
+446:                {orders.length === 0 ? (
+447:                  <div style={{ padding: '12px 0', color: '#94A3B8', fontSize: '13px' }}>Belum ada order hari ini</div>
+448:                ) : orders.map((order) => {
+449:                  const served = !!order.servedAt
+450:                  const paid = order.status === 'COMPLETED'
+451:                  return (
+452:                    <div key={order.id} style={{ flexShrink: 0, width: '170px', background: '#fff', borderRadius: '14px', border: `1.5px solid ${!paid ? '#FECACA' : served ? '#A7F3D0' : 'var(--border)'}`, overflow: 'hidden', boxShadow: '0 1px 4px rgba(13,21,38,0.06)', transition: 'box-shadow 0.15s' }}
+453:                      onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 14px rgba(13,21,38,0.12)'}
+454:                      onMouseLeave={e => e.currentTarget.style.boxShadow = '0 1px 4px rgba(13,21,38,0.06)'}
+455:                    >
+456:                      {/* Klik area untuk detail */}
+457:                      <div onClick={() => setSelectedOrder(order)} style={{ padding: '12px 12px 8px', cursor: 'pointer' }}>
+458:                        {/* Waktu + invoice */}
+459:                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+460:                          <span style={{ fontSize: '10px', fontWeight: '700', color: 'var(--accent)' }}>{fmtTime(order.createdAt)}</span>
+461:                          <span style={{ fontSize: '10px', color: '#94A3B8', fontFamily: 'monospace' }}>#{order.invoiceNo.slice(-5)}</span>
+462:                        </div>
+463:                        {/* Nama pembeli */}
+464:                        <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text)', marginBottom: '1px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+465:                          {order.customerName || '(Tanpa Nama)'}
+466:                        </div>
+467:                        {/* Total */}
+468:                        <div style={{ fontSize: '13px', fontWeight: '800', color: 'var(--accent)', marginBottom: '8px' }}>Rp {fmt(order.total)}</div>
+469:                        {/* Status badges */}
+470:                        <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+471:                          <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 7px', borderRadius: '20px', textAlign: 'center', background: served ? '#ECFDF5' : '#FFFBEB', color: served ? 'var(--green)' : 'var(--orange)', border: `1px solid ${served ? '#A7F3D0' : '#FDE68A'}` }}>
+472:                            {served ? 'Sudah Disajikan' : 'Belum Disajikan'}
+473:                          </span>
+474:                          <span style={{ fontSize: '10px', fontWeight: '700', padding: '2px 7px', borderRadius: '20px', textAlign: 'center', background: paid ? '#ECFDF5' : '#FEF2F2', color: paid ? 'var(--green)' : 'var(--red)', border: `1px solid ${paid ? '#A7F3D0' : '#FECACA'}` }}>
+475:                            {paid ? 'Lunas' : 'Belum Bayar'}
+476:                          </span>
+477:                        </div>
+478:                      </div>
+479:                      {/* Tombol sajikan */}
+480:                      <div style={{ display: 'flex', borderTop: '1px solid var(--border)' }}>
+481:                        <button
+482:                          onClick={(e) => { e.stopPropagation(); toggleServed(order.id, order.servedAt) }}
+483:                          style={{ flex: 1, padding: '7px', border: 'none', background: served ? '#F0FDF4' : 'var(--accent)', color: served ? 'var(--green)' : '#fff', fontSize: '10px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}>
+484:                          {served ? 'Batal' : 'Sajikan'}
+485:                        </button>
+486:                        <button
+487:                          onClick={(e) => { e.stopPropagation(); deleteOrder(order.id) }}
+488:                          style={{ width: '32px', padding: '7px', border: 'none', borderLeft: '1px solid var(--border)', background: '#FEF2F2', color: 'var(--red)', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+489:                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+490:                        </button>
+491:                      </div>
+492:                    </div>
+493:                  )
+494:                })}
+495:              </div>
+496:            )}
+497:          </div>
+499:          {/* Category bar */}
+500:          <div style={{ background: '#fff', borderBottom: '1px solid var(--border)', padding: '10px 20px', display: 'flex', gap: '8px', overflowX: 'auto', flexShrink: 0 }}>
+501:            {[{ label: 'Semua', value: null }, ...categories.map((c) => ({ label: c, value: c }))].map(({ label, value }) => (
+502:              <button key={label} onClick={() => setSelectedCat(value)}
+503:                style={{ padding: '6px 16px', borderRadius: '20px', border: `1px solid ${selectedCat === value ? 'var(--accent)' : 'var(--border)'}`, background: selectedCat === value ? 'var(--accent)' : '#fff', color: selectedCat === value ? '#fff' : 'var(--text2)', fontSize: '13px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit' }}>
+504:                {label}
+505:              </button>
+506:            ))}
+507:          </div>
+509:          {/* Grid produk */}
+510:          <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
+511:            {loading ? (
+512:              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '200px', color: '#94A3B8' }}>Memuat produk...</div>
+513:            ) : (
+514:              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '12px' }}>
+515:                {filtered.map((p) => {
+516:                  const qty = qtyOf(p.id)
+517:                  const outOfStock = p.stock <= 0
+518:                  return (
+519:                    <div key={p.id} onClick={() => addToCart(p)}
+520:                      style={{ background: '#fff', borderRadius: '12px', border: `2px solid ${qty > 0 ? 'var(--accent)' : 'var(--border)'}`, cursor: outOfStock ? 'not-allowed' : 'pointer', opacity: outOfStock ? 0.5 : 1, overflow: 'hidden', transition: 'border-color 0.15s, box-shadow 0.15s', boxShadow: qty > 0 ? '0 0 0 3px rgba(37,99,235,0.1)' : '0 1px 4px rgba(13,21,38,0.06)' }}>
+521:                      <div style={{ height: '100px', background: '#F1F5F9', position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+522:                        {p.imageUrl ? <img src={p.imageUrl} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none' }} /> : <span style={{ fontSize: '28px' }}>☕</span>}
+523:                        {p.category && (
+524:                          <span style={{ position: 'absolute', top: '6px', left: '6px', fontSize: '9px', fontWeight: '700', background: 'rgba(0,0,0,0.45)', color: '#fff', padding: '2px 6px', borderRadius: '5px', backdropFilter: 'blur(2px)', letterSpacing: '0.2px' }}>{p.category.name}</span>
+525:                        )}
+526:                        {qty > 0 && (
+527:                          <span style={{ position: 'absolute', top: '6px', right: '6px', fontSize: '10px', fontWeight: '800', background: 'var(--accent)', color: '#fff', width: '20px', height: '20px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{qty}</span>
+528:                        )}
+529:                      </div>
+530:                      <div style={{ padding: '8px 10px' }}>
+531:                        <div style={{ fontWeight: '700', fontSize: '12px', color: 'var(--text)', marginBottom: '4px', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: '1.35' }}>{p.name}</div>
+532:                        <div style={{ fontSize: '13px', fontWeight: '800', color: 'var(--accent)' }}>Rp {fmt(p.price)}</div>
+533:                      </div>
+534:                    </div>
+535:                  )
+536:                })}
+537:                {filtered.length === 0 && <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '48px', color: '#94A3B8' }}><div style={{ fontSize: '32px', marginBottom: '8px' }}>📦</div>Tidak ada produk</div>}
+538:              </div>
+539:            )}
+540:          </div>
+541:        </div>
+543:        {/* Tombol link self order */}
+544:        <div style={{ position: 'fixed', bottom: '80px', right: '20px', zIndex: 100 }}>
+545:          <a href="/self-order" target="_blank" rel="noreferrer" title="Buka halaman Self Order" style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '20px', background: 'linear-gradient(135deg,#C8935A,#A0682F)', color: '#fff', textDecoration: 'none', fontSize: '12px', fontWeight: '700', boxShadow: '0 4px 16px rgba(200,147,90,0.4)' }}>
+546:            🛎️ Self Order
+547:          </a>
+548:        </div>
+550:        {/* Cart Overlay */}
+551:        <div className={`cart-overlay${cartOpen ? ' open' : ''}`} onClick={() => setCartOpen(false)} />
+553:        {/* Cart Drawer */}
+554:        <div className={`cart-drawer${cartOpen ? ' open' : ''}`}>
+555:          <div style={{ padding: '16px 20px 12px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+556:            <span style={{ fontSize: '16px', fontWeight: '800', color: 'var(--text)' }}>Pesanan</span>
+557:            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+558:              {cart.length > 0 && <button onClick={clearCart} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', color: 'var(--red)', fontWeight: '600', fontFamily: 'inherit' }}>Kosongkan</button>}
+559:              <button onClick={() => setCartOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', display: 'flex', padding: '4px' }}>
+560:                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+561:              </button>
+562:            </div>
+563:          </div>
+565:          <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }}>
+566:            {cart.length === 0 ? (
+567:              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#94A3B8', gap: '8px' }}>
+568:                <span style={{ fontSize: '40px' }}>🛒</span>
+569:                <span style={{ fontSize: '13px' }}>Belum ada pesanan</span>
+570:              </div>
+571:            ) : cart.map((item) => (
+572:              <div key={item.product.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', background: 'var(--surface2)', borderRadius: '10px', border: '1px solid var(--border)', marginBottom: '8px' }}>
+573:                <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: '#F1F5F9', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+574:                  {item.product.imageUrl ? <img src={item.product.imageUrl} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none' }} /> : <span style={{ fontSize: '18px' }}>☕</span>}
+575:                </div>
+576:                <div style={{ flex: 1, minWidth: 0 }}>
+577:                  <div style={{ fontWeight: '700', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.product.name}</div>
+578:                  <div style={{ fontSize: '12px', color: 'var(--accent)', fontWeight: '600' }}>Rp {fmt(item.product.price)}</div>
+579:                </div>
+580:                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+581:                  <button onClick={() => updateQty(item.product.id, -1)} style={{ width: '26px', height: '26px', borderRadius: '7px', border: '1px solid var(--border)', background: 'var(--accent-light)', color: 'var(--accent)', cursor: 'pointer', fontWeight: '700', fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
+582:                  <span style={{ fontWeight: '800', fontSize: '14px', minWidth: '20px', textAlign: 'center' }}>{item.qty}</span>
+583:                  <button onClick={() => updateQty(item.product.id, 1)} style={{ width: '26px', height: '26px', borderRadius: '7px', border: 'none', background: 'var(--accent)', color: '#fff', cursor: 'pointer', fontWeight: '700', fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+584:                </div>
+585:              </div>
+586:            ))}
+587:          </div>
+589:          {/* Footer cart */}
+590:          <div style={{ padding: '16px', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
+591:            <ManualItemButton categories={categories} onAdd={(item) => setCart((prev) => {
+592:              const idx = prev.findIndex((i) => i.product.id === item.id)
+593:              if (idx >= 0) return prev.map((i, n) => n === idx ? { ...i, qty: i.qty + 1 } : i)
+594:              return [...prev, { product: item, qty: 1 }]
+595:            })} />
+596:            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '12px 0' }}>
+597:              <span style={{ fontSize: '16px', fontWeight: '700' }}>Total</span>
+598:              <span style={{ fontSize: '20px', fontWeight: '800', color: 'var(--accent)' }}>Rp {fmt(total)}</span>
+599:            </div>
+600:            <div style={{ display: 'flex', gap: '8px', marginBottom: '0' }}>
+601:              <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '12px', fontSize: '14px' }}
+602:                disabled={cart.length === 0 || closed} onClick={() => setCheckoutOpen(true)}>
+603:                {closed ? '🔒 Kasir Tutup' : 'Lanjutkan →'}
+604:              </button>
+605:            </div>
+606:          </div>
+607:        </div>
+609:        {/* FAB Cart */}
+610:        <button className="cart-fab" onClick={() => setCartOpen(!cartOpen)}>
+611:          {cartOpen
+612:            ? <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+613:            : <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+614:          }
+615:          {!cartOpen && totalQty > 0 && (
+616:            <span className="cart-badge">{totalQty > 99 ? '99+' : totalQty}</span>
+617:          )}
+618:        </button>
+619:      </main>
+621:      {checkoutOpen && (
+622:        <CheckoutModal
+623:          cart={cart}
+624:          total={total}
+625:          onClose={() => setCheckoutOpen(false)}
+626:          onSuccess={(newTx) => {
+627:            clearCart(); setCheckoutOpen(false); setCartOpen(false)
+628:            if (newTx?.id) setOrders((prev) => [newTx, ...prev.filter(o => o.id !== newTx.id)])
+629:            load(true)
+630:          }}
+631:        />
+632:      )}
+634:      {selectedOrder && (
+635:        <OrderDetailModal
+636:          order={selectedOrder}
+637:          products={products}
+638:          onClose={() => setSelectedOrder(null)}
+639:          onToggleServed={() => toggleServed(selectedOrder.id, selectedOrder.servedAt)}
+640:          onPayNow={(order) => { setSelectedOrder(null); setPendingOrder(order) }}
+641:          onRefresh={() => { loadOrders(); setSelectedOrder(null) }}
+642:        />
+643:      )}
+645:      {pendingOrder && (
+646:        <CheckoutModal
+647:          cart={pendingOrder.items.map((i) => ({ product: { id: i.productId || `manual_${i.id}`, name: i.product?.name || 'Item Manual', price: i.price, stock: 999, imageUrl: i.product?.imageUrl || null, category: null }, qty: i.qty }))}
+648:          total={pendingOrder.total}
+649:          existingOrderId={pendingOrder.id}
+650:          onClose={() => setPendingOrder(null)}
+651:          onSuccess={() => { setPendingOrder(null); loadOrders() }}
+652:        />
+653:      )}
+655:      {closingOpen && (
+656:        <ClosingModal
+657:          orders={orders}
+658:          todayShifts={todayShifts}
+659:          kasAwalOtomatis={lastShiftKasAkhir}
+660:          onClose={() => setClosingOpen(false)}
+661:          onSaved={(shift, kasAkhir) => {
+662:            const newShifts = [...todayShifts, shift]
+663:            setTodayShifts(newShifts)
+664:            setLastShiftKasAkhir(kasAkhir)
+665:            setOrders([]) // reset order list setelah closing
+666:            localStorage.setItem('last_shift_close_ts', new Date().toISOString())
+667:            const allDone = ['SHIFT_1', 'SHIFT_2', 'SHIFT_3'].every(s => newShifts.includes(s))
+668:            if (allDone) { localStorage.setItem('closing_date', todayKey); setClosed(true) }
+669:            setClosingOpen(false)
+670:          }}
+671:        />
+672:      )}
+673:    </div>
+674:  )
+675:}
+677:// ── Order Detail Modal ──
+678:function OrderDetailModal({ order, products = [], onClose, onToggleServed, onPayNow, onRefresh }) {
+679:  const [printing, setPrinting] = useState(false)
+680:  const [printingKitchen, setPrintingKitchen] = useState(false)
+681:  const [printingBar, setPrintingBar] = useState(false)
+682:  const [toggling, setToggling] = useState(false)
+683:  const [editing, setEditing] = useState(false)
+684:  const [saving, setSaving] = useState(false)
+685:  const [editName, setEditName] = useState(order.customerName || '')
+686:  const [editNote, setEditNote] = useState(order.note || '')
+687:  const [editItems, setEditItems] = useState(order.items.map(i => ({ productId: i.productId || null, name: i.product?.name || i.name || '', category: i.category || '', code: i.code || '', qty: i.qty, price: i.price })))
+688:  const [productSearch, setProductSearch] = useState('')
+689:  const [showPicker, setShowPicker] = useState(false)
+690:  const filteredProducts = products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()) || (p.code || '').toLowerCase().includes(productSearch.toLowerCase()))
+691:  const served = !!order.servedAt
+692:  const paid = order.status === 'COMPLETED'
+693:  const editTotal = editItems.reduce((s, i) => s + i.price * i.qty, 0)
+695:  async function handlePrint() {
+696:    setPrinting(true)
+697:    try { await printThermal(order) } catch (e) { alert('Gagal cetak: ' + e.message) }
+698:    finally { setPrinting(false) }
+699:  }
+701:  async function handlePrintKitchen() {
+702:    setPrintingKitchen(true)
+703:    try { await printKitchen(order) } catch (e) { alert(e.message) }
+704:    finally { setPrintingKitchen(false) }
+705:  }
+707:  async function handlePrintBar() {
+708:    setPrintingBar(true)
+709:    try { await printBar(order) } catch (e) { alert(e.message) }
+710:    finally { setPrintingBar(false) }
+711:  }
+713:  function handleToggle() {
+714:    setToggling(true)
+715:    onToggleServed()
+716:    setTimeout(() => setToggling(false), 500)
+717:  }
+719:  async function handleSaveEdit() {
+720:    if (!editItems.length) return alert('Item pesanan tidak boleh kosong')
+721:    setSaving(true)
+722:    try {
+723:      await api.patch(`/transactions/${order.id}`, {
+724:        customerName: editName,
+725:        note: editNote,
+726:        items: editItems,
+727:      })
+728:      setEditing(false)
+729:      onRefresh()
+730:    } catch (e) { alert(e.response?.data?.message || 'Gagal menyimpan') }
+731:    finally { setSaving(false) }
+732:  }
+734:  function updateItem(i, field, val) {
+735:    setEditItems(prev => prev.map((it, n) => n === i ? { ...it, [field]: field === 'qty' || field === 'price' ? Number(val) || 0 : val } : it))
+736:  }
+738:  return (
+739:    <div style={{ position: 'fixed', inset: 0, background: 'rgba(13,21,38,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, backdropFilter: 'blur(4px)' }}
+740:      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+741:      <div className="card fade-in" style={{ width: '440px', maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+742:        {/* Header */}
+743:        <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+744:          <div>
+745:            <div style={{ fontSize: '15px', fontWeight: '800', color: 'var(--text)' }}>{order.customerName || '(Tanpa Nama)'}</div>
+746:            <div style={{ fontSize: '11px', color: '#94A3B8', fontFamily: 'monospace', marginTop: '2px' }}>{order.invoiceNo} · {fmtTime(order.createdAt)}</div>
+747:          </div>
+748:          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+749:            <button onClick={() => setEditing(!editing)}
+750:              style={{ fontSize: '12px', fontWeight: '700', padding: '5px 12px', borderRadius: '7px', border: `1px solid ${editing ? '#FECACA' : 'var(--border)'}`, background: editing ? '#FEF2F2' : 'var(--surface2)', color: editing ? 'var(--red)' : 'var(--text2)', cursor: 'pointer', fontFamily: 'inherit' }}>
+751:              {editing ? 'Batal' : '✏️ Edit'}
+752:            </button>
+753:            <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '20px', lineHeight: 1 }}>×</button>
+754:          </div>
+755:        </div>
+757:        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
+758:          {/* Status row */}
+759:          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
+760:            <div style={{ background: served ? '#ECFDF5' : '#FFFBEB', borderRadius: '10px', padding: '12px', border: `1px solid ${served ? '#A7F3D0' : '#FDE68A'}` }}>
+761:              <div style={{ fontSize: '11px', color: '#94A3B8', marginBottom: '4px' }}>STATUS SAJIAN</div>
+762:              <div style={{ fontSize: '13px', fontWeight: '700', color: served ? 'var(--green)' : 'var(--orange)' }}>{served ? '✓ Sudah Disajikan' : 'Belum Disajikan'}</div>
+763:            </div>
+764:            <div style={{ background: paid ? '#ECFDF5' : '#FEF2F2', borderRadius: '10px', padding: '12px', border: `1px solid ${paid ? '#A7F3D0' : '#FECACA'}` }}>
+765:              <div style={{ fontSize: '11px', color: '#94A3B8', marginBottom: '4px' }}>STATUS BAYAR</div>
+766:              <div style={{ fontSize: '13px', fontWeight: '700', color: paid ? 'var(--green)' : 'var(--red)' }}>{paid ? 'Lunas' : 'Belum Bayar'}</div>
+767:            </div>
+768:          </div>
+770:          {editing ? (
+771:            <>
+772:              {/* Edit nama & catatan */}
+773:              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
+774:                <div>
+775:                  <label className="label">Nama Pembeli</label>
+776:                  <input className="input" value={editName} onChange={e => setEditName(e.target.value)} placeholder="Nama pelanggan" />
+777:                </div>
+778:                <div>
+779:                  <label className="label">Catatan</label>
+780:                  <input className="input" value={editNote} onChange={e => setEditNote(e.target.value)} placeholder="Catatan..." />
+781:                </div>
+782:              </div>
+783:              {/* Edit items */}
+784:              <div className="section-label">Item Pesanan</div>
+785:              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '10px' }}>
+786:                {editItems.map((item, i) => (
+787:                  <div key={i} style={{ display: 'flex', gap: '6px', alignItems: 'center', background: 'var(--surface2)', borderRadius: '8px', padding: '8px 10px', border: '1px solid var(--border)' }}>
+788:                    <input className="input" style={{ flex: 2, fontSize: '12px', padding: '5px 8px' }} value={item.name} onChange={e => updateItem(i, 'name', e.target.value)} placeholder="Nama item" />
+789:                    <input className="input" type="number" style={{ flex: '0 0 48px', fontSize: '12px', padding: '5px 6px' }} value={item.qty} onChange={e => updateItem(i, 'qty', e.target.value)} min="1" placeholder="Qty" />
+790:                    <input className="input" type="number" style={{ flex: 2, fontSize: '12px', padding: '5px 8px' }} value={item.price} onChange={e => updateItem(i, 'price', e.target.value)} placeholder="Harga" />
+791:                    <button onClick={() => setEditItems(prev => prev.filter((_, n) => n !== i))}
+792:                      style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '6px', color: 'var(--red)', cursor: 'pointer', padding: '5px 7px', display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+793:                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+794:                    </button>
+795:                  </div>
+796:                ))}
+797:                <button onClick={() => setShowPicker(!showPicker)}
+798:                  style={{ padding: '7px', border: '1px dashed var(--border)', borderRadius: '8px', background: 'none', cursor: 'pointer', fontSize: '12px', color: 'var(--accent)', fontWeight: '600', fontFamily: 'inherit' }}>
+799:                  + Tambah Item
+800:                </button>
+801:                {showPicker && (
+802:                  <div style={{ border: '1px solid var(--border)', borderRadius: '8px', overflow: 'hidden', background: '#fff' }}>
+803:                    <input className="input" style={{ borderRadius: 0, borderLeft: 'none', borderRight: 'none', borderTop: 'none', fontSize: '12px' }}
+804:                      placeholder="Cari produk..." value={productSearch} onChange={e => setProductSearch(e.target.value)} autoFocus />
+805:                    <div style={{ maxHeight: '160px', overflowY: 'auto' }}>
+806:                      <div onClick={() => { setEditItems(prev => [...prev, { productId: null, name: '', category: '', code: '', qty: 1, price: 0 }]); setShowPicker(false); setProductSearch('') }}
+807:                        style={{ padding: '8px 12px', fontSize: '12px', cursor: 'pointer', borderBottom: '1px solid var(--border)', color: 'var(--muted)', fontStyle: 'italic' }}
+808:                        onMouseEnter={e => e.currentTarget.style.background = '#F1F5F9'}
+809:                        onMouseLeave={e => e.currentTarget.style.background = ''}>
+810:                        + Item manual (kosong)
+811:                      </div>
+812:                      {filteredProducts.map(p => (
+813:                        <div key={p.id} onClick={() => { setEditItems(prev => [...prev, { productId: p.id, name: p.name, category: p.category?.name || '', code: p.code || '', qty: 1, price: p.price }]); setShowPicker(false); setProductSearch('') }}
+814:                          style={{ padding: '8px 12px', fontSize: '12px', cursor: 'pointer', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+815:                          onMouseEnter={e => e.currentTarget.style.background = '#F1F5F9'}
+816:                          onMouseLeave={e => e.currentTarget.style.background = ''}>
+817:                          <div>
+818:                            <div style={{ fontWeight: '600', color: 'var(--text)' }}>{p.name}</div>
+819:                            <div style={{ fontSize: '11px', color: 'var(--muted)' }}>{p.category?.name || ''}{p.code ? ` · ${p.code}` : ''}</div>
+820:                          </div>
+821:                          <span style={{ fontWeight: '700', color: 'var(--accent)', fontSize: '12px' }}>Rp {fmt(p.price)}</span>
+822:                        </div>
+823:                      ))}
+824:                      {filteredProducts.length === 0 && <div style={{ padding: '12px', fontSize: '12px', color: 'var(--muted)', textAlign: 'center' }}>Tidak ada produk</div>}
+825:                    </div>
+826:                  </div>
+827:                )}
+828:              </div>
+829:              <div style={{ padding: '10px 14px', background: 'var(--surface2)', borderRadius: '8px', border: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: '700' }}>
+830:                <span>Total Baru</span>
+831:                <span style={{ color: 'var(--accent)' }}>Rp {fmt(editTotal)}</span>
+832:              </div>
+833:            </>
+834:          ) : (
+835:            <>
+836:              {/* Catatan */}
+837:              {order.note && (
+838:                <div style={{ marginBottom: '14px', padding: '10px 14px', background: '#FFFBEB', borderRadius: '10px', border: '1px solid #FDE68A' }}>
+839:                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#92400E', marginBottom: '3px' }}>CATATAN</div>
+840:                  <div style={{ fontSize: '13px', color: '#78350F' }}>{order.note}</div>
+841:                </div>
+842:              )}
+843:              {/* Items */}
+844:              <div style={{ marginBottom: '14px' }}>
+845:                <div className="section-label">Item Pesanan</div>
+846:                <div style={{ background: 'var(--surface2)', borderRadius: '10px', border: '1px solid var(--border)', overflow: 'hidden' }}>
+847:                  {order.items.length === 0
+848:                    ? <div style={{ padding: '14px', fontSize: '13px', color: 'var(--muted)', textAlign: 'center' }}>Tidak ada item</div>
+849:                    : order.items.map((item, i) => (
+850:                      <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: i < order.items.length - 1 ? '1px solid var(--border)' : 'none' }}>
+851:                        <div>
+852:                          <div style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text)' }}>{item.product?.name || item.name || 'Item Manual'}</div>
+853:                          <div style={{ fontSize: '11px', color: '#94A3B8' }}>{item.qty} × Rp {fmt(item.price)}</div>
+854:                        </div>
+855:                        <div style={{ fontSize: '13px', fontWeight: '700' }}>Rp {fmt(item.subtotal)}</div>
+856:                      </div>
+857:                    ))}
+858:                </div>
+859:              </div>
+860:              {/* Total */}
+861:              <div style={{ background: 'var(--surface2)', borderRadius: '10px', padding: '14px', border: '1px solid var(--border)', marginBottom: paid ? '0' : '16px' }}>
+862:                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: paid && order.payment > 0 ? '6px' : '0' }}>
+863:                  <span style={{ fontSize: '14px', fontWeight: '700' }}>Total</span>
+864:                  <span style={{ fontSize: '16px', fontWeight: '800', color: 'var(--accent)' }}>Rp {fmt(order.total)}</span>
+865:                </div>
+866:                {paid && order.payment > 0 && <>
+867:                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text2)', marginBottom: '4px' }}>
+868:                    <span>Bayar ({order.payMethod})</span><span>Rp {fmt(order.payment)}</span>
+869:                  </div>
+870:                  {order.change > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', fontWeight: '700', color: 'var(--green)' }}>
+871:                    <span>Kembalian</span><span>Rp {fmt(order.change)}</span>
+872:                  </div>}
+873:                </>}
+874:              </div>
+875:              {!paid && (
+876:                <button onClick={() => { onClose(); onPayNow(order) }}
+877:                  style={{ width: '100%', padding: '12px', borderRadius: '10px', border: 'none', background: 'var(--accent)', color: '#fff', fontSize: '14px', fontWeight: '800', cursor: 'pointer', fontFamily: 'inherit', marginTop: '16px' }}>
+878:                  💳 Proses Pembayaran
+879:                </button>
+880:              )}
+881:            </>
+882:          )}
+883:        </div>
+885:        {/* Footer */}
+886:        <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: '8px' }}>
+887:          {editing ? (
+888:            <button onClick={handleSaveEdit} disabled={saving}
+889:              style={{ flex: 1, padding: '10px', borderRadius: '9px', border: 'none', background: 'var(--accent)', color: '#fff', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+890:              {saving ? 'Menyimpan...' : 'Simpan Perubahan'}
+891:            </button>
+892:          ) : (
+893:            <>
+894:              <button onClick={handleToggle} disabled={toggling}
+895:                style={{ flex: 1, padding: '10px', borderRadius: '9px', border: `1px solid ${served ? '#FDE68A' : '#A7F3D0'}`, background: served ? '#FFFBEB' : '#ECFDF5', color: served ? 'var(--orange)' : 'var(--green)', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+896:                {toggling ? '...' : served ? 'Batalkan Sajian' : 'Tandai Disajikan'}
+897:              </button>
+898:              <button onClick={handlePrint} disabled={printing}
+899:                style={{ flex: 1, padding: '10px', borderRadius: '9px', border: '1px solid #C7D4F0', background: '#EFF4FF', color: 'var(--accent)', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+900:                {printing ? '...' : 'Pelanggan'}
+901:              </button>
+902:              <button onClick={handlePrintKitchen} disabled={printingKitchen}
+903:                style={{ flex: 1, padding: '10px', borderRadius: '9px', border: '1px solid #FDE68A', background: '#FFFBEB', color: '#92400E', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+904:                {printingKitchen ? '...' : 'Dapur'}
+905:              </button>
+906:              <button onClick={handlePrintBar} disabled={printingBar}
+907:                style={{ flex: 1, padding: '10px', borderRadius: '9px', border: '1px solid #C7D4F0', background: '#EFF4FF', color: '#1D4ED8', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+908:                {printingBar ? '...' : 'Bar'}
+909:              </button>
+910:            </>
+911:          )}
+912:        </div>
+913:      </div>
+914:    </div>
+915:  )
+916:}
+918:// ── Tambah Item Manual ──
+919:function ManualItemButton({ onAdd, categories }) {
+920:  const [open, setOpen] = useState(false)
+921:  const [name, setName] = useState('')
+922:  const [price, setPrice] = useState('')
+923:  const [category, setCategory] = useState('')
+925:  function submit(e) {
+926:    e.preventDefault()
+927:    if (!name.trim() || !price) return
+928:    onAdd({ id: `manual_${Date.now()}`, name: name.trim(), price: Number(price), stock: 999, imageUrl: null, category: category ? { name: category } : null })
+929:    setName(''); setPrice(''); setCategory(''); setOpen(false)
+930:  }
+932:  return (
+933:    <>
+934:      <button onClick={() => setOpen(true)} style={{ width: '100%', padding: '10px', border: '1px solid var(--border)', borderRadius: '10px', background: 'none', cursor: 'pointer', fontSize: '13px', color: 'var(--text2)', fontWeight: '600', fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginBottom: '10px' }}>
+935:        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+936:        {t('tambahItemManual')}
+937:      </button>
+938:      {open && (
+939:        <div style={{ position: 'fixed', inset: 0, background: 'rgba(13,21,38,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }} onClick={(e) => { if (e.target === e.currentTarget) setOpen(false) }}>
+940:          <div className="card" style={{ width: '360px', padding: '24px' }}>
+941:            <div style={{ fontWeight: '700', fontSize: '15px', marginBottom: '16px' }}>{t('tambahItemManual')}</div>
+942:            <form onSubmit={submit}>
+943:              <div style={{ marginBottom: '12px' }}>
+944:                <input className="input" aria-label={t('namaItem')} value={name} onChange={(e) => setName(e.target.value)} placeholder={t('namaItem')} required />
+945:              </div>
+946:              <div style={{ marginBottom: '12px' }}>
+947:                <input className="input" type="number" aria-label={t('harga')} value={price} onChange={(e) => setPrice(e.target.value)} placeholder={t('harga')} required />
+948:              </div>
+949:              <div style={{ marginBottom: '16px' }}>
+950:                <select className="input" aria-label={t('kategori')} value={category} onChange={(e) => setCategory(e.target.value)}>
+951:                  <option value="">Tanpa kategori</option>
+952:                  {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+953:                </select>
+954:              </div>
+955:              <div style={{ display: 'flex', gap: '8px' }}>
+956:                <button type="submit" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>Tambah</button>
+957:                <button type="button" className="btn btn-ghost" onClick={() => setOpen(false)}>Batal</button>
+958:              </div>
+959:            </form>
+960:          </div>
+961:        </div>
+962:      )}
+963:    </>
+964:  )
+965:}
+967:// ── Closing Modal ──
+968:const SHIFTS = [
+969:  { key: 'SHIFT_1', label: 'Closing Shift 1', jam: '07.00 - 13.00' },
+970:  { key: 'SHIFT_2', label: 'Closing Shift 2', jam: '13.00 - 18.00' },
+971:  { key: 'SHIFT_3', label: 'Closing Shift 3', jam: '18.00 - 23.00' },
+972:]
+974:function ClosingModal({ orders, todayShifts = [], kasAwalOtomatis = 0, onClose, onSaved }) {
+975:  const fmt = (n) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(n || 0)
+977:  const availableShifts = SHIFTS.filter(s => !todayShifts.includes(s.key))
+978:  const [shift, setShift] = useState(() => availableShifts[0]?.key || 'SHIFT_1')
+979:  const activeShift = SHIFTS.find(s => s.key === shift)
+980:  const [employees, setEmployees] = useState([])
+981:  useEffect(() => { api.get('/admin/employees').then(r => setEmployees(r.data.filter(e => e.isActive))).catch(() => {}) }, [])
+983:  const [snapshot] = useState(() => {
+984:    const completed = orders.filter(o => o.status === 'COMPLETED')
+985:    return {
+986:      completed,
+987:      totalPenjualan: completed.reduce((s, o) => s + o.total, 0),
+988:      totalCash: completed.filter(o => o.payMethod === 'CASH').reduce((s, o) => s + o.total, 0),
+989:      totalQris: completed.filter(o => o.payMethod === 'QRIS').reduce((s, o) => s + o.total, 0),
+990:      totalTransfer: completed.filter(o => o.payMethod === 'TRANSFER' || o.payMethod === 'NONTUNAI').reduce((s, o) => s + o.total, 0),
+991:      pendingCount: orders.filter(o => o.status !== 'COMPLETED').length,
+992:    }
+993:  })
+994:  const { completed, totalPenjualan, totalCash, totalQris, totalTransfer, pendingCount } = snapshot
+996:  const [pengeluaran, setPengeluaran] = useState([])
+997:  const [catatan, setCatatan] = useState('')
+998:  const [closerName, setCloserName] = useState('')
+999:  // Pemindahan kas: ke shift berikutnya atau ke hari berikutnya
+1000:  const [saving, setSaving] = useState(false)
+1001:  const [saved, setSaved] = useState(false)
+1003:  const kasAwal = kasAwalOtomatis // otomatis dari kas akhir shift/hari sebelumnya
+1004:  const totalPengeluaran = pengeluaran.reduce((s, p) => s + (Number(p.harga) * Number(p.qty || 1)), 0)
+1005:  const kasAkhir = kasAwal + totalCash - totalPengeluaran
+1007:  function addPengeluaran() { setPengeluaran(prev => [...prev, { barang: '', qty: 1, harga: 0 }]) }
+1008:  function updatePengeluaran(i, field, val) { setPengeluaran(prev => prev.map((p, n) => n === i ? { ...p, [field]: val } : p)) }
+1010:  async function handleSave() {
+1011:    setSaving(true)
+1012:    try {
+1013:      await api.post('/daily-reports', {
+1014:        shift, kasAwal, penjualan: totalPenjualan, uangDisetor: totalCash,
+1015:        qris: totalQris, transfer: totalTransfer,
+1016:        pengeluaran: pengeluaran.filter(p => p.barang).map(p => ({ ...p, qty: Number(p.qty) || 1, harga: Number(p.harga) || 0 })),
+1017:        piutang: [], catatan, closerName,
+1018:      })
+1019:      setSaved(true)
+1020:    } catch (e) {
+1021:      alert(e.response?.data?.message || 'Gagal menyimpan laporan')
+1022:    } finally { setSaving(false) }
+1023:  }
+1025:  return (
+1026:    <div style={{ position: 'fixed', inset: 0, background: 'rgba(30,42,59,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400, backdropFilter: 'blur(4px)' }}
+1027:      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+1028:      <div className="card fade-in" style={{ width: '820px', maxWidth: '96vw', maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+1030:        {/* Header */}
+1031:        <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(135deg, #D8E4F4, #E8EEF8)', flexShrink: 0 }}>
+1032:          <div>
+1033:            <div style={{ fontSize: '14px', fontWeight: '800', color: '#1E2A3B' }}>Closing Kasir</div>
+1034:            <div style={{ fontSize: '11px', color: '#7A8FAF', marginTop: '1px' }}>{new Date().toLocaleDateString('id-ID', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}</div>
+1035:          </div>
+1036:          <button onClick={onClose} style={{ background: 'rgba(74,124,199,0.1)', border: '1px solid #C0D0E8', borderRadius: '8px', cursor: 'pointer', color: '#5A6E90', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+1037:            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+1038:          </button>
+1039:        </div>
+1041:        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+1042:          {saved ? (
+1043:            <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', padding: '14px 18px', gap: '10px' }}>
+1044:              {/* Success header */}
+1045:              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', paddingBottom: '10px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+1046:                <div style={{ width: '32px', height: '32px', background: 'var(--green-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1.5px solid #A7DFC8', flexShrink: 0, color: 'var(--green)' }}>
+1047:                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+1048:                </div>
+1049:                <div>
+1050:                  <div style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text)' }}>Laporan Closing Tersimpan</div>
+1051:                  <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
+1052:                    {new Date().toLocaleDateString('id-ID', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+1053:                    {closerName && <> &nbsp;&middot;&nbsp; <span style={{ fontWeight: '600', color: 'var(--text2)' }}>{closerName}</span></>}
+1054:                  </div>
+1055:                </div>
+1056:                <button className="btn btn-primary" style={{ marginLeft: 'auto', justifyContent: 'center', padding: '7px 18px', fontSize: '12px' }} onClick={() => onSaved(shift, kasAkhir)}>Tutup</button>
+1057:              </div>
+1059:              {/* Body 2 kolom */}
+1060:              <div style={{ display: 'flex', gap: '12px', flex: 1, overflow: 'hidden', minHeight: 0 }}>
+1061:                {/* Kolom kiri */}
+1062:                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'hidden' }}>
+1063:                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+1064:                    {[
+1065:                      { label: 'Total Penjualan', value: totalPenjualan, color: '#4A7CC7', bg: '#EBF1FB', border: '#C0D0E8' },
+1066:                      { label: 'Cash', value: totalCash, color: '#2A9D6E', bg: '#E8F7F1', border: '#A7DFC8' },
+1067:                      { label: 'QRIS', value: totalQris, color: '#6B5BAF', bg: '#EEEAF8', border: '#C8C0E8' },
+1068:                      { label: 'Transfer', value: totalTransfer, color: '#C47D1A', bg: '#FDF4E3', border: '#F0D090' },
+1069:                    ].map(({ label, value, color, bg, border }) => (
+1070:                      <div key={label} style={{ background: bg, border: `1px solid ${border}`, borderRadius: '8px', padding: '8px 10px' }}>
+1071:                        <div style={{ fontSize: '10px', color: 'var(--muted)', marginBottom: '2px' }}>{label}</div>
+1072:                        <div style={{ fontSize: '13px', fontWeight: '800', color }}>{fmt(value)}</div>
+1073:                      </div>
+1074:                    ))}
+1075:                  </div>
+1076:                  <div style={{ fontSize: '11px', color: 'var(--muted)', padding: '2px' }}>
+1077:                    {completed.length} transaksi selesai &nbsp;&middot;&nbsp; {pendingCount} belum bayar
+1078:                  </div>
+1079:                  <div style={{ background: 'linear-gradient(135deg, #D8E4F4, #E8EEF8)', borderRadius: '10px', border: '1px solid #C0D0E8', padding: '10px 12px', flex: 1 }}>
+1080:                    <div style={{ fontSize: '10px', fontWeight: '700', color: '#7A8FAF', letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: '8px' }}>Kalkulasi Kas</div>
+1081:                    {[
+1082:                      ['Kas Awal', fmt(Number(kasAwal) || 0), 'var(--text2)'],
+1083:                      ['+ Penjualan Cash', `+${fmt(totalCash)}`, '#2A9D6E'],
+1084:                      ...(totalPengeluaran > 0 ? [['- Pengeluaran', `-${fmt(totalPengeluaran)}`, '#C95555']] : []),
+1085:                    ].map(([label, val, color]) => (
+1086:                      <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', marginBottom: '5px' }}>
+1087:                        <span style={{ color: '#7A8FAF' }}>{label}</span>
+1088:                        <span style={{ fontWeight: '600', color }}>{val}</span>
+1089:                      </div>
+1090:                    ))}
+1091:                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #C0D0E8', paddingTop: '8px', marginTop: '4px' }}>
+1092:                      <span style={{ fontSize: '12px', fontWeight: '700', color: '#1E2A3B' }}>Total Kas Akhir</span>
+1093:                      <span style={{ fontSize: '18px', fontWeight: '800', color: kasAkhir >= 0 ? '#2A9D6E' : '#C95555' }}>{fmt(kasAkhir)}</span>
+1094:                    </div>
+1095:                  </div>
+1096:                </div>
+1098:                {/* Kolom kanan */}
+1099:                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', overflow: 'hidden' }}>
+1100:                  <div style={{ background: 'var(--surface2)', borderRadius: '10px', border: '1px solid var(--border)', overflow: 'hidden' }}>
+1101:                    <div style={{ padding: '7px 12px', borderBottom: '1px solid var(--border)', background: '#F5F8FE', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+1102:                      <div style={{ fontSize: '10px', fontWeight: '700', color: 'var(--muted)', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Pengeluaran</div>
+1103:                      {totalPengeluaran > 0 && <span style={{ fontSize: '11px', fontWeight: '700', color: '#C95555' }}>-{fmt(totalPengeluaran)}</span>}
+1104:                    </div>
+1105:                    <div style={{ padding: '8px 12px', overflowY: 'auto', maxHeight: '120px' }}>
+1106:                      {pengeluaran.filter(p => p.barang).length === 0 ? (
+1107:                        <div style={{ fontSize: '11px', color: 'var(--muted)', fontStyle: 'italic' }}>Tidak ada pengeluaran</div>
+1108:                      ) : pengeluaran.filter(p => p.barang).map((p, i) => (
+1109:                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0', borderBottom: i < pengeluaran.filter(x => x.barang).length - 1 ? '1px solid var(--border)' : 'none' }}>
+1110:                          <div>
+1111:                            <div style={{ fontSize: '12px', fontWeight: '600', color: 'var(--text)' }}>{p.barang}</div>
+1112:                            <div style={{ fontSize: '10px', color: 'var(--muted)' }}>{p.qty} x {fmt(Number(p.harga))}</div>
+1113:                          </div>
+1114:                          <span style={{ fontSize: '12px', fontWeight: '700', color: '#C95555' }}>-{fmt(Number(p.harga) * Number(p.qty || 1))}</span>
+1115:                        </div>
+1116:                      ))}
+1117:                    </div>
+1118:                  </div>
+1119:                  <div style={{ background: 'var(--surface2)', borderRadius: '10px', border: '1px solid var(--border)', overflow: 'hidden' }}>
+1120:                    <div style={{ padding: '7px 12px', borderBottom: '1px solid var(--border)', background: '#F5F8FE' }}>
+1121:                      <div style={{ fontSize: '10px', fontWeight: '700', color: 'var(--muted)', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Catatan</div>
+1122:                    </div>
+1123:                    <div style={{ padding: '8px 12px' }}>
+1124:                      {catatan ? (
+1125:                        <div style={{ fontSize: '12px', color: 'var(--text2)', lineHeight: '1.5' }}>{catatan}</div>
+1126:                      ) : (
+1127:                        <div style={{ fontSize: '11px', color: 'var(--muted)', fontStyle: 'italic' }}>Tidak ada catatan</div>
+1128:                      )}
+1129:                    </div>
+1130:                  </div>
+1131:                </div>
+1132:              </div>
+1133:            </div>
+1134:          ) : (
+1135:            <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+1136:              {/* Kolom Kiri: Ringkasan + Kas Akhir */}
+1137:              <div style={{ flex: 1, padding: '14px 16px', borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto' }}>
+1138:                <div style={{ fontSize: '10px', fontWeight: '700', color: 'var(--muted)', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Ringkasan Penjualan</div>
+1139:                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+1140:                  {[
+1141:                    { label: 'Total Penjualan', value: totalPenjualan, color: '#4A7CC7', bg: '#EBF1FB', border: '#C0D0E8' },
+1142:                    { label: 'Cash', value: totalCash, color: '#2A9D6E', bg: '#E8F7F1', border: '#A7DFC8' },
+1143:                    { label: 'QRIS', value: totalQris, color: '#6B5BAF', bg: '#EEEAF8', border: '#C8C0E8' },
+1144:                    { label: 'Transfer / Non-Tunai', value: totalTransfer, color: '#C47D1A', bg: '#FDF4E3', border: '#F0D090' },
+1145:                  ].map(({ label, value, color, bg, border }) => (
+1146:                    <div key={label} style={{ background: bg, border: `1px solid ${border}`, borderRadius: '10px', padding: '10px 12px' }}>
+1147:                      <div style={{ fontSize: '10px', color: 'var(--muted)', marginBottom: '3px' }}>{label}</div>
+1148:                      <div style={{ fontSize: '14px', fontWeight: '800', color }}>{fmt(value)}</div>
+1149:                    </div>
+1150:                  ))}
+1151:                </div>
+1152:                <div style={{ padding: '6px 10px', background: '#F5F8FE', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '11px', color: 'var(--muted)' }}>
+1153:                  {completed.length} transaksi selesai &nbsp;&middot;&nbsp; {pendingCount} belum bayar
+1154:                </div>
+1155:                <div style={{ background: 'linear-gradient(135deg, #D8E4F4, #E8EEF8)', borderRadius: '12px', padding: '12px 14px', marginTop: 'auto', border: '1px solid #C0D0E8' }}>
+1156:                  <div style={{ fontSize: '10px', fontWeight: '700', color: '#7A8FAF', letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: '8px' }}>Kalkulasi Kas</div>
+1157:                  {[['Kas Awal', fmt(Number(kasAwal) || 0), '#4A5878'], ['+ Penjualan Cash', `+${fmt(totalCash)}`, '#2A9D6E'], ...(totalPengeluaran > 0 ? [['- Pengeluaran', `-${fmt(totalPengeluaran)}`, '#C95555']] : [])].map(([label, val, color]) => (
+1158:                    <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+1159:                      <span style={{ fontSize: '11px', color: '#7A8FAF' }}>{label}</span>
+1160:                      <span style={{ fontSize: '12px', color }}>{val}</span>
+1161:                    </div>
+1162:                  ))}
+1163:                  <div style={{ borderTop: '1px solid #C0D0E8', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+1164:                    <span style={{ fontSize: '12px', fontWeight: '700', color: '#1E2A3B' }}>Total Kas Akhir</span>
+1165:                    <span style={{ fontSize: '18px', fontWeight: '800', color: kasAkhir >= 0 ? '#2A9D6E' : '#C95555' }}>{fmt(kasAkhir)}</span>
+1166:                  </div>
+1167:                </div>
+1168:              </div>
+1169:              {/* Kolom Kanan: Laporan Kas */}
+1170:              <div style={{ width: '310px', flexShrink: 0, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '10px', overflowY: 'auto' }}>
+1171:                <div style={{ fontSize: '10px', fontWeight: '700', color: 'var(--muted)', letterSpacing: '0.5px', textTransform: 'uppercase' }}>Laporan Kas</div>
+1172:                {/* Pilih Shift */}
+1173:                <div>
+1174:                  <label className="label" style={{ fontSize: '11px' }}>Shift</label>
+1175:                  <div style={{ display: 'flex', gap: '6px' }}>
+1176:                    {SHIFTS.map(s => {
+1177:                      const done = todayShifts.includes(s.key)
+1178:                      const active = shift === s.key
+1179:                      return (
+1180:                        <button key={s.key} onClick={() => !done && setShift(s.key)}
+1181:                          disabled={done}
+1182:                          style={{ flex: 1, padding: '7px 4px', borderRadius: '8px', border: `1.5px solid ${active ? 'var(--accent)' : done ? '#E2E8F0' : 'var(--border)'}`, background: active ? 'var(--accent)' : done ? '#F1F5F9' : '#fff', color: active ? '#fff' : done ? '#94A3B8' : 'var(--text2)', fontWeight: '700', fontSize: '11px', cursor: done ? 'not-allowed' : 'pointer', fontFamily: 'inherit', position: 'relative' }}>
+1183:                          {s.label.replace('Closing ', '')}
+1184:                          {done && <span style={{ display: 'block', fontSize: '9px', fontWeight: '600', color: '#94A3B8' }}>✓ Selesai</span>}
+1185:                        </button>
+1186:                      )
+1187:                    })}
+1188:                  </div>
+1189:                  {activeShift && <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '4px' }}>{activeShift.jam}</div>}
+1190:                </div>
+1191:                {/* Nama yang closing */}
+1192:                <div>
+1193:                  <label className="label" style={{ fontSize: '11px' }}>Nama yang Closing</label>
+1194:                  <select className="input" value={closerName} onChange={e => setCloserName(e.target.value)} style={{ fontSize: '13px' }}>
+1195:                    <option value="">Pilih nama staff...</option>
+1196:                    {employees.map(e => <option key={e.id} value={e.name}>{e.name}</option>)}
+1197:                  </select>
+1198:                </div>
+1199:                {/* Kas Awal otomatis */}
+1200:                <div style={{ background: '#F5F8FE', borderRadius: '8px', padding: '10px 12px', border: '1px solid var(--border)' }}>
+1201:                  <div style={{ fontSize: '10px', color: 'var(--muted)', marginBottom: '2px' }}>Kas Awal (dari shift/hari sebelumnya)</div>
+1202:                  <div style={{ fontSize: '15px', fontWeight: '800', color: 'var(--accent)' }}>{fmt(kasAwal)}</div>
+1203:                </div>
+1204:                <div style={{ flex: 1 }}>
+1205:                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+1206:                    <label className="label" style={{ margin: 0, fontSize: '11px' }}>{t('pengeluaran')}</label>
+1207:                    <button type="button" onClick={addPengeluaran} style={{ fontSize: '11px', color: 'var(--accent)', background: 'var(--accent-light)', border: '1px solid #C7D4F0', borderRadius: '6px', padding: '2px 8px', cursor: 'pointer', fontFamily: 'inherit', fontWeight: '600' }}>+ Tambah</button>
+1208:                  </div>
+1209:                  {pengeluaran.length === 0 && <div style={{ fontSize: '11px', color: 'var(--muted)', padding: '4px 0' }}>Belum ada pengeluaran</div>}
+1210:                  <div style={{ maxHeight: '130px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+1211:                    {pengeluaran.map((p, i) => (
+1212:                      <div key={i} style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+1213:                        <input className="input" placeholder="Nama barang" value={p.barang} onChange={(e) => updatePengeluaran(i, 'barang', e.target.value)} style={{ flex: 2, fontSize: '11px', padding: '6px 8px' }} />
+1214:                        <input className="input" type="number" placeholder="Qty" value={p.qty} onChange={(e) => updatePengeluaran(i, 'qty', e.target.value)} style={{ flex: '0 0 44px', fontSize: '11px', padding: '6px 6px' }} />
+1215:                        <input className="input" type="number" placeholder="Harga" value={p.harga} onChange={(e) => updatePengeluaran(i, 'harga', e.target.value)} style={{ flex: 2, fontSize: '11px', padding: '6px 8px' }} />
+1216:                        <button onClick={() => setPengeluaran(prev => prev.filter((_, n) => n !== i))} style={{ background: 'var(--red-light)', border: '1px solid #FECACA', borderRadius: '6px', color: 'var(--red)', cursor: 'pointer', padding: '6px 7px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+1217:                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+1218:                        </button>
+1219:                      </div>
+1220:                    ))}
+1221:                  </div>
+1222:                </div>
+1223:                <div>
+1224:                  <label className="label" style={{ fontSize: '11px' }}>{t('catatan')} <span style={{ color: 'var(--muted)', fontWeight: '400' }}>{t('opsional')}</span></label>
+1225:                  <textarea className="input" rows={2} placeholder="Catatan tambahan..." value={catatan} onChange={(e) => setCatatan(e.target.value)} style={{ resize: 'none', fontSize: '12px' }} />
+1226:                </div>
+1227:              </div>
+1228:            </div>
+1229:          )}
+1230:        </div>
+1232:        {/* Footer */}
+1233:        {!saved && (
+1234:          <div style={{ padding: '11px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: '8px', flexShrink: 0 }}>
+1235:            <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={onClose}>Batal</button>
+1236:            <button className="btn btn-primary" style={{ flex: 2, justifyContent: 'center' }} onClick={handleSave} disabled={saving}>
+1237:              {saving ? 'Menyimpan...' : 'Simpan Laporan Closing'}
+1238:            </button>
+1239:          </div>
+1240:        )}
+1241:      </div>
+1242:    </div>
+1243:  )
+1244:}
+1246:// ── Checkout Modal ──
+1247:function CheckoutModal({ cart, total, onClose, onSuccess, existingOrderId }) {
+1248:  const [payMethod, setPayMethod] = useState('CASH')
+1249:  const [payment, setPayment] = useState('')
+1250:  const [payLater, setPayLater] = useState(false)
+1251:  const [customerName, setCustomerName] = useState('')
+1252:  const [note, setNote] = useState('')
+1253:  const [loading, setLoading] = useState(false)
+1254:  const [tx, setTx] = useState(null)
+1255:  const [printing, setPrinting] = useState(false)
+1257:  const paid = Number(payment) || 0
+1258:  const change = payMethod === 'CASH' && !payLater ? paid - total : 0
+1259:  const methods = ['CASH', 'QRIS', 'TRANSFER']
+1261:  function numpadPress(val) {
+1262:    if (payLater) return
+1263:    if (val === 'C') { setPayment(''); return }
+1264:    if (val === '⌫') { setPayment((p) => p.slice(0, -1)); return }
+1265:    if (val === '000') { setPayment((p) => (p === '' ? '' : p + '000')); return }
+1266:    setPayment((p) => (p.length >= 10 ? p : p + val))
+1267:  }
+1269:  async function checkout(later = false) {
+1270:    if (!later && payMethod === 'CASH' && paid < total) return alert('Uang bayar kurang')
+1271:    // Optimistic: langsung tampil sukses
+1272:    const optimisticTx = {
+1273:      id: `opt_${Date.now()}`,
+1274:      invoiceNo: `BK-${Date.now()}`,
+1275:      total, change: payMethod === 'CASH' && !later ? paid - total : 0,
+1276:      payment: later ? 0 : (payMethod === 'CASH' ? paid : total),
+1277:      payMethod, status: later ? 'PENDING' : 'COMPLETED',
+1278:      servedAt: null, createdAt: new Date().toISOString(),
+1279:      customerName, note,
+1280:      cashier: { name: '' },
+1281:      items: cart.map((i) => ({ qty: i.qty, price: i.product.price, subtotal: i.product.price * i.qty, category: i.product.category?.name || '', product: { name: i.product.name, imageUrl: i.product.imageUrl, category: i.product.category } })),
+1282:    }
+1283:    if (!existingOrderId) setTx(optimisticTx)
+1284:    setLoading(true)
+1285:    try {
+1286:      if (existingOrderId) {
+1287:        const res = await api.patch(`/transactions/${existingOrderId}`, {
+1288:          payment: later ? 0 : (payMethod === 'CASH' ? paid : total),
+1289:          payMethod, total,
+1290:        })
+1291:        setTx({ ...optimisticTx, invoiceNo: existingOrderId, ...res.data })
+1292:      } else {
+1293:        const items = cart.map((i) => {
+1294:          const o = { qty: i.qty, price: i.product.price }
+1295:          if (i.product.id.startsWith('manual_')) {
+1296:            o.name = i.product.name
+1297:            o.category = i.product.category?.name || ''
+1298:          } else {
+1299:            o.productId = i.product.id
+1300:            o.name = i.product.name
+1301:            o.category = i.product.category?.name || ''
+1302:          }
+1303:          return o
+1304:        })
+1305:        const res = await api.post('/transactions', {
+1306:          items,
+1307:          payment: later ? 0 : (payMethod === 'CASH' ? paid : total),
+1308:          payMethod, payLater: later, customerName, note,
+1309:        })
+1310:        setTx(res.data)
+1311:      }
+1312:    } catch (e) {
+1313:      setTx(null)
+1314:      alert(e.response?.data?.message || 'Gagal menyimpan transaksi')
+1315:    } finally { setLoading(false) }
+1316:  }
+1318:  const [printingKitchen, setPrintingKitchen] = useState(false)
+1319:  const [printingBar, setPrintingBar] = useState(false)
+1321:  async function handlePrint() {
+1322:    if (!tx) return
+1323:    setPrinting(true)
+1324:    try { await printAll(tx) } catch (e) { alert('Gagal cetak: ' + e.message) }
+1325:    finally { setPrinting(false) }
+1326:  }
+1328:  async function handlePrintCustomer() {
+1329:    if (!tx) return
+1330:    setPrinting(true)
+1331:    try { await printThermal(tx) } catch (e) { alert('Gagal cetak: ' + e.message) }
+1332:    finally { setPrinting(false) }
+1333:  }
+1335:  async function handlePrintKitchen() {
+1336:    if (!tx) return
+1337:    setPrintingKitchen(true)
+1338:    try { await printKitchen(tx) } catch (e) { alert(e.message) }
+1339:    finally { setPrintingKitchen(false) }
+1340:  }
+1342:  async function handlePrintBar() {
+1343:    if (!tx) return
+1344:    setPrintingBar(true)
+1345:    try { await printBar(tx) } catch (e) { alert(e.message) }
+1346:    finally { setPrintingBar(false) }
+1347:  }
+1349:  const numKeys = ['7','8','9','4','5','6','1','2','3','000','0','⌫']
+1351:  if (tx) return (
+1352:    <div style={{ position: 'fixed', inset: 0, background: 'rgba(13,21,38,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }}>
+1353:      <div className="card fade-in" style={{ width: '400px', padding: '32px', textAlign: 'center' }}>
+1354:        <div style={{ width: '64px', height: '64px', background: 'var(--green-light)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: '28px' }}>✓</div>
+1355:        <div style={{ fontSize: '18px', fontWeight: '800', color: 'var(--text)', marginBottom: '4px' }}>Transaksi Berhasil!</div>
+1356:        <div style={{ fontSize: '12px', color: 'var(--muted)', fontFamily: 'monospace', marginBottom: '20px' }}>{tx.invoiceNo}</div>
+1357:        <div style={{ background: 'var(--surface2)', borderRadius: '12px', padding: '16px', marginBottom: '20px', textAlign: 'left' }}>
+1358:          {cart.map((item) => (
+1359:            <div key={item.product.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: '13px' }}>
+1360:              <span>{item.product.name} ×{item.qty}</span>
+1361:              <span style={{ fontWeight: '600' }}>Rp {fmt(item.product.price * item.qty)}</span>
+1362:            </div>
+1363:          ))}
+1364:          <div style={{ borderTop: '1px solid var(--border)', marginTop: '8px', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', fontWeight: '800', fontSize: '15px' }}>
+1365:            <span>Total</span><span style={{ color: 'var(--accent)' }}>Rp {fmt(tx.total)}</span>
+1366:          </div>
+1367:          {payMethod === 'CASH' && tx.change > 0 && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', marginTop: '4px', color: 'var(--green)' }}><span>Kembalian</span><span style={{ fontWeight: '700' }}>Rp {fmt(tx.change)}</span></div>}
+1368:        </div>
+1369:        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+1370:          <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={() => onSuccess(tx)}>Selesai</button>
+1371:          <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} disabled={printing} onClick={handlePrint}>
+1372:            {printing ? '⏳...' : 'Print Semua'}
+1373:          </button>
+1374:          <button onClick={handlePrintCustomer} disabled={printing}
+1375:            style={{ flex: 1, padding: '10px', borderRadius: '9px', border: '1px solid #C7D4F0', background: '#EFF4FF', color: '#1D4ED8', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+1376:            Pelanggan
+1377:          </button>
+1378:          <button onClick={handlePrintKitchen} disabled={printingKitchen}
+1379:            style={{ flex: 1, padding: '10px', borderRadius: '9px', border: '1px solid #FDE68A', background: '#FFFBEB', color: '#92400E', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+1380:            {printingKitchen ? '...' : 'Dapur'}
+1381:          </button>
+1382:          <button onClick={handlePrintBar} disabled={printingBar}
+1383:            style={{ flex: 1, padding: '10px', borderRadius: '9px', border: '1px solid #C7D4F0', background: '#EFF4FF', color: '#1D4ED8', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+1384:            {printingBar ? '...' : 'Bar'}
+1385:          </button>
+1386:        </div>
+1387:      </div>
+1388:    </div>
+1389:  )
+1391:  return (
+1392:    <div style={{ position: 'fixed', inset: 0, background: 'rgba(13,21,38,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }}
+1393:      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+1394:      <div className="card fade-in" style={{ width: '820px', maxWidth: '96vw', maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+1395:        {/* Header */}
+1396:        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+1397:          <span style={{ fontSize: '16px', fontWeight: '800' }}>Checkout</span>
+1398:          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '22px', color: 'var(--muted)', lineHeight: 1 }}>×</button>
+1399:        </div>
+1401:        {/* Body 2 kolom */}
+1402:        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+1404:          {/* Kiri: Info + Items */}
+1405:          <div style={{ flex: 1, padding: '16px 20px', overflowY: 'auto', borderRight: '1px solid var(--border)' }}>
+1406:            {/* Nama + Catatan */}
+1407:            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
+1408:              <div>
+1409:                <label className="label">{t('namaPembeli')}</label>
+1410:                <input className="input" placeholder="Nama pelanggan" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
+1411:              </div>
+1412:              <div>
+1413:                <label className="label">{t('catatan')}</label>
+1414:                <input className="input" placeholder="Tanpa es, extra shot..." value={note} onChange={(e) => setNote(e.target.value)} />
+1415:              </div>
+1416:            </div>
+1418:            {/* Items */}
+1419:            <div className="section-label">Pesanan</div>
+1420:            <div style={{ background: 'var(--surface2)', borderRadius: '10px', border: '1px solid var(--border)', marginBottom: '14px', overflow: 'hidden' }}>
+1421:              {cart.map((item, i) => (
+1422:                <div key={item.product.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '9px 14px', borderBottom: i < cart.length - 1 ? '1px solid var(--border)' : 'none', fontSize: '13px' }}>
+1423:                  <span style={{ color: 'var(--text2)' }}>{item.product.name} <span style={{ color: 'var(--muted)' }}>×{item.qty}</span></span>
+1424:                  <span style={{ fontWeight: '700' }}>Rp {fmt(item.product.price * item.qty)}</span>
+1425:                </div>
+1426:              ))}
+1427:            </div>
+1429:            {/* Total */}
+1430:            <div style={{ background: 'var(--surface2)', borderRadius: '10px', padding: '12px 14px', border: '1px solid var(--border)' }}>
+1431:              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+1432:                <span style={{ fontSize: '14px', fontWeight: '700' }}>Total</span>
+1433:                <span style={{ fontSize: '18px', fontWeight: '800', color: 'var(--accent)' }}>Rp {fmt(total)}</span>
+1434:              </div>
+1435:              {payMethod === 'CASH' && !payLater && paid > 0 && <>
+1436:                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text2)', marginTop: '6px' }}>
+1437:                  <span>Bayar</span><span>Rp {fmt(paid)}</span>
+1438:                </div>
+1439:                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: '700', color: change >= 0 ? 'var(--green)' : 'var(--red)', marginTop: '4px' }}>
+1440:                  <span>Kembalian</span><span>Rp {fmt(Math.max(0, change))}</span>
+1441:                </div>
+1442:              </>}
+1443:            </div>
+1444:          </div>
+1446:          {/* Kanan: Metode + Numpad + Tombol */}
+1447:          <div style={{ width: '300px', flexShrink: 0, padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', overflowY: 'auto' }}>
+1448:            {/* Metode */}
+1449:            <div>
+1450:              <div className="section-label">Metode Pembayaran</div>
+1451:              <div style={{ display: 'flex', gap: '6px' }}>
+1452:                {methods.map((m) => (
+1453:                  <button key={m} onClick={() => { setPayMethod(m); setPayment(''); setPayLater(false) }}
+1454:                    style={{ flex: 1, padding: '8px 4px', borderRadius: '9px', border: `1.5px solid ${payMethod === m && !payLater ? 'var(--accent)' : 'var(--border)'}`, background: payMethod === m && !payLater ? 'var(--accent)' : '#fff', color: payMethod === m && !payLater ? '#fff' : 'var(--text2)', fontWeight: '700', fontSize: '12px', cursor: 'pointer', fontFamily: 'inherit' }}>
+1455:                    {m}
+1456:                  </button>
+1457:                ))}
+1458:              </div>
+1459:            </div>
+1461:            {/* Display nominal */}
+1462:            <div style={{ background: '#0F172A', borderRadius: '12px', padding: '14px 16px' }}>
+1463:              <div style={{ fontSize: '11px', color: '#475569', marginBottom: '4px' }}>{payLater ? 'BAYAR NANTI' : 'NOMINAL BAYAR'}</div>
+1464:              <div style={{ fontSize: '26px', fontWeight: '800', color: payLater ? '#F59E0B' : '#F1F5F9', letterSpacing: '1px', minHeight: '36px', textAlign: 'right' }}>
+1465:                {payLater ? 'Bon / Hutang' : (payment ? `Rp ${Number(payment).toLocaleString('id-ID')}` : 'Rp 0')}
+1466:              </div>
+1467:              {payMethod === 'CASH' && !payLater && paid > 0 && (
+1468:                <div style={{ fontSize: '13px', fontWeight: '700', color: change >= 0 ? '#10B981' : '#EF4444', textAlign: 'right', marginTop: '4px' }}>
+1469:                  Kembali: Rp {fmt(Math.max(0, change))}
+1470:                </div>
+1471:              )}
+1472:            </div>
+1474:            {/* Numpad */}
+1475:            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+1476:              {numKeys.map((k) => (
+1477:                <button key={k} onClick={() => numpadPress(k)}
+1478:                  style={{ padding: '14px 0', borderRadius: '10px', border: '1px solid var(--border)', background: k === '⌫' ? '#FEF2F2' : k === 'C' ? '#FEF2F2' : '#fff', color: k === '⌫' || k === 'C' ? 'var(--red)' : 'var(--text)', fontSize: k === '⌫' ? '18px' : '16px', fontWeight: '700', cursor: payLater ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: payLater ? 0.4 : 1, transition: 'background 0.1s' }}
+1479:                  onMouseEnter={e => { if (!payLater) e.currentTarget.style.background = '#F1F5F9' }}
+1480:                  onMouseLeave={e => { e.currentTarget.style.background = k === '⌫' || k === 'C' ? '#FEF2F2' : '#fff' }}
+1481:                >
+1482:                  {k}
+1483:                </button>
+1484:              ))}
+1485:            </div>
+1487:            {/* Tombol aksi */}
+1488:            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+1489:              <button
+1490:                onClick={() => checkout(false)}
+1491:                disabled={(payMethod === 'CASH' && !payLater && paid < total) || payLater}
+1492:                style={{ width: '100%', padding: '13px', borderRadius: '10px', border: 'none', background: 'var(--accent)', color: '#fff', fontSize: '14px', fontWeight: '800', cursor: 'pointer', fontFamily: 'inherit', opacity: ((payMethod === 'CASH' && paid < total) || payLater) ? 0.5 : 1 }}>
+1493:                {`Bayar Rp ${fmt(total)}`}
+1494:              </button>
+1495:              <button
+1496:                onClick={() => checkout(true)}
+1497:                disabled={loading}
+1498:                style={{ width: '100%', padding: '11px', borderRadius: '10px', border: '1.5px solid #FDE68A', background: '#FFFBEB', color: '#92400E', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+1499:                ⏳ Bayar Nanti (Bon)
+1500:              </button>
+1501:            </div>
+1502:          </div>
+1503:        </div>
+1504:      </div>
+1505:    </div>
+1506:  )
+1507:}

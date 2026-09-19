@@ -29,6 +29,8 @@ export default function KasirPage() {
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [cart, setCart] = useState([])
+  const [tax, setTax] = useState(0)        // persen, misal 10 = 10%
+  const [discount, setDiscount] = useState(0) // persen, misal 5 = 5%
   const [cartOpen, setCartOpen] = useState(false)
   const [checkoutOpen, setCheckoutOpen] = useState(false)
   const [pendingOrder, setPendingOrder] = useState(null)
@@ -304,9 +306,12 @@ export default function KasirPage() {
     )
   }
 
-  function clearCart() { setCart([]) }
+  function clearCart() { setCart([]); setTax(0); setDiscount(0) }
 
-  const total = cart.reduce((s, i) => s + i.product.price * i.qty, 0)
+  const subtotal = cart.reduce((s, i) => s + i.product.price * i.qty, 0)
+  const discountAmount = Math.round(subtotal * discount / 100)
+  const taxAmount = Math.round((subtotal - discountAmount) * tax / 100)
+  const total = subtotal - discountAmount + taxAmount
   const qtyOf = (id) => cart.find((i) => i.product.id === id)?.qty || 0
   const totalQty = cart.reduce((s, i) => s + i.qty, 0)
 
@@ -593,9 +598,56 @@ export default function KasirPage() {
               if (idx >= 0) return prev.map((i, n) => n === idx ? { ...i, qty: i.qty + 1 } : i)
               return [...prev, { product: item, qty: 1 }]
             })} />
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '12px 0' }}>
-              <span style={{ fontSize: '16px', fontWeight: '700' }}>Total</span>
-              <span style={{ fontSize: '20px', fontWeight: '800', color: 'var(--accent)' }}>Rp {fmt(total)}</span>
+
+            {/* Diskon & Pajak */}
+            {cart.length > 0 && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: '600', color: 'var(--muted)', display: 'block', marginBottom: '4px' }}>Diskon (%)</label>
+                  <div style={{ position: 'relative' }}>
+                    <input type="number" min="0" max="100" value={discount || ''} onChange={e => setDiscount(Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
+                      placeholder="0" className="input" style={{ paddingRight: '28px', fontSize: '13px' }} />
+                    <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '12px', color: 'var(--muted)' }}>%</span>
+                  </div>
+                </div>
+                <div>
+                  <label style={{ fontSize: '11px', fontWeight: '600', color: 'var(--muted)', display: 'block', marginBottom: '4px' }}>Pajak (%)</label>
+                  <div style={{ position: 'relative' }}>
+                    <input type="number" min="0" max="100" value={tax || ''} onChange={e => setTax(Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
+                      placeholder="0" className="input" style={{ paddingRight: '28px', fontSize: '13px' }} />
+                    <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '12px', color: 'var(--muted)' }}>%</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Rincian total */}
+            <div style={{ marginBottom: '12px' }}>
+              {(discountAmount > 0 || taxAmount > 0) ? (
+                <div style={{ background: 'var(--surface2)', borderRadius: '10px', padding: '10px 12px', border: '1px solid var(--border)', fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text2)' }}>
+                    <span>Subtotal</span><span>Rp {fmt(subtotal)}</span>
+                  </div>
+                  {discountAmount > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--green)' }}>
+                      <span>Diskon ({discount}%)</span><span>- Rp {fmt(discountAmount)}</span>
+                    </div>
+                  )}
+                  {taxAmount > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--orange)' }}>
+                      <span>Pajak ({tax}%)</span><span>+ Rp {fmt(taxAmount)}</span>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '800', fontSize: '14px', color: 'var(--text)', borderTop: '1px solid var(--border)', paddingTop: '6px', marginTop: '2px' }}>
+                    <span>Total</span><span style={{ color: 'var(--accent)' }}>Rp {fmt(total)}</span>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '16px', fontWeight: '700' }}>Total</span>
+                  <span style={{ fontSize: '20px', fontWeight: '800', color: 'var(--accent)' }}>Rp {fmt(total)}</span>
+                </div>
+              )}
             </div>
             <div style={{ display: 'flex', gap: '8px', marginBottom: '0' }}>
               <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '12px', fontSize: '14px' }}
@@ -622,6 +674,11 @@ export default function KasirPage() {
         <CheckoutModal
           cart={cart}
           total={total}
+          subtotal={subtotal}
+          tax={tax}
+          discount={discount}
+          taxAmount={taxAmount}
+          discountAmount={discountAmount}
           onClose={() => setCheckoutOpen(false)}
           onSuccess={(newTx) => {
             clearCart(); setCheckoutOpen(false); setCartOpen(false)
@@ -1244,7 +1301,7 @@ function ClosingModal({ orders, todayShifts = [], kasAwalOtomatis = 0, onClose, 
 }
 
 // ── Checkout Modal ──
-function CheckoutModal({ cart, total, onClose, onSuccess, existingOrderId }) {
+function CheckoutModal({ cart, total, subtotal = total, tax = 0, discount = 0, taxAmount = 0, discountAmount = 0, onClose, onSuccess, existingOrderId }) {
   const [payMethod, setPayMethod] = useState('CASH')
   const [payment, setPayment] = useState('')
   const [payLater, setPayLater] = useState(false)
@@ -1428,6 +1485,24 @@ function CheckoutModal({ cart, total, onClose, onSuccess, existingOrderId }) {
 
             {/* Total */}
             <div style={{ background: 'var(--surface2)', borderRadius: '10px', padding: '12px 14px', border: '1px solid var(--border)' }}>
+              {(discountAmount > 0 || taxAmount > 0) && (
+                <>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text2)', marginBottom: '4px' }}>
+                    <span>Subtotal</span><span>Rp {fmt(subtotal)}</span>
+                  </div>
+                  {discountAmount > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--green)', marginBottom: '4px' }}>
+                      <span>Diskon ({discount}%)</span><span>- Rp {fmt(discountAmount)}</span>
+                    </div>
+                  )}
+                  {taxAmount > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--orange)', marginBottom: '4px' }}>
+                      <span>Pajak ({tax}%)</span><span>+ Rp {fmt(taxAmount)}</span>
+                    </div>
+                  )}
+                  <div style={{ borderTop: '1px solid var(--border)', marginTop: '4px', paddingTop: '8px' }} />
+                </>
+              )}
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ fontSize: '14px', fontWeight: '700' }}>Total</span>
                 <span style={{ fontSize: '18px', fontWeight: '800', color: 'var(--accent)' }}>Rp {fmt(total)}</span>
