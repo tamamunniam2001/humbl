@@ -897,15 +897,15 @@ function OrderDetailModal({ order, products = [], onClose, onToggleServed, onPay
               </button>
               <button onClick={handlePrint} disabled={printing}
                 style={{ flex: 1, padding: '10px', borderRadius: '9px', border: '1px solid #C7D4F0', background: '#EFF4FF', color: 'var(--accent)', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
-                {printing ? '⏳...' : '🖨️ Pelanggan'}
+                {printing ? '...' : 'Pelanggan'}
               </button>
               <button onClick={handlePrintKitchen} disabled={printingKitchen}
                 style={{ flex: 1, padding: '10px', borderRadius: '9px', border: '1px solid #FDE68A', background: '#FFFBEB', color: '#92400E', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
-                {printingKitchen ? '⏳...' : '🍳 Dapur'}
+                {printingKitchen ? '...' : 'Dapur'}
               </button>
               <button onClick={handlePrintBar} disabled={printingBar}
                 style={{ flex: 1, padding: '10px', borderRadius: '9px', border: '1px solid #C7D4F0', background: '#EFF4FF', color: '#1D4ED8', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
-                {printingBar ? '⏳...' : '☕ Bar'}
+                {printingBar ? '...' : 'Bar'}
               </button>
             </>
           )}
@@ -1369,19 +1369,19 @@ function CheckoutModal({ cart, total, onClose, onSuccess, existingOrderId }) {
         <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={() => onSuccess(tx)}>Selesai</button>
           <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} disabled={printing} onClick={handlePrint}>
-            {printing ? '⏳...' : '🖨️ Print Semua'}
+            {printing ? '⏳...' : 'Print Semua'}
           </button>
           <button onClick={handlePrintCustomer} disabled={printing}
             style={{ flex: 1, padding: '10px', borderRadius: '9px', border: '1px solid #C7D4F0', background: '#EFF4FF', color: '#1D4ED8', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
-            👤 Pelanggan
+            Pelanggan
           </button>
           <button onClick={handlePrintKitchen} disabled={printingKitchen}
             style={{ flex: 1, padding: '10px', borderRadius: '9px', border: '1px solid #FDE68A', background: '#FFFBEB', color: '#92400E', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
-            {printingKitchen ? '⏳...' : '🍳 Dapur'}
+            {printingKitchen ? '...' : 'Dapur'}
           </button>
           <button onClick={handlePrintBar} disabled={printingBar}
             style={{ flex: 1, padding: '10px', borderRadius: '9px', border: '1px solid #C7D4F0', background: '#EFF4FF', color: '#1D4ED8', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
-            {printingBar ? '⏳...' : '☕ Bar'}
+            {printingBar ? '...' : 'Bar'}
           </button>
         </div>
       </div>
