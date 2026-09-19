@@ -1365,7 +1365,7 @@ function CheckoutModal({ cart, total, subtotal = total, tax = 0, discount = 0, t
           payment: later ? 0 : (payMethod === 'CASH' ? paid : total),
           payMethod, payLater: later, customerName, note,
         })
-        setTx(res.data)
+        setTx({ subtotal, discount, tax, discountAmount, taxAmount, ...res.data })
       }
     } catch (e) {
       setTx(null)
