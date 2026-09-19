@@ -20,9 +20,13 @@ function calcHpp(selectedIngredients, allIngredients) {
 
 function IngredientSearch({ allIngredients, selectedIngredients, onToggle, onQtyChange }) {
   const [search, setSearch] = useState('')
-  const filtered = allIngredients.filter((i) =>
-    i.name.toLowerCase().includes(search.toLowerCase())
-  )
+  const filtered = allIngredients
+    .filter((i) => i.name.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => {
+      const asel = selectedIngredients.some(s => s.ingredientId === a.id) ? 0 : 1
+      const bsel = selectedIngredients.some(s => s.ingredientId === b.id) ? 0 : 1
+      return asel - bsel
+    })
   return (
     <div>
       <div style={{ position: 'relative', marginBottom: '8px' }}>
