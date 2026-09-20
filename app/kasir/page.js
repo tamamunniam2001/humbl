@@ -44,6 +44,9 @@ export default function KasirPage() {
   const [paidOrders, setPaidOrders] = useState([])
   const [paidOrderAlert, setPaidOrderAlert] = useState(null)
   const notifIntervalRef = useRef(null)
+  const [trashOpen, setTrashOpen] = useState(false)
+  const [trashOrders, setTrashOrders] = useState([])
+  const [trashLoading, setTrashLoading] = useState(false)
 
   const playNotif = useCallback(() => {
     try {
@@ -184,7 +187,7 @@ export default function KasirPage() {
       const shiftFrom = localStorage.getItem('last_shift_close_ts')
       const fromDate = shiftFrom ? new Date(shiftFrom) : (() => { const d = new Date(); d.setHours(0,0,0,0); return d })()
       const endOfDay = new Date(); endOfDay.setHours(23, 59, 59, 999)
-      const res = await api.get(`/transactions?slim=1&from=${fromDate.toISOString()}&to=${endOfDay.toISOString()}&page=1`)
+      const res = await api.get(`/transactions?slim=1&all=1&from=${fromDate.toISOString()}&to=${endOfDay.toISOString()}`)
       const incoming = res.data.transactions || []
       const incomingIds = new Set(incoming.map((o) => o.id))
       setOrders((prev) => {
@@ -277,10 +280,35 @@ export default function KasirPage() {
   }
 
   async function deleteOrder(orderId) {
-    if (!confirm('Hapus transaksi ini? Tindakan ini tidak bisa dibatalkan.')) return
+    if (!confirm('Pindahkan transaksi ini ke sampah?')) return
     try {
       await api.delete(`/transactions/${orderId}`)
       setOrders((prev) => prev.filter((o) => o.id !== orderId))
+    } catch (e) { alert(e.response?.data?.message || 'Gagal menghapus') }
+  }
+
+  async function loadTrash() {
+    setTrashLoading(true)
+    try {
+      const res = await api.get('/transactions?trash=1')
+      setTrashOrders(res.data.transactions || [])
+    } catch { }
+    finally { setTrashLoading(false) }
+  }
+
+  async function restoreOrder(orderId) {
+    try {
+      await api.patch(`/transactions/${orderId}`, { restore: true })
+      setTrashOrders(prev => prev.filter(o => o.id !== orderId))
+      loadOrders()
+    } catch (e) { alert(e.response?.data?.message || 'Gagal memulihkan') }
+  }
+
+  async function purgeOrder(orderId) {
+    if (!confirm('Hapus permanen? Data tidak bisa dipulihkan.')) return
+    try {
+      await api.delete(`/transactions/${orderId}?permanent=1`)
+      setTrashOrders(prev => prev.filter(o => o.id !== orderId))
     } catch (e) { alert(e.response?.data?.message || 'Gagal menghapus') }
   }
 
@@ -420,6 +448,12 @@ export default function KasirPage() {
                     style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', display: 'flex', padding: '2px' }}>
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
                   </button>
+                  {user.role === 'ADMIN' && (
+                    <button onClick={(e) => { e.stopPropagation(); setTrashOpen(true); loadTrash() }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', display: 'flex', padding: '2px' }} title="Lihat sampah">
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                    </button>
+                  )}
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ color: '#94A3B8', transition: 'transform 0.2s', transform: ordersExpanded ? 'rotate(0deg)' : 'rotate(-90deg)' }}>
                     <polyline points="6 9 12 15 18 9"/>
                   </svg>
@@ -726,6 +760,16 @@ export default function KasirPage() {
             if (allDone) { localStorage.setItem('closing_date', todayKey); setClosed(true) }
             setClosingOpen(false)
           }}
+        />
+      )}
+
+      {trashOpen && (
+        <TrashModal
+          orders={trashOrders}
+          loading={trashLoading}
+          onClose={() => setTrashOpen(false)}
+          onRestore={restoreOrder}
+          onPurge={purgeOrder}
         />
       )}
     </div>
@@ -1597,6 +1641,65 @@ function CheckoutModal({ cart, total, subtotal = total, tax = 0, discount = 0, t
               </button>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Trash Modal ──
+function TrashModal({ orders, loading, onClose, onRestore, onPurge }) {
+  const fmtDate = (d) => new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(13,21,38,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500, backdropFilter: 'blur(4px)' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="card fade-in" style={{ width: '560px', maxWidth: '96vw', maxHeight: '80vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#FEF2F2', flexShrink: 0 }}>
+          <div>
+            <div style={{ fontSize: '14px', fontWeight: '800', color: '#C95555' }}>🗑️ Sampah Transaksi</div>
+            <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '1px' }}>Data yang dihapus — dapat dipulihkan oleh Admin</div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '20px', lineHeight: 1 }}>×</button>
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 20px' }}>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#94A3B8', fontSize: '13px' }}>Memuat...</div>
+          ) : orders.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#94A3B8' }}>
+              <div style={{ fontSize: '32px', marginBottom: '8px' }}>🗑️</div>
+              <div style={{ fontSize: '13px' }}>Sampah kosong</div>
+            </div>
+          ) : orders.map((order) => (
+            <div key={order.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', background: '#FEF2F2', borderRadius: '10px', border: '1px solid #FECACA', marginBottom: '8px' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {order.customerName || '(Tanpa Nama)'}
+                </div>
+                <div style={{ fontSize: '11px', color: '#94A3B8', fontFamily: 'monospace' }}>
+                  #{order.invoiceNo?.slice(-8)} · {fmtDate(order.createdAt)}
+                </div>
+                <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--red)', marginTop: '2px' }}>
+                  Rp {fmt(order.total)} · {order.payMethod} · {order.status === 'COMPLETED' ? 'Lunas' : 'Belum Bayar'}
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                <button onClick={() => onRestore(order.id)}
+                  style={{ padding: '6px 12px', borderRadius: '7px', border: '1px solid #A7F3D0', background: '#ECFDF5', color: 'var(--green)', fontSize: '11px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+                  ↩ Pulihkan
+                </button>
+                <button onClick={() => onPurge(order.id)}
+                  style={{ padding: '6px 10px', borderRadius: '7px', border: '1px solid #FECACA', background: '#FEF2F2', color: 'var(--red)', fontSize: '11px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+                  Hapus Permanen
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', flexShrink: 0 }}>
+          <button onClick={onClose} className="btn btn-ghost" style={{ width: '100%', justifyContent: 'center' }}>Tutup</button>
         </div>
       </div>
     </div>

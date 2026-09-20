@@ -102,10 +102,12 @@ model Transaction {
   cashier      User        @relation(fields: [cashierId], references: [id])
   items        OrderItem[]
   createdAt    DateTime    @default(now())
+  deletedAt    DateTime?
 
   @@index([createdAt])
   @@index([cashierId])
   @@index([status, createdAt])
+  @@index([deletedAt])
 }
 
 model OrderItem {

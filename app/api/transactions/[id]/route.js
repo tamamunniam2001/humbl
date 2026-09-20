@@ -3,7 +3,6 @@ import prisma from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth'
 
 function isCsrfSafe(req) {
-  // Must carry the custom header (browsers block cross-origin scripts from setting this)
   if (req.headers.get('x-requested-with') !== 'XMLHttpRequest') return false
   const host = req.headers.get('host')
   if (!host) return false
@@ -15,7 +14,6 @@ function isCsrfSafe(req) {
   if (referer) {
     try { return new URL(referer).host === host } catch { return false }
   }
-  // No origin/referer but custom header present — allow (server-side same-origin calls)
   return true
 }
 
@@ -38,8 +36,19 @@ export async function PATCH(req, { params }) {
   if (error) return error
   const { id } = await params
   const body = await req.json()
+
+  // Restore dari sampah
+  if (body.restore) {
+    if (user.role !== 'ADMIN') return NextResponse.json({ message: 'Akses ditolak' }, { status: 403 })
+    const tx = await prisma.transaction.update({
+      where: { id },
+      data: { deletedAt: null },
+      select: { id: true, invoiceNo: true, deletedAt: true },
+    })
+    return NextResponse.json(tx)
+  }
+
   const data = {}
-  // Kasir hanya boleh update servedAt dan payment — edit items/nama/catatan hanya admin
   const isAdminEdit = ('items' in body) || ('customerName' in body) || ('note' in body)
   if (isAdminEdit && user.role !== 'ADMIN')
     return NextResponse.json({ message: 'Akses ditolak' }, { status: 403 })
@@ -85,21 +94,31 @@ export async function DELETE(req, { params }) {
   if (user.role !== 'ADMIN')
     return NextResponse.json({ message: 'Akses ditolak' }, { status: 403 })
   const { id } = await params
+  const { searchParams } = new URL(req.url)
+  const permanent = searchParams.get('permanent') === '1'
+
   const tx = await prisma.transaction.findUnique({
     where: { id },
-    select: { status: true, items: { select: { productId: true, qty: true } } },
+    select: { status: true, deletedAt: true, items: { select: { productId: true, qty: true } } },
   })
   if (!tx) return NextResponse.json({ message: 'Transaksi tidak ditemukan' }, { status: 404 })
-  // Kembalikan stock produk jika transaksi sudah COMPLETED
-  if (tx.status === 'COMPLETED') {
-    const productItems = tx.items.filter(i => i.productId)
-    if (productItems.length) {
-      await Promise.all(productItems.map(i =>
-        prisma.product.update({ where: { id: i.productId }, data: { stock: { increment: i.qty } } })
-      ))
+
+  if (permanent) {
+    // Hapus permanen — kembalikan stock jika COMPLETED
+    if (tx.status === 'COMPLETED') {
+      const productItems = tx.items.filter(i => i.productId)
+      if (productItems.length) {
+        await Promise.all(productItems.map(i =>
+          prisma.product.update({ where: { id: i.productId }, data: { stock: { increment: i.qty } } })
+        ))
+      }
     }
+    await prisma.orderItem.deleteMany({ where: { transactionId: id } })
+    await prisma.transaction.delete({ where: { id } })
+    return NextResponse.json({ success: true, permanent: true })
   }
-  await prisma.orderItem.deleteMany({ where: { transactionId: id } })
-  await prisma.transaction.delete({ where: { id } })
-  return NextResponse.json({ success: true })
+
+  // Soft-delete
+  await prisma.transaction.update({ where: { id }, data: { deletedAt: new Date() } })
+  return NextResponse.json({ success: true, permanent: false })
 }

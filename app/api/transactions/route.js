@@ -25,8 +25,11 @@ export async function GET(req) {
   const from = searchParams.get('from')
   const to = searchParams.get('to')
   const slim = searchParams.get('slim')
-  const where = {}
-  if (from && to) where.createdAt = { gte: new Date(from), lte: new Date(to) }
+  const trash = searchParams.get('trash') === '1'
+  const where = trash
+    ? { deletedAt: { not: null } }
+    : { deletedAt: null }
+  if (!trash && from && to) where.createdAt = { gte: new Date(from), lte: new Date(to) }
   const [transactions, total] = await Promise.all([
     prisma.transaction.findMany({
       where,
@@ -40,7 +43,8 @@ export async function GET(req) {
       } : {
         include: { cashier: { select: { name: true } }, items: { include: { product: true } } }
       }),
-      orderBy: { createdAt: 'desc' }, take: 20, skip: (page - 1) * 20,
+      orderBy: { createdAt: 'desc' },
+      ...(searchParams.get('all') === '1' ? {} : { take: 20, skip: (page - 1) * 20 }),
     }),
     prisma.transaction.count({ where }),
   ])
