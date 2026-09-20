@@ -34,11 +34,15 @@ export async function GET(req, { params }) {
 
 export async function PATCH(req, { params }) {
   if (!isCsrfSafe(req)) return NextResponse.json({ message: 'Forbidden' }, { status: 403 })
-  const { error } = verifyAuth(req)
+  const { error, user } = verifyAuth(req)
   if (error) return error
   const { id } = await params
   const body = await req.json()
   const data = {}
+  // Kasir hanya boleh update servedAt dan payment — edit items/nama/catatan hanya admin
+  const isAdminEdit = ('items' in body) || ('customerName' in body) || ('note' in body)
+  if (isAdminEdit && user.role !== 'ADMIN')
+    return NextResponse.json({ message: 'Akses ditolak' }, { status: 403 })
   if ('servedAt' in body) data.servedAt = body.servedAt ? new Date(body.servedAt) : null
   if ('payment' in body) {
     data.payment = body.payment
@@ -78,14 +82,14 @@ export async function DELETE(req, { params }) {
   if (!isCsrfSafe(req)) return NextResponse.json({ message: 'Forbidden' }, { status: 403 })
   const { error, user } = verifyAuth(req)
   if (error) return error
+  if (user.role !== 'ADMIN')
+    return NextResponse.json({ message: 'Akses ditolak' }, { status: 403 })
   const { id } = await params
   const tx = await prisma.transaction.findUnique({
     where: { id },
-    select: { cashierId: true, status: true, items: { select: { productId: true, qty: true } } },
+    select: { status: true, items: { select: { productId: true, qty: true } } },
   })
   if (!tx) return NextResponse.json({ message: 'Transaksi tidak ditemukan' }, { status: 404 })
-  if (user.role !== 'ADMIN' && tx.cashierId !== user.id)
-    return NextResponse.json({ message: 'Akses ditolak' }, { status: 403 })
   // Kembalikan stock produk jika transaksi sudah COMPLETED
   if (tx.status === 'COMPLETED') {
     const productItems = tx.items.filter(i => i.productId)

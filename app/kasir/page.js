@@ -490,7 +490,7 @@ export default function KasirPage() {
                         </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); deleteOrder(order.id) }}
-                          style={{ width: '32px', padding: '7px', border: 'none', borderLeft: '1px solid var(--border)', background: '#FEF2F2', color: 'var(--red)', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          style={{ width: '32px', padding: '7px', border: 'none', borderLeft: '1px solid var(--border)', background: '#FEF2F2', color: 'var(--red)', fontSize: '12px', cursor: 'pointer', display: user.role === 'ADMIN' ? 'flex' : 'none', alignItems: 'center', justifyContent: 'center' }}>
                           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
                         </button>
                       </div>
@@ -692,6 +692,7 @@ export default function KasirPage() {
         <OrderDetailModal
           order={selectedOrder}
           products={products}
+          user={user}
           onClose={() => setSelectedOrder(null)}
           onToggleServed={() => toggleServed(selectedOrder.id, selectedOrder.servedAt)}
           onPayNow={(order) => { setSelectedOrder(null); setPendingOrder(order) }}
@@ -732,7 +733,7 @@ export default function KasirPage() {
 }
 
 // ── Order Detail Modal ──
-function OrderDetailModal({ order, products = [], onClose, onToggleServed, onPayNow, onRefresh }) {
+function OrderDetailModal({ order, products = [], user = {}, onClose, onToggleServed, onPayNow, onRefresh }) {
   const [printing, setPrinting] = useState(false)
   const [printingKitchen, setPrintingKitchen] = useState(false)
   const [printingBar, setPrintingBar] = useState(false)
@@ -804,7 +805,7 @@ function OrderDetailModal({ order, products = [], onClose, onToggleServed, onPay
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <button onClick={() => setEditing(!editing)}
-              style={{ fontSize: '12px', fontWeight: '700', padding: '5px 12px', borderRadius: '7px', border: `1px solid ${editing ? '#FECACA' : 'var(--border)'}`, background: editing ? '#FEF2F2' : 'var(--surface2)', color: editing ? 'var(--red)' : 'var(--text2)', cursor: 'pointer', fontFamily: 'inherit' }}>
+              style={{ fontSize: '12px', fontWeight: '700', padding: '5px 12px', borderRadius: '7px', border: `1px solid ${editing ? '#FECACA' : 'var(--border)'}`, background: editing ? '#FEF2F2' : 'var(--surface2)', color: editing ? 'var(--red)' : 'var(--text2)', cursor: 'pointer', fontFamily: 'inherit', display: user.role === 'ADMIN' ? 'block' : 'none' }}>
               {editing ? 'Batal' : '✏️ Edit'}
             </button>
             <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '20px', lineHeight: 1 }}>×</button>

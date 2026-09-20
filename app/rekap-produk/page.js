@@ -163,18 +163,16 @@ export default function RekapProdukPage() {
       setData(prev => ({ ...prev, rows: prev.rows.filter(r => r.id !== id), total: prev.total - 1 }))
       setSelected(prev => { const next = new Set(prev); next.delete(id); return next })
       loadMonthly()
+      loadByKategori(from, to)
     } catch (e) { alert(e.response?.data?.message || 'Gagal menghapus') }
   }
 
   // ── Delete bulk ──
   async function handleDeleteSelected() {
-    if (!confirm(`Hapus ${selected.size} item yang dipilih? Seluruh transaksi terkait akan ikut dihapus.`)) return
+    if (!confirm(`Hapus ${selected.size} item yang dipilih?`)) return
     setDeleting(true)
     try {
-      // Deduplikasi berdasarkan transactionId agar tidak double-delete
-      const txIds = new Set(data.rows.filter(r => selected.has(r.id)).map(r => r.transactionId))
-      const idsToDelete = [...txIds].map(txId => data.rows.find(r => r.transactionId === txId)?.id).filter(Boolean)
-      await Promise.all(idsToDelete.map(id => api.delete(`/admin/product-sales/${id}`)))
+      await Promise.all([...selected].map(id => api.delete(`/admin/product-sales/${id}`)))
       setData(prev => ({
         ...prev,
         rows: prev.rows.filter(r => !selected.has(r.id)),
@@ -182,6 +180,7 @@ export default function RekapProdukPage() {
       }))
       setSelected(new Set())
       loadMonthly()
+      loadByKategori(from, to)
     } catch (e) { alert(e.response?.data?.message || 'Gagal menghapus') }
     finally { setDeleting(false) }
   }
