@@ -66,17 +66,21 @@ export async function POST(req) {
 
   const { note, date } = await req.json()
 
-  const [expenseItems, prevManualItems] = await Promise.all([
+  const [expenseItems, ingredients, prevManualItems] = await Promise.all([
     prisma.expenseItem.findMany({
       where: { isActive: true },
       orderBy: [{ category: 'asc' }, { name: 'asc' }],
+    }),
+    prisma.ingredient.findMany({
+      where: { isComposite: false },
+      orderBy: { name: 'asc' },
     }),
     prisma.stockOpname.findFirst({
       orderBy: { date: 'desc' },
       include: { items: { where: { isManual: true }, select: { itemName: true, satuan: true, hargaManual: true } } },
     }),
   ])
-  if (!expenseItems.length) return NextResponse.json({ message: 'Belum ada item persediaan. Tambahkan dulu di menu Item Pengeluaran.' }, { status: 400 })
+  if (!expenseItems.length && !ingredients.length) return NextResponse.json({ message: 'Belum ada item persediaan. Tambahkan dulu di menu Item Pengeluaran.' }, { status: 400 })
 
   const manualItems = prevManualItems?.items || []
 
@@ -105,6 +109,15 @@ export async function POST(req) {
             expenseItemId: item.id,
             itemName: item.name,
             satuan: item.satuan || '',
+            qtySystem: 0,
+            qtyActual: 0,
+            selisih: 0,
+          })),
+          ...ingredients.map(item => ({
+            itemName: item.name,
+            satuan: item.unit || '',
+            isManual: true,
+            hargaManual: item.price && item.packSize ? item.price / item.packSize : null,
             qtySystem: 0,
             qtyActual: 0,
             selisih: 0,
