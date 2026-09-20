@@ -23,7 +23,7 @@ export async function GET(req) {
   const page = Number(searchParams.get('page') || 1)
   const limit = 30 // hari per halaman
 
-  const where = { status: { not: 'CANCELLED' } }
+  const where = { status: 'COMPLETED', deletedAt: null }
   if (from) where.createdAt = { ...(where.createdAt || {}), gte: new Date(from) }
   if (to) where.createdAt = { ...(where.createdAt || {}), lte: new Date(to + 'T23:59:59.999Z') }
 

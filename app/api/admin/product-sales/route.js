@@ -17,7 +17,7 @@ export async function GET(req) {
 
   // Mode by kategori
   if (searchParams.get('bykategori') === '1') {
-    const katWhere = { transaction: { status: 'COMPLETED' } }
+    const katWhere = { transaction: { status: 'COMPLETED', deletedAt: null } }
     if (from && to) katWhere.transaction.createdAt = {
       gte: new Date(`${from}T00:00:00+07:00`),
       lte: new Date(`${to}T23:59:59.999+07:00`),
@@ -42,7 +42,7 @@ export async function GET(req) {
     const start = new Date(year, 0, 1)
     const end = new Date(year, 11, 31, 23, 59, 59, 999)
     const items = await prisma.orderItem.findMany({
-      where: { transaction: { status: 'COMPLETED', createdAt: { gte: start, lte: end } } },
+      where: { transaction: { status: 'COMPLETED', deletedAt: null, createdAt: { gte: start, lte: end } } },
       select: { subtotal: true, qty: true, transaction: { select: { createdAt: true } } },
     })
     // Group by bulan
@@ -57,7 +57,7 @@ export async function GET(req) {
 
   const nullOnly = searchParams.get('nullOnly') === '1'
   const categoryFilter = searchParams.get('category') || ''
-  const txWhere = { status: 'COMPLETED' }
+  const txWhere = { status: 'COMPLETED', deletedAt: null }
   if (from && to) txWhere.createdAt = {
     gte: new Date(`${from}T00:00:00+07:00`),
     lte: new Date(`${to}T23:59:59.999+07:00`),

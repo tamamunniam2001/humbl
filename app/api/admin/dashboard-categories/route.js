@@ -33,7 +33,7 @@ export async function GET(req) {
 
   const [salesRaw, expRaw, kasData] = await Promise.all([
     prisma.orderItem.findMany({
-      where: { transaction: { status: 'COMPLETED', createdAt: { gte: rangeStart, lte: rangeEnd } } },
+      where: { transaction: { status: 'COMPLETED', deletedAt: null, createdAt: { gte: rangeStart, lte: rangeEnd } } },
       select: {
         category: true, subtotal: true,
         transaction: { select: { createdAt: true } },
