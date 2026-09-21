@@ -163,27 +163,32 @@ export default function KasirPage() {
   const pendingServed = useState(() => new Set())[0]
 
   const load = useCallback(async (silent = false) => {
-    // Tampil dari cache dulu agar instan
     if (!silent) {
       const cached = localStorage.getItem('kasir_products_cache')
       if (cached) {
         try {
           const { products: cp, categories: cc } = JSON.parse(cached)
-          setProducts(cp); setCategories(cc); setLoading(false)
-        } catch { }
+          if (Array.isArray(cp) && cp.length > 0) {
+            console.log('[kasir] cache hit, products:', cp?.length)
+            setProducts(cp); setCategories(cc); setLoading(false)
+          }
+        } catch { localStorage.removeItem('kasir_products_cache') }
       } else {
         setLoading(true)
       }
     }
+    console.log('[kasir] fetching products...')
     try {
       const [prodsRes, catsRes] = await Promise.all([
         api.get('/products?slim=1'),
         api.get('/admin/categories'),
       ])
-      const cats = catsRes.data.map((c) => c.name).sort()
-      setProducts(prodsRes.data)
+      console.log('[kasir] products fetched:', prodsRes.data?.length, 'cats:', catsRes.data?.length)
+      const prods = Array.isArray(prodsRes.data) ? prodsRes.data : []
+      const cats = Array.isArray(catsRes.data) ? catsRes.data.map((c) => c.name).sort() : []
+      setProducts(prods)
       setCategories(cats)
-      localStorage.setItem('kasir_products_cache', JSON.stringify({ products: prodsRes.data, categories: cats, ts: Date.now() }))
+      localStorage.setItem('kasir_products_cache', JSON.stringify({ products: prods, categories: cats, ts: Date.now() }))
     } catch (e) {
       console.error('[kasir] load error:', e?.response?.status, e?.response?.data || e?.message)
     }
