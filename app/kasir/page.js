@@ -128,18 +128,32 @@ export default function KasirPage() {
   const [lastShiftKasAkhir, setLastShiftKasAkhir] = useState(0) // kas akhir shift terakhir hari ini
 
   useEffect(() => {
+    const calcKasAkhir = (report) => {
+      const totP = (report.pengeluaran || []).reduce((s, p) => s + p.harga * p.qty, 0)
+      return (report.kasAwal || 0) + (report.uangDisetor || 0) - totP
+    }
     const today = new Date(); today.setHours(0, 0, 0, 0)
     const endOfDay = new Date(); endOfDay.setHours(23, 59, 59, 999)
     api.get(`/daily-reports?from=${today.toISOString()}&to=${endOfDay.toISOString()}`)
-      .then(res => {
+      .then(async res => {
         const reports = res.data.reports || []
         const shifts = reports.map(r => r.shift).filter(Boolean)
         setTodayShifts(shifts)
-        // Kas akhir shift terakhir = kasAwal + cash - pengeluaran dari report terakhir
         if (reports.length > 0) {
+          // Ada report hari ini — pakai kas akhir shift terakhir
           const last = reports[reports.length - 1]
-          const totP = (last.pengeluaran || []).reduce((s, p) => s + p.harga * p.qty, 0)
-          setLastShiftKasAkhir((last.kasAwal || 0) + (last.uangDisetor || 0) - totP)
+          setLastShiftKasAkhir(calcKasAkhir(last))
+        } else {
+          // Belum ada report hari ini (misal shift 1 pagi) — ambil report terakhir kemarin
+          try {
+            const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1)
+            const yRes = await api.get(`/daily-reports?from=${yesterday.toISOString()}&to=${today.toISOString()}`)
+            const yReports = yRes.data.reports || []
+            if (yReports.length > 0) {
+              const lastY = yReports[0] // orderBy: date desc → index 0 = terbaru
+              setLastShiftKasAkhir(calcKasAkhir(lastY))
+            }
+          } catch { }
         }
         const allDone = ['SHIFT_1', 'SHIFT_2', 'SHIFT_3'].every(s => shifts.includes(s))
         if (allDone) { localStorage.setItem('closing_date', todayKey); setClosed(true) }
