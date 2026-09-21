@@ -201,12 +201,13 @@ export default function KasirPage() {
     if (closingDate && closingDate !== today) localStorage.removeItem('closing_date')
     if (closingDate === today) return
     try {
-      // Mulai dari awal hari ini (WIB), atau timestamp closing shift terakhir jika masih hari ini
-      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
+      // Mulai dari awal hari ini (WIB)
+      const todayWIB = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })
+      const todayStart = new Date(`${todayWIB}T00:00:00+07:00`)
+      const endOfDay = new Date(`${todayWIB}T23:59:59+07:00`)
       const shiftFrom = localStorage.getItem('last_shift_close_ts')
       const shiftFromDate = shiftFrom ? new Date(shiftFrom) : null
       const fromDate = (shiftFromDate && shiftFromDate > todayStart) ? shiftFromDate : todayStart
-      const endOfDay = new Date(); endOfDay.setHours(23, 59, 59, 999)
       const res = await api.get(`/transactions?slim=1&all=1&from=${fromDate.toISOString()}&to=${endOfDay.toISOString()}`)
       const incoming = res.data.transactions || []
       const incomingIds = new Set(incoming.map((o) => o.id))

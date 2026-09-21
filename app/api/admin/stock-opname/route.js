@@ -82,7 +82,10 @@ export async function POST(req) {
   ])
   if (!expenseItems.length && !ingredients.length) return NextResponse.json({ message: 'Belum ada item persediaan. Tambahkan dulu di menu Item Pengeluaran.' }, { status: 400 })
 
-  const manualItems = prevManualItems?.items || []
+  const ingredientNames = new Set(ingredients.map(i => i.name.trim().toLowerCase()))
+  const manualItems = (prevManualItems?.items || []).filter(
+    item => !ingredientNames.has(item.itemName.trim().toLowerCase())
+  )
 
   // Parse tanggal sebagai WIB (UTC+7) — simpan sebagai noon WIB agar tidak geser hari
   const opnameDate = date
