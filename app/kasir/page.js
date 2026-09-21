@@ -141,8 +141,8 @@ export default function KasirPage() {
         const shifts = reports.map(r => r.shift).filter(Boolean)
         setTodayShifts(shifts)
         if (reports.length > 0) {
-          // Ada report hari ini — pakai kas akhir shift terakhir
-          const last = reports[reports.length - 1]
+          // reports diurutkan desc — index 0 adalah shift terbaru
+          const last = reports[0]
           setLastShiftKasAkhir(calcKasAkhir(last))
         } else {
           // Belum ada report hari ini — ambil report terakhir (bisa kemarin/shift 3)
