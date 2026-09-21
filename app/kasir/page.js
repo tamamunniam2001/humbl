@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import api from '@/lib/api'
@@ -1079,9 +1079,9 @@ function ManualItemButton({ onAdd, categories }) {
 
 // ── Closing Modal ──
 const SHIFTS = [
-  { key: 'SHIFT_1', label: 'Closing Shift 1', jam: '07.00 - 13.00' },
-  { key: 'SHIFT_2', label: 'Closing Shift 2', jam: '13.00 - 18.00' },
-  { key: 'SHIFT_3', label: 'Closing Shift 3', jam: '18.00 - 23.00' },
+  { key: 'SHIFT_1', label: 'Closing Shift 1', jam: '07.00 - 13.00', startHour: 7,  endHour: 13 },
+  { key: 'SHIFT_2', label: 'Closing Shift 2', jam: '13.00 - 18.00', startHour: 13, endHour: 18 },
+  { key: 'SHIFT_3', label: 'Closing Shift 3', jam: '18.00 - 23.00', startHour: 18, endHour: 23 },
 ]
 
 function ClosingModal({ orders, todayShifts = [], kasAwalOtomatis = 0, onClose, onSaved }) {
@@ -1097,17 +1097,30 @@ function ClosingModal({ orders, todayShifts = [], kasAwalOtomatis = 0, onClose, 
     api.get('/admin/expense-items').then(r => setPersediaanItems((r.data || []).filter(i => (i.category || '').toLowerCase() === 'persediaan'))).catch(() => {})
   }, [])
 
-  const [snapshot] = useState(() => {
-    const completed = orders.filter(o => o.status === 'COMPLETED')
+  const snapshot = useMemo(() => {
+    const shiftDef = SHIFTS.find(s => s.key === shift)
+    // Filter transaksi sesuai jam operasional shift (WIB = UTC+7)
+    const todayWIB = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })
+    const shiftStart = shiftDef ? new Date(`${todayWIB}T${String(shiftDef.startHour).padStart(2,'0')}:00:00+07:00`) : null
+    const shiftEnd   = shiftDef ? new Date(`${todayWIB}T${String(shiftDef.endHour).padStart(2,'0')}:59:59+07:00`) : null
+
+    const inShift = (o) => {
+      if (!shiftStart || !shiftEnd) return true
+      const t = new Date(o.createdAt)
+      return t >= shiftStart && t <= shiftEnd
+    }
+
+    const completed = orders.filter(o => o.status === 'COMPLETED' && inShift(o))
+    const pendingCount = orders.filter(o => o.status !== 'COMPLETED' && inShift(o)).length
     return {
       completed,
       totalPenjualan: completed.reduce((s, o) => s + o.total, 0),
-      totalCash: completed.filter(o => o.payMethod === 'CASH').reduce((s, o) => s + o.total, 0),
-      totalQris: completed.filter(o => o.payMethod === 'QRIS').reduce((s, o) => s + o.total, 0),
-      totalTransfer: completed.filter(o => o.payMethod === 'TRANSFER' || o.payMethod === 'NONTUNAI').reduce((s, o) => s + o.total, 0),
-      pendingCount: orders.filter(o => o.status !== 'COMPLETED').length,
+      totalCash:      completed.filter(o => o.payMethod === 'CASH').reduce((s, o) => s + o.total, 0),
+      totalQris:      completed.filter(o => o.payMethod === 'QRIS').reduce((s, o) => s + o.total, 0),
+      totalTransfer:  completed.filter(o => o.payMethod === 'TRANSFER' || o.payMethod === 'NONTUNAI').reduce((s, o) => s + o.total, 0),
+      pendingCount,
     }
-  })
+  }, [shift, orders])
   const { completed, totalPenjualan, totalCash, totalQris, totalTransfer, pendingCount } = snapshot
 
   const [pengeluaran, setPengeluaran] = useState([])
