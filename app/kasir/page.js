@@ -184,7 +184,9 @@ export default function KasirPage() {
       setProducts(prodsRes.data)
       setCategories(cats)
       localStorage.setItem('kasir_products_cache', JSON.stringify({ products: prodsRes.data, categories: cats, ts: Date.now() }))
-    } catch { }
+    } catch (e) {
+      console.error('[kasir] load error:', e?.response?.status, e?.response?.data || e?.message)
+    }
     setLoading(false)
   }, [])
 
