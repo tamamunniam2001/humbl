@@ -26,14 +26,23 @@ export async function GET(req) {
 export async function POST(req) {
   const { error, user } = verifyAuth(req)
   if (error) return error
-  const { shift, kasAwal, penjualan, uangDisetor, qris, transfer, pengeluaran, piutang, catatan, closerName, kasAkhirDisetor } = await req.json()
-  // Cek apakah shift ini sudah ada hari ini
-  const today = new Date(); today.setHours(0, 0, 0, 0)
-  const endOfDay = new Date(); endOfDay.setHours(23, 59, 59, 999)
-  const existing = await prisma.dailyReport.findFirst({ where: { shift, date: { gte: today, lte: endOfDay } } })
-  if (existing) return NextResponse.json({ message: `${shift} sudah pernah di-closing hari ini` }, { status: 400 })
+  const { shift, kasAwal, penjualan, uangDisetor, qris, transfer, pengeluaran, piutang, catatan, closerName, kasAkhirDisetor, date } = await req.json()
+
+  // Tentukan tanggal laporan — bisa di-override untuk closing shift yang terlewat
+  const reportDate = date ? new Date(date) : new Date()
+
+  // Cek duplikat: shift yang sama pada hari kalender WIB yang sama
+  const wibOffset = 7 * 60 * 60 * 1000
+  const wibDate = new Date(reportDate.getTime() + wibOffset)
+  const wibDateStr = wibDate.toISOString().slice(0, 10)
+  const dayStart = new Date(`${wibDateStr}T00:00:00+07:00`)
+  const dayEnd   = new Date(`${wibDateStr}T23:59:59.999+07:00`)
+
+  const existing = await prisma.dailyReport.findFirst({ where: { shift, date: { gte: dayStart, lte: dayEnd } } })
+  if (existing) return NextResponse.json({ message: `${shift} sudah pernah di-closing pada tanggal tersebut` }, { status: 400 })
+
   const report = await prisma.dailyReport.create({
-    data: { shift, kasAwal: kasAwal || 0, penjualan, uangDisetor, qris, transfer, pengeluaran, piutang, catatan, cashierId: user.id, closerName: closerName || null, kasAkhirDisetor: kasAkhirDisetor || 0 },
+    data: { shift, date: reportDate, kasAwal: kasAwal || 0, penjualan, uangDisetor, qris, transfer, pengeluaran, piutang, catatan, cashierId: user.id, closerName: closerName || null, kasAkhirDisetor: kasAkhirDisetor || 0 },
     include: { cashier: { select: { name: true } } },
   })
   return NextResponse.json(report, { status: 201 })
