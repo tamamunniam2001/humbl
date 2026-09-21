@@ -196,19 +196,11 @@ export default function KasirPage() {
   }, [])
 
   const loadOrders = useCallback(async () => {
-    const today = new Date().toLocaleDateString('en-CA')
-    const closingDate = localStorage.getItem('closing_date')
-    if (closingDate && closingDate !== today) localStorage.removeItem('closing_date')
-    if (closingDate === today) return
     try {
-      // Mulai dari awal hari ini (WIB)
       const todayWIB = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })
       const todayStart = new Date(`${todayWIB}T00:00:00+07:00`)
       const endOfDay = new Date(`${todayWIB}T23:59:59+07:00`)
-      const shiftFrom = localStorage.getItem('last_shift_close_ts')
-      const shiftFromDate = shiftFrom ? new Date(shiftFrom) : null
-      const fromDate = (shiftFromDate && shiftFromDate > todayStart) ? shiftFromDate : todayStart
-      const res = await api.get(`/transactions?slim=1&all=1&from=${fromDate.toISOString()}&to=${endOfDay.toISOString()}`)
+      const res = await api.get(`/transactions?slim=1&all=1&from=${todayStart.toISOString()}&to=${endOfDay.toISOString()}`)
       const incoming = res.data.transactions || []
       const incomingIds = new Set(incoming.map((o) => o.id))
       setOrders((prev) => {
@@ -775,8 +767,6 @@ export default function KasirPage() {
             const newShifts = [...todayShifts, shift]
             setTodayShifts(newShifts)
             setLastShiftKasAkhir(kasAkhir)
-            setOrders([]) // reset order list setelah closing
-            localStorage.setItem('last_shift_close_ts', new Date().toISOString())
             const allDone = ['SHIFT_1', 'SHIFT_2', 'SHIFT_3'].every(s => newShifts.includes(s))
             if (allDone) { localStorage.setItem('closing_date', todayKey); setClosed(true) }
             setClosingOpen(false)
