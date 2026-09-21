@@ -144,15 +144,11 @@ export default function KasirPage() {
           const last = reports[reports.length - 1]
           setLastShiftKasAkhir(calcKasAkhir(last))
         } else {
-          // Belum ada report hari ini (misal shift 1 pagi) — ambil report terakhir kemarin
+          // Belum ada report hari ini — ambil report terakhir (bisa kemarin/shift 3)
           try {
-            const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1)
-            const yRes = await api.get(`/daily-reports?from=${yesterday.toISOString()}&to=${today.toISOString()}`)
+            const yRes = await api.get('/daily-reports?last=1')
             const yReports = yRes.data.reports || []
-            if (yReports.length > 0) {
-              const lastY = yReports[0] // orderBy: date desc → index 0 = terbaru
-              setLastShiftKasAkhir(calcKasAkhir(lastY))
-            }
+            if (yReports.length > 0) setLastShiftKasAkhir(calcKasAkhir(yReports[0]))
           } catch { }
         }
         const allDone = ['SHIFT_1', 'SHIFT_2', 'SHIFT_3'].every(s => shifts.includes(s))

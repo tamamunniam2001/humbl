@@ -11,6 +11,11 @@ export async function GET(req) {
   const to = searchParams.get('to')
   const where = {}
   if (from && to) where.date = { gte: new Date(from), lte: new Date(new Date(to).setHours(23, 59, 59, 999)) }
+  const last = searchParams.get('last')
+  if (last) {
+    const report = await prisma.dailyReport.findFirst({ where, include: { cashier: { select: { name: true } } }, orderBy: { date: 'desc' } })
+    return NextResponse.json({ reports: report ? [report] : [] })
+  }
   const [reports, total] = await Promise.all([
     prisma.dailyReport.findMany({ where, include: { cashier: { select: { name: true } } }, orderBy: { date: 'desc' }, take: 100, skip: (page - 1) * 100 }),
     prisma.dailyReport.count({ where }),
