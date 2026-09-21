@@ -37,6 +37,13 @@ export async function middleware(req) {
       return NextResponse.redirect(new URL('/dashboard', req.url))
     }
 
+    // Custom role → cek allowedPaths
+    if (payload.allowedPaths) {
+      const allowed = payload.allowedPaths
+      const isAllowed = allowed.some(p => pathname === p || pathname.startsWith(p + '/'))
+      if (!isAllowed) return NextResponse.redirect(new URL('/dashboard', req.url))
+    }
+
     return NextResponse.next()
   } catch {
     // Token invalid → redirect ke login

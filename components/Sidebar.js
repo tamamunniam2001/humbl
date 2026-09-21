@@ -67,9 +67,14 @@ export default function Sidebar() {
   const [dark, setDark] = useState(false)
   const user = (() => { try { return JSON.parse(Cookies.get('user') || '{}') } catch { return {} } })()
   const role = user.role || 'CASHIER'
+  const allowedPaths = user.allowedPaths || null
   const navGroups = allNavGroups
     .filter(g => g.roles.includes(role))
-    .map(g => ({ ...g, items: g.items.filter(i => i.roles.includes(role)) }))
+    .map(g => ({ ...g, items: g.items.filter(i => {
+      if (!i.roles.includes(role)) return false
+      if (allowedPaths) return allowedPaths.some(p => i.href === p || i.href.startsWith(p + '/'))
+      return true
+    }) }))
     .filter(g => g.items.length > 0)
 
   useEffect(() => {
