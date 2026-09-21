@@ -32,11 +32,11 @@ export async function middleware(req) {
     const secret = new TextEncoder().encode(process.env.JWT_SECRET)
     const { payload } = await jwtVerify(token, secret)
 
-    // Custom role → akses dikontrol penuh oleh allowedPaths
+    // Custom role → akses dikontrol penuh oleh allowedPaths (hanya untuk page routes)
     if (payload.allowedPaths) {
       const allowed = payload.allowedPaths
-      // /dashboard selalu boleh diakses sebagai landing page
-      if (pathname === '/dashboard') return NextResponse.next()
+      // API routes dan /dashboard selalu boleh
+      if (pathname.startsWith('/api/') || pathname === '/dashboard') return NextResponse.next()
       const isAllowed = allowed.some(p => pathname === p || pathname.startsWith(p + '/'))
       if (!isAllowed) return NextResponse.redirect(new URL('/dashboard', req.url))
       return NextResponse.next()

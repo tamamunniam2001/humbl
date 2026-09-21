@@ -61,6 +61,12 @@ export default function UsersPage() {
     await api.put(`/admin/users/${user.id}`, { isActive: !user.isActive }); load()
   }
 
+  async function handleDeleteUser(u) {
+    if (!confirm(`Hapus pengguna "${u.name}"? Tindakan ini tidak dapat dibatalkan.`)) return
+    try { await api.delete(`/admin/users/${u.id}`); load() }
+    catch (err) { alert(err.response?.data?.message || 'Gagal menghapus') }
+  }
+
   async function handleSubmitRole(e) {
     e.preventDefault()
     try {
@@ -193,6 +199,7 @@ export default function UsersPage() {
                         <button className={`btn ${u.isActive ? 'btn-danger' : 'btn-success'}`} style={{ padding: '5px 12px', fontSize: '12px' }} onClick={() => toggleActive(u)}>
                           {u.isActive ? 'Nonaktifkan' : 'Aktifkan'}
                         </button>
+                        <button className="btn btn-danger" style={{ padding: '5px 12px', fontSize: '12px' }} onClick={() => handleDeleteUser(u)}>Hapus</button>
                       </div>
                     </div>
                   </div>

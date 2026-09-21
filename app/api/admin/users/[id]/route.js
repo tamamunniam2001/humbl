@@ -3,6 +3,17 @@ import bcrypt from 'bcryptjs'
 import prisma from '@/lib/prisma'
 import { verifyAuth, adminOnly } from '@/lib/auth'
 
+export async function DELETE(req, { params }) {
+  const { error, user } = verifyAuth(req)
+  if (error) return error
+  const denied = adminOnly(user)
+  if (denied) return denied
+  const { id } = await params
+  if (user.id === id) return NextResponse.json({ message: 'Tidak bisa menghapus akun sendiri' }, { status: 400 })
+  await prisma.user.delete({ where: { id } })
+  return NextResponse.json({ success: true })
+}
+
 export async function PUT(req, { params }) {
   const { error, user } = verifyAuth(req)
   if (error) return error
