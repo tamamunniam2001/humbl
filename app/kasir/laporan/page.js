@@ -125,8 +125,12 @@ export default function LaporanHarianPage() {
                     const sumQris = dayReports.reduce((s, r) => s + (r.qris || 0), 0)
                     const sumTransfer = dayReports.reduce((s, r) => s + (r.transfer || 0), 0)
                     const sumPengeluaran = dayReports.reduce((s, r) => s + totalPengeluaran(r), 0)
-                    const lastReport = dayReports[dayReports.length - 1]
-                    const sumKasAkhir = kasAkhir(lastReport)
+                    const sortedReports = [...dayReports].sort((a, b) => {
+                      const ord = { SHIFT_1: 1, SHIFT_2: 2, SHIFT_3: 3 }
+                      return (ord[a.shift] || 0) - (ord[b.shift] || 0)
+                    })
+                    const firstReport = sortedReports[0]
+                    const sumKasAkhir = (firstReport.kasAwal || 0) + sumCash - sumPengeluaran
                     const tdS = { padding: '5px 8px' }
                     return (
                       <>
