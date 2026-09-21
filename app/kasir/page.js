@@ -121,6 +121,7 @@ export default function KasirPage() {
     } finally { setConnecting(false) }
   }
   const user = (() => { try { return JSON.parse(Cookies.get('user') || '{}') } catch { return {} } })()
+  const isAdmin = user.role === 'ADMIN' || !!(user.allowedPaths)
 
   const todayKey = new Date().toLocaleDateString('en-CA')
   const [closed, setClosed] = useState(false)
@@ -460,7 +461,7 @@ export default function KasirPage() {
                     style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', display: 'flex', padding: '2px' }}>
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
                   </button>
-                  {user.role === 'ADMIN' && (
+                  {isAdmin && (
                     <button onClick={(e) => { e.stopPropagation(); setTrashOpen(true); loadTrash() }}
                       style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', display: 'flex', padding: '2px' }} title="Lihat sampah">
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
@@ -536,7 +537,7 @@ export default function KasirPage() {
                         </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); deleteOrder(order.id) }}
-                          style={{ width: '32px', padding: '7px', border: 'none', borderLeft: '1px solid var(--border)', background: '#FEF2F2', color: 'var(--red)', fontSize: '12px', cursor: 'pointer', display: user.role === 'ADMIN' ? 'flex' : 'none', alignItems: 'center', justifyContent: 'center' }}>
+                          style={{ width: '32px', padding: '7px', border: 'none', borderLeft: '1px solid var(--border)', background: '#FEF2F2', color: 'var(--red)', fontSize: '12px', cursor: 'pointer', display: isAdmin ? 'flex' : 'none', alignItems: 'center', justifyContent: 'center' }}>
                           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
                         </button>
                       </div>
@@ -861,7 +862,7 @@ function OrderDetailModal({ order, products = [], user = {}, onClose, onToggleSe
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <button onClick={() => setEditing(!editing)}
-              style={{ fontSize: '12px', fontWeight: '700', padding: '5px 12px', borderRadius: '7px', border: `1px solid ${editing ? '#FECACA' : 'var(--border)'}`, background: editing ? '#FEF2F2' : 'var(--surface2)', color: editing ? 'var(--red)' : 'var(--text2)', cursor: 'pointer', fontFamily: 'inherit', display: user.role === 'ADMIN' ? 'block' : 'none' }}>
+              style={{ fontSize: '12px', fontWeight: '700', padding: '5px 12px', borderRadius: '7px', border: `1px solid ${editing ? '#FECACA' : 'var(--border)'}`, background: editing ? '#FEF2F2' : 'var(--surface2)', color: editing ? 'var(--red)' : 'var(--text2)', cursor: 'pointer', fontFamily: 'inherit', display: (user.role === 'ADMIN' || user.allowedPaths) ? 'block' : 'none' }}>
               {editing ? 'Batal' : '✏️ Edit'}
             </button>
             <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '20px', lineHeight: 1 }}>×</button>
