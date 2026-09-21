@@ -15,6 +15,7 @@ export default function ExpenseSettingsPage() {
   const [activeTab, setActiveTab] = useState('items')
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState(null)
+  const [syncing, setSyncing] = useState(false)
   const fileRef = useRef(null)
 
   async function load() {
@@ -65,6 +66,18 @@ export default function ExpenseSettingsPage() {
 
   function handleCancelEdit() { setForm(empty); setEditId(null) }
   function handleClearImport() { setImportResult(null) }
+
+  async function handleSyncIngredients() {
+    if (!confirm('Sync semua bahan baku (non-komposit) ke item pengeluaran dengan kategori "Persediaan"? Item yang sudah ada akan dilewati.')) return
+    setSyncing(true)
+    try {
+      const res = await api.post('/admin/expense-items/sync-ingredients')
+      setImportResult({ ...res.data, errors: [] })
+      load()
+    } catch (err) {
+      setImportResult({ error: err.response?.data?.message || 'Gagal sync' })
+    } finally { setSyncing(false) }
+  }
   function handleClickImport() { fileRef.current.click() }
   const handleSetTab = useCallback((key) => setActiveTab(key), [])
   const handleFormCode = useCallback(e => setForm(f => ({ ...f, code: e.target.value })), [])
@@ -129,6 +142,11 @@ export default function ExpenseSettingsPage() {
             <div className="topbar-sub">Kelola daftar item pengeluaran</div>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
+            <button className="btn" style={{ background: '#EFF4FF', color: 'var(--accent)', border: '1px solid #C7D4F0' }}
+              onClick={handleSyncIngredients} disabled={syncing}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 12a9 9 0 0 1-9 9m9-9a9 9 0 0 0-9-9m9 9H3m9 9a9 9 0 0 1-9-9m9 9c1.66 0 3-4.03 3-9s-1.34-9-3-9m0 18c-1.66 0-3-4.03-3-9s1.34-9 3-9"/></svg>
+              {syncing ? 'Menyinkronkan...' : 'Sync dari Bahan Baku'}
+            </button>
             <button className="btn btn-ghost" onClick={downloadTemplate}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               Template CSV

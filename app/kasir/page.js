@@ -1095,7 +1095,7 @@ function ClosingModal({ orders, todayShifts = [], kasAwalOtomatis = 0, onClose, 
   const [persediaanItems, setPersediaanItems] = useState([])
   useEffect(() => {
     api.get('/admin/employees').then(r => setEmployees(r.data.filter(e => e.isActive))).catch(() => {})
-    api.get('/admin/expense-items').then(r => setPersediaanItems((r.data || []).filter(i => i.category === 'Persediaan'))).catch(() => {})
+    api.get('/admin/expense-items').then(r => setPersediaanItems((r.data || []).filter(i => (i.category || '').toLowerCase() === 'persediaan'))).catch(() => {})
   }, [])
 
   const [snapshot] = useState(() => {
