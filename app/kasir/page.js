@@ -1092,7 +1092,11 @@ function ClosingModal({ orders, todayShifts = [], kasAwalOtomatis = 0, onClose, 
   const [shift, setShift] = useState(() => availableShifts[0]?.key || 'SHIFT_1')
   const activeShift = SHIFTS.find(s => s.key === shift)
   const [employees, setEmployees] = useState([])
-  useEffect(() => { api.get('/admin/employees').then(r => setEmployees(r.data.filter(e => e.isActive))).catch(() => {}) }, [])
+  const [persediaanItems, setPersediaanItems] = useState([])
+  useEffect(() => {
+    api.get('/admin/employees').then(r => setEmployees(r.data.filter(e => e.isActive))).catch(() => {})
+    api.get('/admin/expense-items').then(r => setPersediaanItems((r.data || []).filter(i => i.category === 'Persediaan'))).catch(() => {})
+  }, [])
 
   const [snapshot] = useState(() => {
     const completed = orders.filter(o => o.status === 'COMPLETED')
@@ -1324,7 +1328,7 @@ function ClosingModal({ orders, todayShifts = [], kasAwalOtomatis = 0, onClose, 
                   <div style={{ maxHeight: '130px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '5px' }}>
                     {pengeluaran.map((p, i) => (
                       <div key={i} style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
-                        <input className="input" placeholder="Nama barang" value={p.barang} onChange={(e) => updatePengeluaran(i, 'barang', e.target.value)} style={{ flex: 2, fontSize: '11px', padding: '6px 8px' }} />
+                        <input className="input" placeholder="Nama barang" list="persediaan-list" value={p.barang} onChange={(e) => updatePengeluaran(i, 'barang', e.target.value)} style={{ flex: 2, fontSize: '11px', padding: '6px 8px' }} />
                         <input className="input" type="number" placeholder="Qty" value={p.qty} onChange={(e) => updatePengeluaran(i, 'qty', e.target.value)} style={{ flex: '0 0 44px', fontSize: '11px', padding: '6px 6px' }} />
                         <input className="input" type="number" placeholder="Harga" value={p.harga} onChange={(e) => updatePengeluaran(i, 'harga', e.target.value)} style={{ flex: 2, fontSize: '11px', padding: '6px 8px' }} />
                         <button onClick={() => setPengeluaran(prev => prev.filter((_, n) => n !== i))} style={{ background: 'var(--red-light)', border: '1px solid #FECACA', borderRadius: '6px', color: 'var(--red)', cursor: 'pointer', padding: '6px 7px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -1333,6 +1337,9 @@ function ClosingModal({ orders, todayShifts = [], kasAwalOtomatis = 0, onClose, 
                       </div>
                     ))}
                   </div>
+                  <datalist id="persediaan-list">
+                    {persediaanItems.map(item => <option key={item.id} value={item.name} />)}
+                  </datalist>
                 </div>
                 <div>
                   <label className="label" style={{ fontSize: '11px' }}>{t('catatan')} <span style={{ color: 'var(--muted)', fontWeight: '400' }}>{t('opsional')}</span></label>
