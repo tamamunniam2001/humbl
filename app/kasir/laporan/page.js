@@ -445,6 +445,7 @@ function EditModal({ report: r, onClose, onSaved, fmt, fmtDate, isAdmin }) {
   const [pengeluaran, setPengeluaran] = useState((r.pengeluaran || []).map(p => ({ ...p })))
   const [catatan, setCatatan] = useState(r.catatan || '')
   const [saving, setSaving] = useState(false)
+  const [syncing, setSyncing] = useState(false)
   const [employees, setEmployees] = useState([])
   useEffect(() => { api.get('/admin/employees').then(res => setEmployees(res.data.filter(e => e.isActive))).catch(() => {}) }, [])
 
@@ -453,6 +454,35 @@ function EditModal({ report: r, onClose, onSaved, fmt, fmtDate, isAdmin }) {
 
   function addPengeluaran() { setPengeluaran(prev => [...prev, { barang: '', qty: 1, harga: 0 }]) }
   function updateP(i, field, val) { setPengeluaran(prev => prev.map((p, n) => n === i ? { ...p, [field]: val } : p)) }
+
+  // Sinkron nilai penjualan dari transaksi aktual sesuai jam shift
+  async function handleSync() {
+    const SHIFT_RANGES = {
+      SHIFT_1: { startHour: 7,  endHour: 13 },
+      SHIFT_2: { startHour: 13, endHour: 18 },
+      SHIFT_3: { startHour: 18, endHour: 23 },
+    }
+    const currentShift = isAdmin ? shift : r.shift
+    const shiftDef = SHIFT_RANGES[currentShift]
+    if (!shiftDef) return alert('Shift tidak dikenal')
+    setSyncing(true)
+    try {
+      const dateWIB = new Date(r.date).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })
+      const from = new Date(`${dateWIB}T${String(shiftDef.startHour).padStart(2,'0')}:00:00+07:00`)
+      const to   = new Date(`${dateWIB}T${String(shiftDef.endHour - 1).padStart(2,'0')}:59:59.999+07:00`)
+      const res = await api.get(`/transactions?slim=1&all=1&from=${from.toISOString()}&to=${to.toISOString()}`)
+      const txs = (res.data.transactions || []).filter(t => t.status === 'COMPLETED' && !t.deletedAt)
+      const totP   = txs.reduce((s, t) => s + t.total, 0)
+      const totC   = txs.filter(t => t.payMethod === 'CASH').reduce((s, t) => s + t.total, 0)
+      const totQ   = txs.filter(t => t.payMethod === 'QRIS').reduce((s, t) => s + t.total, 0)
+      const totT   = txs.filter(t => t.payMethod === 'TRANSFER' || t.payMethod === 'NONTUNAI').reduce((s, t) => s + t.total, 0)
+      setPenjualan(String(totP))
+      setCash(String(totC))
+      setQris(String(totQ))
+      setTransfer(String(totT))
+    } catch { alert('Gagal mengambil data transaksi') }
+    finally { setSyncing(false) }
+  }
 
   async function handleSave() {
     setSaving(true)
@@ -530,22 +560,34 @@ function EditModal({ report: r, onClose, onSaved, fmt, fmtDate, isAdmin }) {
 
             {/* Penjualan — admin only */}
             {isAdmin && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                <div>
-                  <label className="label" style={{ fontSize: '11px' }}>Total Penjualan</label>
-                  <input className="input" type="number" style={inputS} placeholder="0" value={penjualan} onChange={e => setPenjualan(e.target.value)} />
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label className="label" style={{ margin: 0 }}>Data Penjualan</label>
+                  <button type="button" onClick={handleSync} disabled={syncing}
+                    style={{ fontSize: '11px', color: '#2A9D6E', background: '#E8F7F1', border: '1px solid #A7DFC8', borderRadius: '6px', padding: '4px 10px', cursor: 'pointer', fontFamily: 'inherit', fontWeight: '700', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ animation: syncing ? 'spin 1s linear infinite' : 'none' }}>
+                      <path d="M21 12a9 9 0 0 1-9 9m0-18a9 9 0 0 1 9 9M3 12a9 9 0 0 1 9-9"/><polyline points="16 12 21 12 21 7"/>
+                    </svg>
+                    {syncing ? 'Memuat...' : 'Sinkron dari Transaksi'}
+                  </button>
                 </div>
-                <div>
-                  <label className="label" style={{ fontSize: '11px', color: '#2A9D6E' }}>Cash</label>
-                  <input className="input" type="number" style={{ ...inputS, borderColor: '#A7DFC8' }} placeholder="0" value={cash} onChange={e => setCash(e.target.value)} />
-                </div>
-                <div>
-                  <label className="label" style={{ fontSize: '11px', color: '#6B5BAF' }}>QRIS</label>
-                  <input className="input" type="number" style={{ ...inputS, borderColor: '#C8C0E8' }} placeholder="0" value={qris} onChange={e => setQris(e.target.value)} />
-                </div>
-                <div>
-                  <label className="label" style={{ fontSize: '11px', color: '#C47D1A' }}>Transfer</label>
-                  <input className="input" type="number" style={{ ...inputS, borderColor: '#F0D090' }} placeholder="0" value={transfer} onChange={e => setTransfer(e.target.value)} />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <div>
+                    <label className="label" style={{ fontSize: '11px' }}>Total Penjualan</label>
+                    <input className="input" type="number" style={inputS} placeholder="0" value={penjualan} onChange={e => setPenjualan(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="label" style={{ fontSize: '11px', color: '#2A9D6E' }}>Cash</label>
+                    <input className="input" type="number" style={{ ...inputS, borderColor: '#A7DFC8' }} placeholder="0" value={cash} onChange={e => setCash(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="label" style={{ fontSize: '11px', color: '#6B5BAF' }}>QRIS</label>
+                    <input className="input" type="number" style={{ ...inputS, borderColor: '#C8C0E8' }} placeholder="0" value={qris} onChange={e => setQris(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="label" style={{ fontSize: '11px', color: '#C47D1A' }}>Transfer</label>
+                    <input className="input" type="number" style={{ ...inputS, borderColor: '#F0D090' }} placeholder="0" value={transfer} onChange={e => setTransfer(e.target.value)} />
+                  </div>
                 </div>
               </div>
             )}
