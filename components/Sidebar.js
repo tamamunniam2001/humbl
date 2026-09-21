@@ -69,12 +69,13 @@ export default function Sidebar() {
   const role = user.role || 'CASHIER'
   const allowedPaths = user.allowedPaths || null
   const navGroups = allNavGroups
-    .filter(g => g.roles.includes(role))
-    .map(g => ({ ...g, items: g.items.filter(i => {
-      if (!i.roles.includes(role)) return false
-      if (allowedPaths) return allowedPaths.some(p => i.href === p || i.href.startsWith(p + '/'))
-      return true
-    }) }))
+    .map(g => ({
+      ...g,
+      items: g.items.filter(i => {
+        if (allowedPaths) return allowedPaths.some(p => i.href === p || i.href.startsWith(p + '/'))
+        return i.roles.includes(role)
+      })
+    }))
     .filter(g => g.items.length > 0)
 
   useEffect(() => {

@@ -32,16 +32,19 @@ export async function middleware(req) {
     const secret = new TextEncoder().encode(process.env.JWT_SECRET)
     const { payload } = await jwtVerify(token, secret)
 
-    // Kasir coba akses halaman admin-only → redirect ke dashboard
-    if (payload.role === 'CASHIER' && ADMIN_ONLY_PATHS.some(p => pathname.startsWith(p))) {
-      return NextResponse.redirect(new URL('/dashboard', req.url))
-    }
-
-    // Custom role → cek allowedPaths
+    // Custom role → akses dikontrol penuh oleh allowedPaths
     if (payload.allowedPaths) {
       const allowed = payload.allowedPaths
+      // /dashboard selalu boleh diakses sebagai landing page
+      if (pathname === '/dashboard') return NextResponse.next()
       const isAllowed = allowed.some(p => pathname === p || pathname.startsWith(p + '/'))
       if (!isAllowed) return NextResponse.redirect(new URL('/dashboard', req.url))
+      return NextResponse.next()
+    }
+
+    // Kasir biasa → blokir halaman admin-only
+    if (payload.role === 'CASHIER' && ADMIN_ONLY_PATHS.some(p => pathname.startsWith(p))) {
+      return NextResponse.redirect(new URL('/dashboard', req.url))
     }
 
     return NextResponse.next()
