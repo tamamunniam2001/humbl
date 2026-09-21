@@ -183,7 +183,7 @@ export default function KasirPage() {
         api.get('/products?slim=1'),
         api.get('/admin/categories'),
       ])
-      console.log('[kasir] products fetched:', prodsRes.data?.length, 'cats:', catsRes.data?.length)
+      console.log('[kasir] products fetched:', prodsRes.data?.length, 'cats:', catsRes.data?.length, 'isArray prods:', Array.isArray(prodsRes.data), 'isArray cats:', Array.isArray(catsRes.data), 'cats sample:', JSON.stringify(catsRes.data)?.slice(0, 100))
       const prods = Array.isArray(prodsRes.data) ? prodsRes.data : []
       const cats = Array.isArray(catsRes.data) ? catsRes.data.map((c) => c.name).sort() : []
       setProducts(prods)
