@@ -83,8 +83,17 @@ export async function POST(req) {
   if (!expenseItems.length && !ingredients.length) return NextResponse.json({ message: 'Belum ada item persediaan. Tambahkan dulu di menu Item Pengeluaran.' }, { status: 400 })
 
   const ingredientNames = new Set(ingredients.map(i => i.name.trim().toLowerCase()))
+  // Filter ingredients agar tidak dobel dengan expenseItems (nama sama)
+  const expenseItemNames = new Set(expenseItems.map(i => i.name.trim().toLowerCase()))
+  const filteredIngredients = ingredients.filter(i => !expenseItemNames.has(i.name.trim().toLowerCase()))
+
+  // Filter prevManualItems: tidak dobel dengan expenseItems maupun ingredients
+  const coveredNames = new Set([
+    ...expenseItemNames,
+    ...filteredIngredients.map(i => i.name.trim().toLowerCase()),
+  ])
   const manualItems = (prevManualItems?.items || []).filter(
-    item => !ingredientNames.has(item.itemName.trim().toLowerCase())
+    item => !coveredNames.has(item.itemName.trim().toLowerCase())
   )
 
   // Parse tanggal sebagai WIB (UTC+7) — simpan sebagai noon WIB agar tidak geser hari
@@ -116,7 +125,7 @@ export async function POST(req) {
             qtyActual: 0,
             selisih: 0,
           })),
-          ...ingredients.map(item => ({
+          ...filteredIngredients.map(item => ({
             itemName: item.name,
             satuan: item.unit || '',
             isManual: true,
