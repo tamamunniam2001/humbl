@@ -1,16 +1,17 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { verifyAuth, adminOnly } from '@/lib/auth'
+import { verifyAuth, pageAccessOnly } from '@/lib/auth'
 
 // POST /admin/expense-items/sync-ingredients
 // Sinkronkan SEMUA bahan ke tabel ExpenseItem dengan kategori "Persediaan":
 // - "Bahan Baku Biasa" (isComposite=false) maupun "Bahan Baku Jadi" (isComposite=true)
 // - Bahan yang sudah punya item pengeluaran aktif -> dilewati (skipped)
 // - Bahan yang itemnya pernah dihapus (soft delete/isActive=false) -> diaktifkan kembali (restored)
+// Akses: ADMIN, atau role custom (mis. "Operasional") yang punya halaman /expense-settings
 export async function POST(req) {
   const { error, user } = verifyAuth(req)
   if (error) return error
-  const denied = adminOnly(user)
+  const denied = pageAccessOnly(user, '/expense-settings')
   if (denied) return denied
 
   // Semua bahan ikut disinkronkan: "Bahan Baku Biasa" (isComposite=false)
