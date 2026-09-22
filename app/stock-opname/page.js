@@ -323,7 +323,7 @@ export default function StockOpnamePage() {
                   <div style={{ display: 'flex', gap: '16px', marginTop: '10px', flexWrap: 'wrap' }}>
                     {[
                       { label: 'Belum Diisi', val: belumDiisi, color: '#F59E0B' },
-                      { label: 'Total Nilai', val: fmtRp(detail.items.reduce((s, i) => s + (i.qtyActual * (i.hargaTerakhir || 0)), 0)), color: '#8B5CF6' },
+                      { label: 'Total Nilai', val: fmtRp(detail.items.reduce((s, i) => s + (i.qtyActual * (i.hargaPerSatuanDasar ?? i.hargaTerakhir ?? 0)), 0)), color: '#8B5CF6' },
                     ].map(s => (
                       <div key={s.label}>
                         <div style={{ fontSize: '11px', color: 'var(--muted)' }}>{s.label}</div>
@@ -360,10 +360,17 @@ export default function StockOpnamePage() {
                     <div className="card" style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)' }}>Tidak ada item</div>
                   ) : filtered.map(item => {
                     const satuanTampil = (item.satuanOpname && item.konversi) ? item.satuanOpname : (item.inventoryItem?.satuan || item.satuan || '')
+                    const satuanDasar = item.inventoryItem?.satuan || item.satuan || ''
                     const qtyTampil = (item.satuanOpname && item.konversi) ? item.qtyActual / item.konversi : item.qtyActual
                     const qtySebelumnyaTampil = (item.satuanOpname && item.konversi && item.qtySebelumnya != null) ? item.qtySebelumnya / item.konversi : item.qtySebelumnya
-                    const harga = item.hargaTerakhir || 0
-                    const nilaiStok = item.qtyActual * harga
+                    // Gunakan hargaPerSatuanDasar untuk valuasi yang akurat
+                    const hargaDasar = item.hargaPerSatuanDasar ?? item.hargaTerakhir ?? 0
+                    const nilaiStok = item.qtyActual * hargaDasar
+                    // Label keterangan harga: "Rp X / satuanOpname" atau "Rp X / satuan"
+                    const labelSatuan = satuanTampil || satuanDasar
+                    const hargaPerSatuanTampil = item.konversi && item.hargaTerakhir
+                      ? item.hargaTerakhir / item.konversi  // harga per satuanOpname
+                      : (item.hargaPerSatuanDasar ?? item.hargaTerakhir ?? null)
                     const sudahIsi = item.qtyActual > 0
                     const cat = item.inventoryItem?.category || item.expenseItem?.category
                     return (
@@ -401,6 +408,11 @@ export default function StockOpnamePage() {
                             {cat && <span style={{ fontSize: '11px', color: '#4A7CC7', background: '#EBF1FB', border: '1px solid #C0D0E8', padding: '1px 6px', borderRadius: '4px' }}>{cat}</span>}
                             {qtySebelumnyaTampil != null && (
                               <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Sebelumnya: {fmt(qtySebelumnyaTampil)} {satuanTampil}</span>
+                            )}
+                            {hargaPerSatuanTampil != null && (
+                              <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                                {fmtRp(hargaPerSatuanTampil)}{labelSatuan ? `/${labelSatuan}` : ''}
+                              </span>
                             )}
                             {nilaiStok > 0 && (
                               <span style={{ fontSize: '11px', color: '#8B5CF6', fontWeight: '700' }}>{fmtRp(nilaiStok)}</span>
@@ -516,6 +528,40 @@ export default function StockOpnamePage() {
                           = {fmt((Number(editVal) || 0) * editSheet.konversi)} {editSheet.inventoryItem?.satuan || editSheet.satuan}
                         </div>
                       )}
+                      {/* Preview valuasi real-time */}
+                      {(() => {
+                        const hargaDasar = editSheet.hargaPerSatuanDasar ?? editSheet.hargaTerakhir ?? null
+                        if (!hargaDasar) return null
+                        const qtyDasar = editSheet.konversi
+                          ? (Number(editVal) || 0) * editSheet.konversi
+                          : (Number(editVal) || 0)
+                        const nilai = qtyDasar * hargaDasar
+                        const satuanTampil = (editSheet.satuanOpname && editSheet.konversi) ? editSheet.satuanOpname : (editSheet.inventoryItem?.satuan || editSheet.satuan || '')
+                        // harga per satuanOpname
+                        const hargaPerSatuanTampil = editSheet.konversi && editSheet.hargaTerakhir
+                          ? editSheet.hargaTerakhir / editSheet.konversi
+                          : hargaDasar
+                        return (
+                          <div style={{ marginTop: '10px', padding: '10px 14px', background: 'linear-gradient(135deg, #EDE9FE, #F5F3FF)', border: '1px solid #C4B5FD', borderRadius: '10px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <div>
+                                <div style={{ fontSize: '10px', color: '#7C3AED', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Valuasi Stok</div>
+                                <div style={{ fontSize: '11px', color: '#6D28D9', marginTop: '2px' }}>
+                                  {fmtRp(Math.round(hargaPerSatuanTampil))}{satuanTampil ? `/${satuanTampil}` : ''}
+                                  {editSheet.konversi && editSheet.hargaTerakhir && (
+                                    <span style={{ marginLeft: '6px', opacity: 0.7 }}>
+                                      · {fmtRp(Math.round(editSheet.hargaTerakhir))}/{editSheet.satuanBeli || 'satuan beli'}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <div style={{ fontSize: '20px', fontWeight: '800', color: '#7C3AED' }}>
+                                {fmtRp(Math.round(nilai))}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })()}
                     </div>
                   )
                 })()}

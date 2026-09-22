@@ -28,7 +28,7 @@ export async function GET(req) {
       skip: (page - 1) * limit,
       include: {
         user: { select: { name: true } },
-        items: { select: { id: true, selisih: true, qtyActual: true, hargaManual: true, expenseItemId: true } },
+        items: { select: { id: true, selisih: true, qtyActual: true, hargaManual: true, expenseItemId: true, expenseItem: { select: { konversi: true } } } },
       },
     }),
     prisma.stockOpname.count(),
@@ -51,8 +51,11 @@ export async function GET(req) {
       itemsOk: o.items.filter(i => i.selisih === 0).length,
       itemsSelisih: o.items.filter(i => i.selisih !== 0).length,
       totalNilai: o.items.reduce((s, i) => {
-        const harga = i.hargaManual ?? (i.expenseItemId ? (priceMap[i.expenseItemId] ?? 0) : 0)
-        return s + (i.qtyActual * harga)
+        const hargaBeli = i.hargaManual ?? (i.expenseItemId ? (priceMap[i.expenseItemId] ?? 0) : 0)
+        const konversi = i.expenseItem?.konversi
+        // hargaPerSatuanDasar = hargaBeli / konversi (jika ada konversi)
+        const hargaDasar = konversi && konversi > 0 ? hargaBeli / konversi : hargaBeli
+        return s + (i.qtyActual * hargaDasar)
       }, 0),
     })),
     total,

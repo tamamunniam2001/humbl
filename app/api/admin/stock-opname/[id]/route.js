@@ -22,8 +22,13 @@ export async function GET(req, { params }) {
   // Ambil harga terakhir & stok opname sebelumnya per expenseItemId
   const expenseItemIds = opname.items.map(i => i.expenseItemId).filter(Boolean)
 
-  const [lastPrices, prevOpname] = await Promise.all([
-    // Harga terakhir dari ExpenseDetail per item
+  // Nama item manual (isManual=true, tidak punya expenseItemId) untuk fallback ke Ingredient
+  const manualItemNames = opname.items
+    .filter(i => i.isManual && !i.expenseItemId)
+    .map(i => i.itemName.trim())
+
+  const [lastPrices, prevOpname, ingredientPrices] = await Promise.all([
+    // Harga terakhir dari ExpenseDetail per item (harga per satuan beli)
     prisma.expenseDetail.findMany({
       where: { expenseItemId: { in: expenseItemIds } },
       orderBy: { expense: { date: 'desc' } },
@@ -36,24 +41,82 @@ export async function GET(req, { params }) {
       orderBy: { date: 'desc' },
       include: { items: { select: { expenseItemId: true, itemName: true, qtyActual: true } } },
     }),
+    // Fallback harga dari tabel Ingredient (rekap bahan baku) untuk item manual
+    manualItemNames.length > 0
+      ? prisma.ingredient.findMany({
+          where: { name: { in: manualItemNames } },
+          select: { name: true, price: true, packSize: true, unit: true },
+        })
+      : Promise.resolve([]),
   ])
 
+  // priceMap: expenseItemId → harga per satuan beli (dari ExpenseDetail)
   const priceMap = Object.fromEntries(lastPrices.map(p => [p.expenseItemId, p.harga]))
+
+  // ingredientMap: nama (lowercase) → harga per unit dasar (price / packSize)
+  const ingredientMap = Object.fromEntries(
+    ingredientPrices
+      .filter(ig => ig.price != null && ig.packSize != null && ig.packSize > 0)
+      .map(ig => [ig.name.trim().toLowerCase(), {
+        hargaPerUnit: ig.price / ig.packSize,
+        unit: ig.unit,
+      }])
+  )
+
   const prevMap = Object.fromEntries(
     (prevOpname?.items || []).map(i => [i.expenseItemId || i.itemName, i.qtyActual])
   )
 
-  const items = opname.items.map(i => ({
-    ...i,
-    hargaTerakhir: i.isManual
-      ? (i.hargaManual ?? null)
-      : (i.expenseItemId ? (priceMap[i.expenseItemId] ?? null) : null),
-    qtySebelumnya: i.expenseItemId
-      ? (prevMap[i.expenseItemId] ?? null)
-      : (prevMap[i.itemName] ?? null),
-    satuanOpname: i.expenseItem?.satuanOpname || null,
-    konversi: i.expenseItem?.konversi || null,
-  }))
+  const items = opname.items.map(i => {
+    const konversi = i.expenseItem?.konversi || null
+    const satuanOpname = i.expenseItem?.satuanOpname || null
+    const satuanBeli = i.expenseItem?.satuan || i.satuan || null
+
+    // hargaTerakhir: harga per satuan beli (dari ExpenseDetail atau hargaManual)
+    let hargaTerakhir = null
+    if (i.isManual) {
+      hargaTerakhir = i.hargaManual ?? null
+      // Fallback ke Ingredient jika tidak punya hargaManual
+      if (hargaTerakhir == null) {
+        const ig = ingredientMap[i.itemName.trim().toLowerCase()]
+        if (ig) hargaTerakhir = ig.hargaPerUnit // sudah per unit dasar
+      }
+    } else {
+      hargaTerakhir = i.expenseItemId ? (priceMap[i.expenseItemId] ?? null) : null
+    }
+
+    // hargaPerSatuanDasar: harga per satuan dasar (gram/ml/pcs)
+    // Jika ada konversi: hargaTerakhir (per satuan beli) ÷ konversi = harga per satuanOpname
+    // qtyActual disimpan dalam satuan dasar, jadi nilai = qtyActual × (hargaTerakhir / konversi)
+    let hargaPerSatuanDasar = null
+    if (hargaTerakhir != null) {
+      if (konversi && konversi > 0) {
+        // hargaTerakhir per satuan beli, konversi = 1 satuanOpname = konversi satuan dasar
+        // → harga per satuan dasar = hargaTerakhir / konversi
+        hargaPerSatuanDasar = hargaTerakhir / konversi
+      } else {
+        // Tidak ada konversi: hargaTerakhir sudah per satuan yang sama dengan qtyActual
+        hargaPerSatuanDasar = hargaTerakhir
+      }
+    }
+    // Item manual yang harganya sudah dari Ingredient (price/packSize) sudah per unit dasar
+    if (i.isManual && i.hargaManual == null) {
+      const ig = ingredientMap[i.itemName.trim().toLowerCase()]
+      if (ig) hargaPerSatuanDasar = ig.hargaPerUnit
+    }
+
+    return {
+      ...i,
+      hargaTerakhir,          // harga per satuan beli (untuk ditampilkan sebagai referensi)
+      hargaPerSatuanDasar,    // harga per satuan dasar → dipakai untuk kalkulasi nilaiStok
+      satuanBeli,             // satuan pembelian (untuk label keterangan)
+      qtySebelumnya: i.expenseItemId
+        ? (prevMap[i.expenseItemId] ?? null)
+        : (prevMap[i.itemName] ?? null),
+      satuanOpname,
+      konversi,
+    }
+  })
 
   return NextResponse.json({ ...opname, items })
 }
