@@ -68,7 +68,7 @@ export default function ExpenseSettingsPage() {
   function handleClearImport() { setImportResult(null) }
 
   async function handleSyncIngredients() {
-    if (!confirm('Sync semua bahan baku (non-komposit) ke item pengeluaran dengan kategori "Persediaan"? Item yang sudah ada akan dilewati.')) return
+    if (!confirm('Sync semua bahan baku (termasuk Bahan Baku Jadi) ke item pengeluaran dengan kategori "Persediaan"? Item yang sudah ada akan dilewati.')) return
     setSyncing(true)
     try {
       const res = await api.post('/admin/expense-items/sync-ingredients')
@@ -173,6 +173,7 @@ export default function ExpenseSettingsPage() {
                      <div style={{ fontSize: '12px', color: '#4A5578', display: 'flex', gap: '16px' }}>
                          <span>✚ <b>{importResult.created}</b> berhasil</span>
                          <span>⊘ <b>{importResult.skipped}</b> dilewati</span>
+                         {importResult.restored > 0 && <span>↺ <b>{importResult.restored}</b> diaktifkan kembali</span>}
                    <span>∑ <b>{importResult.total}</b> total</span>
                         </div>
                     {importResult.errors?.length > 0 && (
