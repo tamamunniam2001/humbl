@@ -22,12 +22,10 @@ export async function GET(req, { params }) {
   // Ambil harga terakhir & stok opname sebelumnya per expenseItemId
   const expenseItemIds = opname.items.map(i => i.expenseItemId).filter(Boolean)
 
-  // Nama item manual (isManual=true, tidak punya expenseItemId) untuk fallback ke Ingredient
-  const manualItemNames = opname.items
-    .filter(i => i.isManual && !i.expenseItemId)
-    .map(i => i.itemName.trim())
+  // Kumpulkan semua nama item untuk matching ke Ingredient
+  const allItemNames = opname.items.map(i => i.itemName.trim())
 
-  const [lastPrices, prevOpname, ingredientPrices] = await Promise.all([
+  const [lastPrices, prevOpname, allIngredients] = await Promise.all([
     // Harga terakhir dari ExpenseDetail per item (harga per satuan beli)
     prisma.expenseDetail.findMany({
       where: { expenseItemId: { in: expenseItemIds } },
@@ -41,13 +39,10 @@ export async function GET(req, { params }) {
       orderBy: { date: 'desc' },
       include: { items: { select: { expenseItemId: true, itemName: true, qtyActual: true } } },
     }),
-    // Fallback harga dari tabel Ingredient (rekap bahan baku) untuk item manual
-    manualItemNames.length > 0
-      ? prisma.ingredient.findMany({
-          where: { name: { in: manualItemNames } },
-          select: { name: true, price: true, packSize: true, unit: true },
-        })
-      : Promise.resolve([]),
+    // Semua ingredient — untuk fallback harga berdasarkan nama
+    prisma.ingredient.findMany({
+      select: { name: true, price: true, packSize: true, unit: true },
+    }),
   ])
 
   // priceMap: expenseItemId → harga per satuan beli (dari ExpenseDetail)
@@ -55,7 +50,7 @@ export async function GET(req, { params }) {
 
   // ingredientMap: nama (lowercase) → harga per unit dasar (price / packSize)
   const ingredientMap = Object.fromEntries(
-    ingredientPrices
+    allIngredients
       .filter(ig => ig.price != null && ig.packSize != null && ig.packSize > 0)
       .map(ig => [ig.name.trim().toLowerCase(), {
         hargaPerUnit: ig.price / ig.packSize,
@@ -76,33 +71,30 @@ export async function GET(req, { params }) {
     let hargaTerakhir = null
     if (i.isManual) {
       hargaTerakhir = i.hargaManual ?? null
-      // Fallback ke Ingredient jika tidak punya hargaManual
-      if (hargaTerakhir == null) {
-        const ig = ingredientMap[i.itemName.trim().toLowerCase()]
-        if (ig) hargaTerakhir = ig.hargaPerUnit // sudah per unit dasar
-      }
     } else {
       hargaTerakhir = i.expenseItemId ? (priceMap[i.expenseItemId] ?? null) : null
     }
 
-    // hargaPerSatuanDasar: harga per satuan dasar (gram/ml/pcs)
-    // Jika ada konversi: hargaTerakhir (per satuan beli) ÷ konversi = harga per satuanOpname
-    // qtyActual disimpan dalam satuan dasar, jadi nilai = qtyActual × (hargaTerakhir / konversi)
+    // hargaPerSatuanDasar: harga per unit dasar (gram/ml/pcs)
+    // Prioritas:
+    //   1. Harga dari ExpenseDetail / hargaManual → bagi konversi
+    //   2. Fallback: harga dari Ingredient (price/packSize) — sudah per unit dasar
     let hargaPerSatuanDasar = null
     if (hargaTerakhir != null) {
       if (konversi && konversi > 0) {
-        // hargaTerakhir per satuan beli, konversi = 1 satuanOpname = konversi satuan dasar
-        // → harga per satuan dasar = hargaTerakhir / konversi
         hargaPerSatuanDasar = hargaTerakhir / konversi
       } else {
-        // Tidak ada konversi: hargaTerakhir sudah per satuan yang sama dengan qtyActual
         hargaPerSatuanDasar = hargaTerakhir
       }
     }
-    // Item manual yang harganya sudah dari Ingredient (price/packSize) sudah per unit dasar
-    if (i.isManual && i.hargaManual == null) {
+    // Fallback ke Ingredient untuk semua item yang belum dapat harga
+    if (hargaPerSatuanDasar == null) {
       const ig = ingredientMap[i.itemName.trim().toLowerCase()]
-      if (ig) hargaPerSatuanDasar = ig.hargaPerUnit
+      if (ig) {
+        hargaPerSatuanDasar = ig.hargaPerUnit
+        // Gunakan juga sebagai hargaTerakhir jika belum ada
+        if (hargaTerakhir == null) hargaTerakhir = ig.hargaPerUnit
+      }
     }
 
     return {
