@@ -1,11 +1,12 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import Sidebar from '@/components/Sidebar'
 import api from '@/lib/api'
 
 const fmt = n => Number(n) % 1 !== 0 ? Number(n).toLocaleString('id-ID', { maximumFractionDigits: 4 }) : Number(n).toLocaleString('id-ID')
 const fmtRp = n => 'Rp ' + Number(n).toLocaleString('id-ID', { maximumFractionDigits: 0 })
 const fmtDate = d => new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' })
+const fmtDateShort = d => new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Jakarta' })
 
 export default function StockOpnamePage() {
   const [opnames, setOpnames] = useState([])
@@ -22,12 +23,12 @@ export default function StockOpnamePage() {
   const [showCreate, setShowCreate] = useState(false)
 
   // Detail view
-  const [detail, setDetail] = useState(null) // opname object
+  const [detail, setDetail] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [finishing, setFinishing] = useState(false)
   const [filterCat, setFilterCat] = useState('')
-  const [filterSelisih, setFilterSelisih] = useState(false)
+  const [filterBelum, setFilterBelum] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [editVal, setEditVal] = useState('')
   const [editNote, setEditNote] = useState('')
@@ -37,27 +38,42 @@ export default function StockOpnamePage() {
   const [addingManual, setAddingManual] = useState(false)
   const [search, setSearch] = useState('')
   const [reopening, setReopening] = useState(false)
-  const [sortDetail, setSortDetail] = useState({ key: '', dir: 1 })
-  const [sortList, setSortList] = useState({ key: 'date', dir: -1 })
   const [requestingId, setRequestingId] = useState(null)
   const [showRequestModal, setShowRequestModal] = useState(false)
   const [showLaporanRequest, setShowLaporanRequest] = useState(false)
-
   const [showSendWA, setShowSendWA] = useState(false)
   const [waSending, setWaSending] = useState(false)
   const [waTargets, setWaTargets] = useState({ admin: false, group: false })
   const [waStatus, setWaStatus] = useState(null)
   const [waMessage, setWaMessage] = useState('')
   const [waOpname, setWaOpname] = useState(null)
-
   const [syncing, setSyncing] = useState(false)
+  // Mobile: tampilkan panel edit sebagai bottom sheet
+  const [editSheet, setEditSheet] = useState(null) // item object
+  const inputRef = useRef(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await api.get(`/admin/stock-opname?page=${page}`)
+      setOpnames(res.data.opnames)
+      setTotal(res.data.total)
+      setTotalPages(res.data.totalPages)
+    } catch { } finally { setLoading(false) }
+  }, [page])
+
+  useEffect(() => { load() }, [load])
+
+  // Focus input saat bottom sheet terbuka
+  useEffect(() => {
+    if (editSheet && inputRef.current) {
+      setTimeout(() => inputRef.current?.focus(), 120)
+    }
+  }, [editSheet])
 
   function downloadOpnameListCSV() {
     const rows = [['Tanggal', 'Oleh', 'Total Item', 'Selisih', 'Status', 'Total Nilai', 'Catatan']]
-    opnames.forEach(o => rows.push([
-      fmtDate(o.date), o.user?.name || '', o.totalItems, o.itemsSelisih,
-      o.status, o.totalNilai || 0, o.note || ''
-    ]))
+    opnames.forEach(o => rows.push([fmtDate(o.date), o.user?.name || '', o.totalItems, o.itemsSelisih, o.status, o.totalNilai || 0, o.note || '']))
     const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
@@ -71,12 +87,7 @@ export default function StockOpnamePage() {
       const qtyTampil = (item.satuanOpname && item.konversi) ? item.qtyActual / item.konversi : item.qtyActual
       const qtySebelumnya = (item.satuanOpname && item.konversi && item.qtySebelumnya != null) ? item.qtySebelumnya / item.konversi : (item.qtySebelumnya ?? '')
       const harga = item.hargaTerakhir || 0
-      const nilai = item.qtyActual * harga
-      rows.push([
-        item.inventoryItem?.name || item.itemName || '',
-        item.inventoryItem?.category || item.expenseItem?.category || '',
-        qtySebelumnya, satuan, qtyTampil, harga, nilai, item.note || ''
-      ])
+      rows.push([item.inventoryItem?.name || item.itemName || '', item.inventoryItem?.category || item.expenseItem?.category || '', qtySebelumnya, satuan, qtyTampil, harga, item.qtyActual * harga, item.note || ''])
     })
     const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n')
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
@@ -97,10 +108,10 @@ export default function StockOpnamePage() {
         caption: `📋 *Laporan Stock Opname*\n${new Date(opname.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' })}\nOleh: ${opname.user?.name}\nStatus: ${opname.status}${opname.note ? `\nCatatan: ${opname.note}` : ''}`,
       })
       setWaStatus('success')
-      setWaMessage(`Berhasil dikirim ke ${res.data.results?.filter(r => r.success).length} tujuan | Detail: ${JSON.stringify(res.data.results)}`)
+      setWaMessage(`Berhasil dikirim ke ${res.data.results?.filter(r => r.success).length} tujuan`)
     } catch (e) {
       setWaStatus('error')
-      setWaMessage(e.response?.data?.message || JSON.stringify(e.response?.data?.debug) || 'Gagal mengirim')
+      setWaMessage(e.response?.data?.message || 'Gagal mengirim')
     } finally { setWaSending(false) }
   }
 
@@ -113,25 +124,6 @@ export default function StockOpnamePage() {
     } catch (e) { alert(e.response?.data?.message || 'Gagal sync item manual') }
     finally { setSyncing(false) }
   }
-
-  function toggleSortDetail(key) {
-    setSortDetail(prev => prev.key === key ? { key, dir: prev.dir * -1 } : { key, dir: 1 })
-  }
-  function toggleSortList(key) {
-    setSortList(prev => prev.key === key ? { key, dir: prev.dir * -1 } : { key, dir: 1 })
-  }
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const res = await api.get(`/admin/stock-opname?page=${page}`)
-      setOpnames(res.data.opnames)
-      setTotal(res.data.total)
-      setTotalPages(res.data.totalPages)
-    } catch { } finally { setLoading(false) }
-  }, [page])
-
-  useEffect(() => { load() }, [load])
 
   async function handleCreate() {
     setCreating(true)
@@ -150,34 +142,30 @@ export default function StockOpnamePage() {
   }
 
   async function openDetail(id) {
-    setDetailLoading(true)
-    setDetail(null)
+    setDetailLoading(true); setDetail(null)
     try {
       const res = await api.get(`/admin/stock-opname/${id}`)
-      setDetail(res.data)
-      setFilterCat('')
-      setFilterSelisih(false)
-      setEditingId(null)
+      setDetail(res.data); setFilterCat(''); setFilterBelum(false); setEditingId(null)
     } catch (e) { alert(e.response?.data?.message || 'Gagal memuat detail') }
     finally { setDetailLoading(false) }
   }
 
-  async function handleSaveItem(itemId) {
+  async function handleSaveItem(itemId, qtyVal, noteVal, hargaVal) {
     setSaving(true)
     try {
       const item = detail.items.find(i => i.id === itemId)
       const konversi = item?.konversi
-      const qtyToSave = konversi ? Number(editVal) * konversi : Number(editVal)
-      const hargaToSave = item?.isManual && editHarga !== '' ? Number(editHarga) : undefined
-      await api.patch(`/admin/stock-opname/${detail.id}`, { itemId, qtyActual: qtyToSave, note: editNote, hargaTerakhir: hargaToSave })
+      const qtyToSave = konversi ? Number(qtyVal) * konversi : Number(qtyVal)
+      const hargaToSave = item?.isManual && hargaVal !== '' && hargaVal != null ? Number(hargaVal) : undefined
+      await api.patch(`/admin/stock-opname/${detail.id}`, { itemId, qtyActual: qtyToSave, note: noteVal ?? '', hargaTerakhir: hargaToSave })
       setDetail(prev => ({
         ...prev,
         items: prev.items.map(i => i.id === itemId
-          ? { ...i, qtyActual: qtyToSave, note: editNote, ...(hargaToSave !== undefined ? { hargaTerakhir: hargaToSave } : {}) }
+          ? { ...i, qtyActual: qtyToSave, note: noteVal ?? '', ...(hargaToSave !== undefined ? { hargaTerakhir: hargaToSave } : {}) }
           : i
         )
       }))
-      setEditingId(null)
+      setEditingId(null); setEditSheet(null)
     } catch (e) { alert(e.response?.data?.message || 'Gagal menyimpan') }
     finally { setSaving(false) }
   }
@@ -188,8 +176,7 @@ export default function StockOpnamePage() {
     try {
       const res = await api.patch(`/admin/stock-opname/${detail.id}`, { action: 'add-item', itemName: manualItem.itemName, satuan: manualItem.satuan, hargaTerakhir: manualItem.hargaTerakhir })
       setDetail(prev => ({ ...prev, items: [...prev.items, res.data] }))
-      setManualItem({ itemName: '', satuan: '', hargaTerakhir: '' })
-      setShowAddManual(false)
+      setManualItem({ itemName: '', satuan: '', hargaTerakhir: '' }); setShowAddManual(false)
     } catch (e) { alert(e.response?.data?.message || 'Gagal menambah item') }
     finally { setAddingManual(false) }
   }
@@ -217,9 +204,7 @@ export default function StockOpnamePage() {
     setFinishing(true)
     try {
       await api.patch(`/admin/stock-opname/${detail.id}`, { action: 'selesai' })
-      setDetail(prev => ({ ...prev, status: 'SELESAI' }))
-      load()
-      // Tampilkan popup laporan request jika ada item yang direquest
+      setDetail(prev => ({ ...prev, status: 'SELESAI' })); load()
       const hasRequest = detail.items.some(i => i.isRequested)
       if (hasRequest) setShowLaporanRequest(true)
     } catch (e) { alert(e.response?.data?.message || 'Gagal menyelesaikan') }
@@ -236,96 +221,84 @@ export default function StockOpnamePage() {
     } catch (e) { alert(e.response?.data?.message || 'Gagal menyimpan request') }
   }
 
-  function openRequestModal(item) {
-    setRequestingId(item.id)
-    setShowRequestModal(true)
-  }
-
   async function handleDelete(id) {
     if (!confirm('Hapus opname ini?')) return
     try { await api.delete(`/admin/stock-opname/${id}`); load() }
     catch (e) { alert(e.response?.data?.message || 'Gagal menghapus') }
   }
 
-  function startEdit(item) {
-    setEditingId(item.id)
+  function openEditSheet(item) {
     const displayQty = item.konversi && item.konversi > 0
       ? String(item.qtyActual / item.konversi)
       : String(item.qtyActual)
+    setEditSheet(item)
     setEditVal(displayQty)
     setEditNote(item.note || '')
     setEditHarga(item.isManual ? String(item.hargaTerakhir || '') : '')
   }
 
-  // ── Detail view ──
+  // ── DETAIL VIEW ──
   if (detail || detailLoading) {
     const cats = detail ? [...new Set(detail.items.map(i => i.inventoryItem?.category || i.expenseItem?.category).filter(Boolean))].sort() : []
     const filtered = detail ? detail.items.filter(i => {
       const matchCat = !filterCat || (i.inventoryItem?.category || i.expenseItem?.category) === filterCat
-      const matchBelum = !filterSelisih || i.qtyActual === 0
+      const matchBelum = !filterBelum || i.qtyActual === 0
       const matchSearch = !search || (i.inventoryItem?.name || i.itemName || '').toLowerCase().includes(search.toLowerCase())
       return matchCat && matchBelum && matchSearch
     }).sort((a, b) => {
-      if (!sortDetail.key) return 0
-      let va, vb
-      if (sortDetail.key === 'name') { va = (a.inventoryItem?.name || a.itemName || '').toLowerCase(); vb = (b.inventoryItem?.name || b.itemName || '').toLowerCase() }
-      else if (sortDetail.key === 'category') { va = (a.inventoryItem?.category || a.expenseItem?.category || '').toLowerCase(); vb = (b.inventoryItem?.category || b.expenseItem?.category || '').toLowerCase() }
-      else if (sortDetail.key === 'qty') { va = a.qtyActual; vb = b.qtyActual }
-      else if (sortDetail.key === 'harga') { va = a.hargaTerakhir || 0; vb = b.hargaTerakhir || 0 }
-      else if (sortDetail.key === 'nilai') { va = a.qtyActual * (a.hargaTerakhir || 0); vb = b.qtyActual * (b.hargaTerakhir || 0) }
-      if (va < vb) return -1 * sortDetail.dir
-      if (va > vb) return 1 * sortDetail.dir
-      return 0
+      // Belum diisi dulu, lalu alphabetical
+      if (a.qtyActual === 0 && b.qtyActual !== 0) return -1
+      if (a.qtyActual !== 0 && b.qtyActual === 0) return 1
+      return (a.inventoryItem?.name || a.itemName || '').localeCompare(b.inventoryItem?.name || b.itemName || '', 'id')
     }) : []
     const isDraft = detail?.status === 'DRAFT'
+    const sudahDiisi = detail ? detail.items.filter(i => i.qtyActual > 0).length : 0
+    const belumDiisi = detail ? detail.items.filter(i => i.qtyActual === 0).length : 0
+    const pct = detail?.items.length ? Math.round(sudahDiisi / detail.items.length * 100) : 0
 
     return (
       <div className="page">
         <Sidebar />
-        <main className="main">
-          <div className="topbar">
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <button onClick={() => setDetail(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', padding: '4px 0' }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
-                  Kembali
-                </button>
-                <span style={{ color: 'var(--border)' }}>/</span>
-                <div className="topbar-title">Detail Opname</div>
+        <main className="main" style={{ paddingBottom: isDraft ? '80px' : '16px' }}>
+
+          {/* Topbar */}
+          <div className="topbar" style={{ flexWrap: 'wrap', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+              <button onClick={() => setDetail(null)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '13px', padding: '4px 0', flexShrink: 0 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+                <span className="hide-mobile">Kembali</span>
+              </button>
+              <div style={{ minWidth: 0 }}>
+                <div className="topbar-title" style={{ fontSize: '14px' }}>Detail Opname</div>
+                {detail && (
+                  <div className="topbar-sub" style={{ fontSize: '11px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {fmtDateShort(detail.date)} · {detail.user?.name} ·{' '}
+                    <span style={{ color: detail.status === 'SELESAI' ? '#10B981' : '#F59E0B', fontWeight: 700 }}>{detail.status}</span>
+                  </div>
+                )}
               </div>
-              {detail && (
-                <div className="topbar-sub">
-                  {fmtDate(detail.date)} · oleh {detail.user?.name} ·{' '}
-                  <span style={{ color: detail.status === 'SELESAI' ? '#10B981' : '#F59E0B', fontWeight: 700 }}>{detail.status}</span>
-                  {detail.note && <> · {detail.note}</>}
-                </div>
-              )}
             </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
               {detail && isDraft && (
                 <>
-                  <button className="btn btn-ghost" onClick={handleSyncManual} disabled={syncing}>
+                  <button className="btn btn-ghost" onClick={handleSyncManual} disabled={syncing} title="Sync Item Manual" style={{ padding: '6px 10px' }}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.5"/></svg>
-                    {syncing ? 'Menyinkron...' : 'Sync Item Manual'}
+                    <span className="hide-mobile">{syncing ? 'Sync...' : 'Sync'}</span>
                   </button>
-                  <button className="btn btn-ghost" onClick={() => setShowAddManual(true)}>
+                  <button className="btn btn-ghost" onClick={() => setShowAddManual(true)} style={{ padding: '6px 10px' }} title="Tambah Manual">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                    Tambah Manual
-                  </button>
-                  <button className="btn btn-primary" onClick={handleFinish} disabled={finishing} style={{ background: '#10B981', borderColor: '#10B981' }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
-                    {finishing ? 'Menyimpan...' : 'Selesaikan Opname'}
+                    <span className="hide-mobile">Manual</span>
                   </button>
                 </>
               )}
-              <button className="btn btn-ghost" onClick={downloadOpnameDetailCSV} disabled={!detail}>
+              <button className="btn btn-ghost" onClick={downloadOpnameDetailCSV} disabled={!detail} style={{ padding: '6px 10px' }} title="Export CSV">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                Export CSV
               </button>
               {detail && !isDraft && (
-                <button className="btn btn-ghost" onClick={handleReopen} disabled={reopening}>
+                <button className="btn btn-ghost" onClick={handleReopen} disabled={reopening} style={{ padding: '6px 10px' }} title="Edit Opname">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                  {reopening ? 'Membuka...' : 'Edit Opname'}
+                  <span className="hide-mobile">{reopening ? 'Membuka...' : 'Edit'}</span>
                 </button>
               )}
             </div>
@@ -336,294 +309,367 @@ export default function StockOpnamePage() {
               <div style={{ padding: '60px', textAlign: 'center', color: 'var(--muted)' }}>Memuat...</div>
             ) : detail && (
               <>
-                {/* Summary cards */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px', marginBottom: '20px' }}>
-                  {[
-                    { label: 'Total Item', val: detail.items.length, color: '#4A7CC7' },
-                    { label: 'Sudah Diisi', val: detail.items.filter(i => i.qtyActual > 0).length, color: '#10B981' },
-                    { label: 'Belum Diisi', val: detail.items.filter(i => i.qtyActual === 0).length, color: '#F59E0B' },
-                    { label: 'Total Nilai', val: fmtRp(detail.items.reduce((s, i) => s + (i.qtyActual * (i.hargaTerakhir || 0)), 0)), color: '#8B5CF6', isText: true },
-                  ].map(s => (
-                    <div key={s.label} className="card" style={{ padding: '14px 18px' }}>
-                      <div style={{ fontSize: s.isText ? '16px' : '22px', fontWeight: '800', color: s.color }}>{s.val}</div>
-                      <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '2px' }}>{s.label}</div>
+                {/* Progress bar + summary */}
+                <div className="card" style={{ padding: '14px 16px', marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text)' }}>
+                      Progress: <span style={{ color: '#10B981' }}>{sudahDiisi}</span> / {detail.items.length} item
                     </div>
-                  ))}
+                    <div style={{ fontSize: '12px', fontWeight: '800', color: pct === 100 ? '#10B981' : '#F59E0B' }}>{pct}%</div>
+                  </div>
+                  <div style={{ height: '8px', background: 'var(--surface2)', borderRadius: '99px', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${pct}%`, background: pct === 100 ? '#10B981' : '#F59E0B', borderRadius: '99px', transition: 'width 0.4s ease' }} />
+                  </div>
+                  <div style={{ display: 'flex', gap: '16px', marginTop: '10px', flexWrap: 'wrap' }}>
+                    {[
+                      { label: 'Belum Diisi', val: belumDiisi, color: '#F59E0B' },
+                      { label: 'Total Nilai', val: fmtRp(detail.items.reduce((s, i) => s + (i.qtyActual * (i.hargaTerakhir || 0)), 0)), color: '#8B5CF6' },
+                    ].map(s => (
+                      <div key={s.label}>
+                        <div style={{ fontSize: '11px', color: 'var(--muted)' }}>{s.label}</div>
+                        <div style={{ fontSize: '15px', fontWeight: '800', color: s.color }}>{s.val}</div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
-                {/* Filter */}
-                <div className="card" style={{ padding: '12px 16px', marginBottom: '16px', display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <div style={{ position: 'relative' }}>
-                    <svg style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', pointerEvents: 'none' }} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                    <input className="input" style={{ paddingLeft: '32px', width: '200px' }} placeholder="Cari nama barang..." value={search} onChange={e => setSearch(e.target.value)} />
+                {/* Filter bar — sticky di mobile */}
+                <div style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--bg)', paddingBottom: '8px', marginBottom: '4px' }}>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div style={{ position: 'relative', flex: '1 1 160px', minWidth: '120px' }}>
+                      <svg style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', pointerEvents: 'none' }} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                      <input className="input" style={{ paddingLeft: '32px', width: '100%', fontSize: '14px', height: '40px' }}
+                        placeholder="Cari barang..." value={search} onChange={e => setSearch(e.target.value)} />
+                    </div>
+                    <select className="input" style={{ flex: '0 1 140px', minWidth: '100px', fontSize: '13px', height: '40px' }}
+                      value={filterCat} onChange={e => setFilterCat(e.target.value)}>
+                      <option value="">Semua Kategori</option>
+                      {cats.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <button onClick={() => setFilterBelum(v => !v)}
+                      style={{ height: '40px', padding: '0 12px', borderRadius: '8px', border: `1.5px solid ${filterBelum ? '#F59E0B' : 'var(--border)'}`, background: filterBelum ? '#FFFBEB' : 'var(--surface)', color: filterBelum ? '#D97706' : 'var(--muted)', fontWeight: '700', fontSize: '12px', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                      {filterBelum ? '● Belum' : 'Belum saja'}
+                    </button>
+                    <span style={{ fontSize: '11px', color: 'var(--muted)', flexShrink: 0 }}>{filtered.length} item</span>
                   </div>
-                  <select className="input" style={{ width: 'auto' }} value={filterCat} onChange={e => setFilterCat(e.target.value)}>
-                    <option value="">Semua Kategori</option>
-                    {cats.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', cursor: 'pointer', userSelect: 'none' }}>
-                    <input type="checkbox" checked={filterSelisih} onChange={e => setFilterSelisih(e.target.checked)} style={{ width: '15px', height: '15px', cursor: 'pointer' }} />
-                    Belum diisi saja
-                  </label>
-                  <span style={{ marginLeft: 'auto', fontSize: '12px', color: 'var(--muted)' }}>{filtered.length} item</span>
                 </div>
 
-                {/* Tabel */}
-                <div className="card" style={{ overflow: 'hidden' }}>
-                  <div style={{ overflowX: 'auto' }}>
-                    <table className="table">
-                      <thead>
-                        <tr>
-                          {[['name','Nama Barang'],['category','Kategori']].map(([k,l]) => (
-                            <th key={k} style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSortDetail(k)}>
-                              {l} {sortDetail.key === k ? (sortDetail.dir === 1 ? '↑' : '↓') : <span style={{ color: 'var(--border)' }}>↕</span>}
-                            </th>
-                          ))}
-                          <th style={{ textAlign: 'center' }}>Stok Sebelumnya</th>
-                          <th style={{ textAlign: 'center', cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSortDetail('qty')}>
-                            Qty Saat Ini {sortDetail.key === 'qty' ? (sortDetail.dir === 1 ? '↑' : '↓') : <span style={{ color: 'var(--border)' }}>↕</span>}
-                          </th>
-                          <th style={{ textAlign: 'right', cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSortDetail('harga')}>
-                            Harga Satuan {sortDetail.key === 'harga' ? (sortDetail.dir === 1 ? '↑' : '↓') : <span style={{ color: 'var(--border)' }}>↕</span>}
-                          </th>
-                          <th style={{ textAlign: 'right', cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSortDetail('nilai')}>
-                            Nilai Stok {sortDetail.key === 'nilai' ? (sortDetail.dir === 1 ? '↑' : '↓') : <span style={{ color: 'var(--border)' }}>↕</span>}
-                          </th>
-                          <th>Catatan</th>
-                          {isDraft && <th></th>}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filtered.length === 0 ? (
-                          <tr><td colSpan={isDraft ? 8 : 7} style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)' }}>Tidak ada item</td></tr>
-                        ) : filtered.map(item => {
-                          const isEditing = editingId === item.id
-                          const harga = item.hargaTerakhir || 0
-                          const satuanTampil = (item.satuanOpname && item.konversi) ? item.satuanOpname : (item.inventoryItem?.satuan || item.satuan)
-                          const qtyAktualTampil = (item.satuanOpname && item.konversi) ? item.qtyActual / item.konversi : item.qtyActual
-                          const qtySebelumnyaTampil = (item.satuanOpname && item.konversi && item.qtySebelumnya != null) ? item.qtySebelumnya / item.konversi : item.qtySebelumnya
-                          const qtyInputNow = isEditing ? (Number(editVal) || 0) : qtyAktualTampil
-                          // Nilai stok selalu pakai satuan asli × harga
-                          const qtyAsli = isEditing
-                            ? (item.konversi ? Number(editVal) * item.konversi : Number(editVal))
-                            : item.qtyActual
-                          const nilaiStok = qtyAsli * harga
-                          return (
-                            <tr key={item.id} style={{ background: item.qtyActual === 0 && !isEditing ? '#FFFBEB' : undefined }}>
-                              <td>
-                                <div style={{ fontWeight: '600', color: 'var(--text)' }}>{item.inventoryItem?.name || item.itemName}</div>
-                                {item.isManual && <span style={{ fontSize: '10px', background: 'var(--orange-light)', color: 'var(--orange)', padding: '1px 6px', borderRadius: '4px', fontWeight: '700' }}>Manual</span>}
-                              </td>
-                              <td>{item.inventoryItem?.category || item.expenseItem?.category ? <span className="badge badge-blue">{item.inventoryItem?.category || item.expenseItem?.category}</span> : null}</td>
-                              <td style={{ textAlign: 'center' }}>
-                                {qtySebelumnyaTampil !== null && qtySebelumnyaTampil !== undefined
-                                  ? <span className="badge badge-gray">{fmt(qtySebelumnyaTampil)} {satuanTampil}</span>
-                                  : <span style={{ color: 'var(--muted)', fontSize: '12px' }}>—</span>
-                                }
-                              </td>
-                              <td style={{ textAlign: 'center' }}>
-                                {isEditing ? (
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                    <input
-                                      className="input"
-                                      type="number"
-                                      step="any"
-                                      min="0"
-                                      value={editVal}
-                                      onChange={e => setEditVal(e.target.value)}
-                                      style={{ width: '80px', textAlign: 'center', padding: '4px 8px' }}
-                                      autoFocus
-                                      onKeyDown={e => { if (e.key === 'Enter') handleSaveItem(item.id); if (e.key === 'Escape') setEditingId(null) }}
-                                    />
-                                    <span style={{ fontSize: '11px', color: 'var(--muted)', whiteSpace: 'nowrap' }}>{satuanTampil}</span>
-                                    {item.satuanOpname && item.konversi && (
-                                      <span style={{ fontSize: '10px', color: 'var(--accent)', background: 'var(--accent-light)', padding: '1px 5px', borderRadius: '4px', whiteSpace: 'nowrap' }}>
-                                        = {fmt(Number(editVal) * item.konversi)} {item.inventoryItem?.satuan || item.satuan}
-                                      </span>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <span className="badge badge-purple" style={{ cursor: isDraft ? 'pointer' : 'default' }} onClick={() => isDraft && startEdit(item)}>
-                                    {fmt(qtyAktualTampil)} {satuanTampil}
-                                  </span>
-                                )}
-                              </td>
-                              <td style={{ textAlign: 'right', fontSize: '12px', color: 'var(--muted)' }}>
-                                {isEditing && item.isManual ? (
-                                  <div style={{ position: 'relative' }}>
-                                    <span style={{ position: 'absolute', left: '8px', top: '50%', transform: 'translateY(-50%)', fontSize: '10px', color: 'var(--muted)', fontWeight: '600', pointerEvents: 'none' }}>Rp</span>
-                                    <input className="input" type="number" step="any" min="0" placeholder="0" value={editHarga}
-                                      onChange={e => setEditHarga(e.target.value)}
-                                      style={{ width: '110px', padding: '4px 8px 4px 24px', fontSize: '12px', textAlign: 'right' }} />
-                                  </div>
-                                ) : harga > 0 ? fmtRp(harga) : <span style={{ color: 'var(--muted)' }}>—</span>}
-                              </td>
-                              <td style={{ textAlign: 'right' }}>
-                                {harga > 0 && qtyAsli > 0
-                                  ? <span style={{ fontWeight: '700', color: '#8B5CF6', fontSize: '13px' }}>{fmtRp(nilaiStok)}</span>
-                                  : <span style={{ color: 'var(--muted)', fontSize: '12px' }}>—</span>
-                                }
-                              </td>
-                              <td style={{ fontSize: '12px', color: 'var(--muted)' }}>
-                                {isEditing ? (
-                                  <input className="input" placeholder="Catatan..." value={editNote} onChange={e => setEditNote(e.target.value)} style={{ padding: '4px 8px', fontSize: '12px' }} />
-                                ) : item.note}
-                              </td>
-                              {isDraft && (
-                                <td>
-                                  {isEditing ? (
-                                    <div style={{ display: 'flex', gap: '4px' }}>
-                                      <button className="btn btn-primary" style={{ padding: '4px 10px', fontSize: '12px' }} onClick={() => handleSaveItem(item.id)} disabled={saving}>Simpan</button>
-                                      <button className="btn btn-ghost" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => setEditingId(null)}>Batal</button>
-                                    </div>
-                                  ) : (
-                                    <div style={{ display: 'flex', gap: '4px' }}>
-                                      <button className="btn" style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid #C7D4F0', padding: '4px 10px', fontSize: '12px' }} onClick={() => startEdit(item)}>Edit</button>
-                                      <button className="btn" style={{ background: item.isRequested ? '#FEF2F2' : '#FFF7ED', color: item.isRequested ? '#EF4444' : '#F59E0B', border: `1px solid ${item.isRequested ? '#FECACA' : '#FDE68A'}`, padding: '4px 8px', fontSize: '12px' }} onClick={() => openRequestModal(item)}>
-                                        {item.isRequested ? '✓ Request' : 'Request'}
-                                      </button>
-                                      {item.isManual && (
-                                        <button className="btn btn-danger" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => handleDeleteManualItem(item.id)}>Hapus</button>
-                                      )}
-                                    </div>
-                                  )}
-                                </td>
-                              )}
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                {/* Item cards */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {filtered.length === 0 ? (
+                    <div className="card" style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)' }}>Tidak ada item</div>
+                  ) : filtered.map(item => {
+                    const satuanTampil = (item.satuanOpname && item.konversi) ? item.satuanOpname : (item.inventoryItem?.satuan || item.satuan || '')
+                    const qtyTampil = (item.satuanOpname && item.konversi) ? item.qtyActual / item.konversi : item.qtyActual
+                    const qtySebelumnyaTampil = (item.satuanOpname && item.konversi && item.qtySebelumnya != null) ? item.qtySebelumnya / item.konversi : item.qtySebelumnya
+                    const harga = item.hargaTerakhir || 0
+                    const nilaiStok = item.qtyActual * harga
+                    const sudahIsi = item.qtyActual > 0
+                    const cat = item.inventoryItem?.category || item.expenseItem?.category
+                    return (
+                      <div key={item.id}
+                        onClick={() => isDraft && openEditSheet(item)}
+                        style={{
+                          background: 'var(--surface)',
+                          border: `1.5px solid ${sudahIsi ? 'var(--border)' : '#FDE68A'}`,
+                          borderRadius: '12px',
+                          padding: '12px 14px',
+                          cursor: isDraft ? 'pointer' : 'default',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          transition: 'border-color 0.15s',
+                          WebkitTapHighlightColor: 'transparent',
+                        }}>
+                        {/* Status dot */}
+                        <div style={{ width: '10px', height: '10px', borderRadius: '50%', flexShrink: 0, background: sudahIsi ? '#10B981' : '#F59E0B', marginTop: '2px' }} />
+
+                        {/* Info */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                            <span style={{ fontWeight: '700', fontSize: '14px', color: 'var(--text)' }}>
+                              {item.inventoryItem?.name || item.itemName}
+                            </span>
+                            {item.isManual && (
+                              <span style={{ fontSize: '10px', background: '#FFF7ED', color: '#D97706', border: '1px solid #FDE68A', padding: '1px 6px', borderRadius: '4px', fontWeight: '700', flexShrink: 0 }}>Manual</span>
+                            )}
+                            {item.isRequested && (
+                              <span style={{ fontSize: '10px', background: '#FEF2F2', color: '#EF4444', border: '1px solid #FECACA', padding: '1px 6px', borderRadius: '4px', fontWeight: '700', flexShrink: 0 }}>Request</span>
+                            )}
+                          </div>
+                          <div style={{ display: 'flex', gap: '10px', marginTop: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
+                            {cat && <span style={{ fontSize: '11px', color: '#4A7CC7', background: '#EBF1FB', border: '1px solid #C0D0E8', padding: '1px 6px', borderRadius: '4px' }}>{cat}</span>}
+                            {qtySebelumnyaTampil != null && (
+                              <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Sebelumnya: {fmt(qtySebelumnyaTampil)} {satuanTampil}</span>
+                            )}
+                            {nilaiStok > 0 && (
+                              <span style={{ fontSize: '11px', color: '#8B5CF6', fontWeight: '700' }}>{fmtRp(nilaiStok)}</span>
+                            )}
+                          </div>
+                          {item.note && (
+                            <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '3px', fontStyle: 'italic' }}>📝 {item.note}</div>
+                          )}
+                        </div>
+
+                        {/* Qty badge */}
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          <div style={{
+                            fontSize: '18px', fontWeight: '800',
+                            color: sudahIsi ? '#10B981' : '#F59E0B',
+                            lineHeight: 1,
+                          }}>
+                            {sudahIsi ? fmt(qtyTampil) : '—'}
+                          </div>
+                          <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>{satuanTampil}</div>
+                          {isDraft && (
+                            <div style={{ fontSize: '10px', color: 'var(--accent)', marginTop: '4px', fontWeight: '600' }}>Tap untuk isi</div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </>
             )}
           </div>
-        </main>
 
-      {/* Modal Tambah Item Manual */}
-      {showAddManual && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500, backdropFilter: 'blur(6px)' }}
-          onClick={e => { if (e.target === e.currentTarget) setShowAddManual(false) }}>
-          <div className="card fade-in" style={{ width: '400px', maxWidth: '96vw', overflow: 'hidden' }}>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(135deg, #D8E4F4, #E8EEF8)' }}>
-              <div style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text)' }}>Tambah Item Manual</div>
-              <button onClick={() => setShowAddManual(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '20px', lineHeight: 1 }}>×</button>
-            </div>
-            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
-              <div>
-                <label className="label">Nama Item</label>
-                <input className="input" placeholder="Nama barang..." value={manualItem.itemName}
-                  onChange={e => setManualItem(p => ({ ...p, itemName: e.target.value }))} autoFocus />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                <div>
-                  <label className="label">Satuan <span style={{ color: 'var(--muted)', fontWeight: '400' }}>(opsional)</span></label>
-                  <input className="input" placeholder="pcs, kg, liter..." value={manualItem.satuan}
-                    onChange={e => setManualItem(p => ({ ...p, satuan: e.target.value }))} />
-                </div>
-                <div>
-                  <label className="label">Harga/Satuan <span style={{ color: 'var(--muted)', fontWeight: '400' }}>(opsional)</span></label>
-                  <div style={{ position: 'relative' }}>
-                    <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '11px', color: 'var(--muted)', fontWeight: '600', pointerEvents: 'none' }}>Rp</span>
-                    <input className="input" type="number" step="any" min="0" placeholder="0" value={manualItem.hargaTerakhir}
-                      onChange={e => setManualItem(p => ({ ...p, hargaTerakhir: e.target.value }))}
-                      style={{ paddingLeft: '30px' }} />
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: '8px', background: 'var(--surface2)' }}>
-              <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setShowAddManual(false)}>Batal</button>
-              <button className="btn btn-primary" style={{ flex: 2, justifyContent: 'center' }} onClick={handleAddManual} disabled={addingManual}>
-                {addingManual ? 'Menambah...' : 'Tambah Item'}
+          {/* FAB Selesaikan di bawah */}
+          {detail && isDraft && (
+            <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: '12px 16px', background: 'var(--bg)', borderTop: '1px solid var(--border)', zIndex: 20, display: 'flex', gap: '10px' }}>
+              <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center', padding: '14px', fontSize: '14px', fontWeight: '800', background: '#10B981', borderColor: '#10B981' }}
+                onClick={handleFinish} disabled={finishing}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+                {finishing ? 'Menyimpan...' : 'Selesaikan Opname'}
               </button>
             </div>
-          </div>
-        </div>
-      )}
-      {/* Modal Request Item */}
-      {showRequestModal && requestingId && (() => {
-        const item = detail.items.find(i => i.id === requestingId)
-        const itemName = item?.inventoryItem?.name || item?.itemName
-        return (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 600, backdropFilter: 'blur(6px)' }}
-            onClick={e => { if (e.target === e.currentTarget) { setShowRequestModal(false); setRequestingId(null) } }}>
-            <div className="card fade-in" style={{ width: '360px', maxWidth: '96vw', overflow: 'hidden' }}>
-              <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', textAlign: 'center' }}>
-                <div style={{ width: '52px', height: '52px', borderRadius: '50%', background: item?.isRequested ? '#FEF2F2' : '#FFF7ED', border: `2px solid ${item?.isRequested ? '#FECACA' : '#FDE68A'}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={item?.isRequested ? '#EF4444' : '#F59E0B'} strokeWidth="2.5" strokeLinecap="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
-                </div>
-                <div>
-                  <div style={{ fontSize: '15px', fontWeight: '800', color: 'var(--text)', marginBottom: '4px' }}>
-                    {item?.isRequested ? 'Batalkan Request?' : 'Tandai Perlu Restock?'}
+          )}
+        </main>
+
+        {/* Bottom Sheet Edit Item */}
+        {editSheet && isDraft && (
+          <>
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', zIndex: 200 }}
+              onClick={() => setEditSheet(null)} />
+            <div style={{
+              position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 201,
+              background: 'var(--surface)',
+              borderRadius: '20px 20px 0 0',
+              boxShadow: '0 -8px 40px rgba(0,0,0,0.18)',
+              padding: '0 0 env(safe-area-inset-bottom)',
+              animation: 'slideUp 0.2s ease',
+            }}>
+              {/* Handle */}
+              <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 4px' }}>
+                <div style={{ width: '40px', height: '4px', background: 'var(--border)', borderRadius: '99px' }} />
+              </div>
+
+              <div style={{ padding: '8px 20px 20px' }}>
+                {/* Header */}
+                <div style={{ marginBottom: '16px' }}>
+                  <div style={{ fontSize: '16px', fontWeight: '800', color: 'var(--text)', lineHeight: 1.3 }}>
+                    {editSheet.inventoryItem?.name || editSheet.itemName}
                   </div>
-                  <div style={{ fontSize: '13px', color: 'var(--muted)' }}>{itemName}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '3px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    {(editSheet.inventoryItem?.category || editSheet.expenseItem?.category) && (
+                      <span>{editSheet.inventoryItem?.category || editSheet.expenseItem?.category}</span>
+                    )}
+                    {(() => {
+                      const qtySeb = (editSheet.satuanOpname && editSheet.konversi && editSheet.qtySebelumnya != null)
+                        ? editSheet.qtySebelumnya / editSheet.konversi : editSheet.qtySebelumnya
+                      const sat = (editSheet.satuanOpname && editSheet.konversi) ? editSheet.satuanOpname : (editSheet.inventoryItem?.satuan || editSheet.satuan || '')
+                      return qtySeb != null ? <span>Sebelumnya: {fmt(qtySeb)} {sat}</span> : null
+                    })()}
+                  </div>
                 </div>
-                {item?.isRequested && (
-                  <div style={{ padding: '8px 14px', background: '#FEF2F2', borderRadius: '8px', border: '1px solid #FECACA', fontSize: '12px', color: '#EF4444', fontWeight: '600', width: '100%' }}>
-                    Item ini sudah ditandai perlu restock
+
+                {/* Input Qty dengan tombol ± */}
+                {(() => {
+                  const satuanTampil = (editSheet.satuanOpname && editSheet.konversi) ? editSheet.satuanOpname : (editSheet.inventoryItem?.satuan || editSheet.satuan || '')
+                  return (
+                    <div style={{ marginBottom: '14px' }}>
+                      <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '8px' }}>
+                        Qty Aktual {satuanTampil && `(${satuanTampil})`}
+                      </label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <button onClick={() => setEditVal(v => String(Math.max(0, (Number(v) || 0) - 1)))}
+                          style={{ width: '48px', height: '48px', borderRadius: '12px', border: '1.5px solid var(--border)', background: 'var(--surface2)', fontSize: '22px', fontWeight: '300', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text)', flexShrink: 0 }}>
+                          −
+                        </button>
+                        <input
+                          ref={inputRef}
+                          type="number"
+                          inputMode="decimal"
+                          step="any"
+                          min="0"
+                          value={editVal}
+                          onChange={e => setEditVal(e.target.value)}
+                          style={{ flex: 1, textAlign: 'center', fontSize: '28px', fontWeight: '800', color: 'var(--text)', border: '1.5px solid var(--border)', borderRadius: '12px', padding: '10px', fontFamily: 'inherit', background: 'var(--surface2)', outline: 'none', minWidth: 0 }}
+                          onFocus={e => e.target.select()}
+                        />
+                        <button onClick={() => setEditVal(v => String((Number(v) || 0) + 1))}
+                          style={{ width: '48px', height: '48px', borderRadius: '12px', border: '1.5px solid var(--border)', background: 'var(--surface2)', fontSize: '22px', fontWeight: '300', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text)', flexShrink: 0 }}>
+                          +
+                        </button>
+                      </div>
+                      {editSheet.satuanOpname && editSheet.konversi && (
+                        <div style={{ textAlign: 'center', marginTop: '6px', fontSize: '12px', color: 'var(--accent)', fontWeight: '600' }}>
+                          = {fmt((Number(editVal) || 0) * editSheet.konversi)} {editSheet.inventoryItem?.satuan || editSheet.satuan}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+
+                {/* Harga (item manual saja) */}
+                {editSheet.isManual && (
+                  <div style={{ marginBottom: '14px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '8px' }}>Harga / Satuan</label>
+                    <div style={{ position: 'relative' }}>
+                      <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '13px', color: 'var(--muted)', fontWeight: '600', pointerEvents: 'none' }}>Rp</span>
+                      <input type="number" inputMode="numeric" step="any" min="0" placeholder="0" value={editHarga}
+                        onChange={e => setEditHarga(e.target.value)}
+                        style={{ width: '100%', fontSize: '16px', fontWeight: '700', padding: '12px 12px 12px 36px', border: '1.5px solid var(--border)', borderRadius: '12px', fontFamily: 'inherit', background: 'var(--surface2)', color: 'var(--text)', outline: 'none' }} />
+                    </div>
                   </div>
                 )}
+
+                {/* Catatan */}
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block', marginBottom: '8px' }}>Catatan (opsional)</label>
+                  <input type="text" value={editNote} onChange={e => setEditNote(e.target.value)} placeholder="Catatan tambahan..."
+                    style={{ width: '100%', fontSize: '14px', padding: '12px', border: '1.5px solid var(--border)', borderRadius: '12px', fontFamily: 'inherit', background: 'var(--surface2)', color: 'var(--text)', outline: 'none' }} />
+                </div>
+
+                {/* Tombol aksi */}
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  {editSheet.isManual && (
+                    <button onClick={() => { handleDeleteManualItem(editSheet.id); setEditSheet(null) }}
+                      style={{ padding: '14px', borderRadius: '12px', border: '1.5px solid #FECACA', background: '#FEF2F2', color: '#EF4444', fontSize: '14px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+                      Hapus
+                    </button>
+                  )}
+                  <button onClick={() => {
+                    const item = detail.items.find(i => i.id === editSheet.id)
+                    const isReq = !item?.isRequested
+                    handleSaveRequest(editSheet.id).then(() => {})
+                  }}
+                    style={{ padding: '14px', borderRadius: '12px', border: `1.5px solid ${editSheet.isRequested ? '#FECACA' : '#FDE68A'}`, background: editSheet.isRequested ? '#FEF2F2' : '#FFFBEB', color: editSheet.isRequested ? '#EF4444' : '#D97706', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                    {editSheet.isRequested ? '✓ Request' : 'Request'}
+                  </button>
+                  <button onClick={() => setEditSheet(null)}
+                    style={{ flex: 1, padding: '14px', borderRadius: '12px', border: '1.5px solid var(--border)', background: 'var(--surface2)', color: 'var(--text2)', fontSize: '14px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+                    Batal
+                  </button>
+                  <button onClick={() => handleSaveItem(editSheet.id, editVal, editNote, editHarga)} disabled={saving}
+                    style={{ flex: 2, padding: '14px', borderRadius: '12px', border: 'none', background: '#10B981', color: '#fff', fontSize: '14px', fontWeight: '800', cursor: 'pointer', fontFamily: 'inherit' }}>
+                    {saving ? 'Menyimpan...' : 'Simpan'}
+                  </button>
+                </div>
               </div>
-              <div style={{ padding: '0 20px 20px', display: 'flex', gap: '8px' }}>
-                <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={() => { setShowRequestModal(false); setRequestingId(null) }}>Batal</button>
-                <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center', background: item?.isRequested ? '#EF4444' : '#F59E0B', borderColor: item?.isRequested ? '#EF4444' : '#F59E0B' }}
-                  onClick={() => handleSaveRequest(requestingId)}>
-                  {item?.isRequested ? 'Batalkan' : 'Tandai Request'}
+            </div>
+          </>
+        )}
+
+        {/* Modal Tambah Item Manual */}
+        {showAddManual && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 300, backdropFilter: 'blur(6px)' }}
+            onClick={e => { if (e.target === e.currentTarget) setShowAddManual(false) }}>
+            <div className="card fade-in" style={{ width: '100%', maxWidth: '500px', borderRadius: '20px 20px 0 0', overflow: 'hidden' }}>
+              <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(135deg, #D8E4F4, #E8EEF8)' }}>
+                <div style={{ fontSize: '15px', fontWeight: '800', color: 'var(--text)' }}>Tambah Item Manual</div>
+                <button onClick={() => setShowAddManual(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '22px', lineHeight: 1 }}>×</button>
+              </div>
+              <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                <div>
+                  <label className="label">Nama Item</label>
+                  <input className="input" style={{ fontSize: '16px' }} placeholder="Nama barang..." value={manualItem.itemName}
+                    onChange={e => setManualItem(p => ({ ...p, itemName: e.target.value }))} autoFocus />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div>
+                    <label className="label">Satuan</label>
+                    <input className="input" style={{ fontSize: '16px' }} placeholder="pcs, kg..." value={manualItem.satuan}
+                      onChange={e => setManualItem(p => ({ ...p, satuan: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="label">Harga/Satuan</label>
+                    <div style={{ position: 'relative' }}>
+                      <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '11px', color: 'var(--muted)', fontWeight: '600', pointerEvents: 'none' }}>Rp</span>
+                      <input className="input" type="number" inputMode="numeric" step="any" min="0" placeholder="0" value={manualItem.hargaTerakhir}
+                        onChange={e => setManualItem(p => ({ ...p, hargaTerakhir: e.target.value }))} style={{ paddingLeft: '30px', fontSize: '16px' }} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div style={{ padding: '14px 20px 20px', display: 'flex', gap: '8px', background: 'var(--surface2)' }}>
+                <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center', padding: '12px' }} onClick={() => setShowAddManual(false)}>Batal</button>
+                <button className="btn btn-primary" style={{ flex: 2, justifyContent: 'center', padding: '12px' }} onClick={handleAddManual} disabled={addingManual}>
+                  {addingManual ? 'Menambah...' : 'Tambah Item'}
                 </button>
               </div>
             </div>
           </div>
-        )
-      })()}
+        )}
 
-      {/* Popup Laporan Request */}
-      {showLaporanRequest && detail && (() => {
-        const requested = detail.items.filter(i => i.isRequested)
-        return (
-          <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 700, backdropFilter: 'blur(6px)' }}>
-            <div className="card fade-in" style={{ width: '420px', maxWidth: '96vw', overflow: 'hidden', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
-              {/* Header */}
-              <div style={{ padding: '20px 24px 16px', background: 'linear-gradient(135deg, #FFF7ED, #FFFBEB)', flexShrink: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: '#FDE68A', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2.5" strokeLinecap="round"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '15px', fontWeight: '800', color: 'var(--text)' }}>Daftar Restock</div>
-                    <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '1px' }}>{requested.length} item perlu restock</div>
-                  </div>
+        {/* Modal Request */}
+        {showRequestModal && requestingId && (() => {
+          const item = detail.items.find(i => i.id === requestingId)
+          return (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400, backdropFilter: 'blur(6px)' }}
+              onClick={e => { if (e.target === e.currentTarget) { setShowRequestModal(false); setRequestingId(null) } }}>
+              <div className="card fade-in" style={{ width: '340px', maxWidth: '96vw', overflow: 'hidden' }}>
+                <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '15px', fontWeight: '800', color: 'var(--text)' }}>{item?.isRequested ? 'Batalkan Request?' : 'Tandai Perlu Restock?'}</div>
+                  <div style={{ fontSize: '13px', color: 'var(--muted)' }}>{item?.inventoryItem?.name || item?.itemName}</div>
+                </div>
+                <div style={{ padding: '0 20px 20px', display: 'flex', gap: '8px' }}>
+                  <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center', padding: '12px' }} onClick={() => { setShowRequestModal(false); setRequestingId(null) }}>Batal</button>
+                  <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center', padding: '12px', background: item?.isRequested ? '#EF4444' : '#F59E0B', borderColor: item?.isRequested ? '#EF4444' : '#F59E0B' }}
+                    onClick={() => handleSaveRequest(requestingId)}>
+                    {item?.isRequested ? 'Batalkan' : 'Tandai'}
+                  </button>
                 </div>
               </div>
-              {/* List */}
-              <div style={{ overflowY: 'auto', flex: 1, padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {requested.map((item, i) => (
-                  <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'var(--surface2)', borderRadius: '10px', border: '1px solid var(--border)' }}>
-                    <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: '#FFF7ED', border: '1px solid #FDE68A', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '11px', fontWeight: '800', color: '#D97706' }}>{i + 1}</div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.inventoryItem?.name || item.itemName}</div>
-                      {(item.expenseItem?.category || item.inventoryItem?.category) && (
-                        <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '1px' }}>{item.expenseItem?.category || item.inventoryItem?.category}</div>
-                      )}
+            </div>
+          )
+        })()}
+
+        {/* Popup Laporan Request */}
+        {showLaporanRequest && detail && (() => {
+          const requested = detail.items.filter(i => i.isRequested)
+          return (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500, backdropFilter: 'blur(6px)' }}>
+              <div className="card fade-in" style={{ width: '420px', maxWidth: '96vw', overflow: 'hidden', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ padding: '20px 24px 16px', background: 'linear-gradient(135deg, #FFF7ED, #FFFBEB)', flexShrink: 0 }}>
+                  <div style={{ fontSize: '15px', fontWeight: '800', color: 'var(--text)' }}>Daftar Restock ({requested.length} item)</div>
+                </div>
+                <div style={{ overflowY: 'auto', flex: 1, padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  {requested.map((item, i) => (
+                    <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'var(--surface2)', borderRadius: '10px', border: '1px solid var(--border)' }}>
+                      <span style={{ fontSize: '11px', fontWeight: '800', color: '#D97706', width: '20px', flexShrink: 0 }}>{i + 1}</span>
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text)' }}>{item.inventoryItem?.name || item.itemName}</div>
+                        {(item.expenseItem?.category || item.inventoryItem?.category) && (
+                          <div style={{ fontSize: '11px', color: 'var(--muted)' }}>{item.expenseItem?.category || item.inventoryItem?.category}</div>
+                        )}
+                      </div>
                     </div>
-                    <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#F59E0B', flexShrink: 0 }} />
-                  </div>
-                ))}
-              </div>
-              {/* Footer */}
-              <div style={{ padding: '14px 16px', borderTop: '1px solid var(--border)', background: 'var(--surface2)', flexShrink: 0 }}>
-                <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', background: '#F59E0B', borderColor: '#F59E0B' }} onClick={() => setShowLaporanRequest(false)}>Tutup</button>
+                  ))}
+                </div>
+                <div style={{ padding: '14px 16px', borderTop: '1px solid var(--border)', background: 'var(--surface2)', flexShrink: 0 }}>
+                  <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '12px', background: '#F59E0B', borderColor: '#F59E0B' }} onClick={() => setShowLaporanRequest(false)}>Tutup</button>
+                </div>
               </div>
             </div>
-          </div>
-        )
-      })()}
+          )
+        })()}
       </div>
     )
   }
 
-  // ── List view ──
+  // ── LIST VIEW ──
+  const sortedOpnames = [...opnames].sort((a, b) => new Date(b.date) - new Date(a.date))
+
   return (
     <div className="page">
       <Sidebar />
@@ -633,134 +679,134 @@ export default function StockOpnamePage() {
             <div className="topbar-title">Stock Opname</div>
             <div className="topbar-sub">{total} opname tercatat</div>
           </div>
-          <button className="btn btn-ghost" onClick={downloadOpnameListCSV} disabled={opnames.length === 0}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Export CSV
-          </button>
-          <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Buat Opname
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button className="btn btn-ghost" onClick={downloadOpnameListCSV} disabled={opnames.length === 0} style={{ padding: '6px 10px' }} title="Export CSV">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span className="hide-mobile">Export</span>
+            </button>
+            <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              Buat Opname
+            </button>
+          </div>
         </div>
 
         <div className="content">
-          <div className="card" style={{ overflow: 'hidden' }}>
-            <div style={{ overflowX: 'auto' }}>
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSortList('date')}>
-                      Tanggal {sortList.key === 'date' ? (sortList.dir === 1 ? '↑' : '↓') : <span style={{ color: 'var(--border)' }}>↕</span>}
-                    </th>
-                    <th>Oleh</th>
-                    <th style={{ textAlign: 'center', cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSortList('totalItems')}>
-                      Total Item {sortList.key === 'totalItems' ? (sortList.dir === 1 ? '↑' : '↓') : <span style={{ color: 'var(--border)' }}>↕</span>}
-                    </th>
-                    <th style={{ textAlign: 'center', cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSortList('selisih')}>
-                      Selisih {sortList.key === 'selisih' ? (sortList.dir === 1 ? '↑' : '↓') : <span style={{ color: 'var(--border)' }}>↕</span>}
-                    </th>
-                    <th style={{ textAlign: 'center', cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSortList('status')}>
-                      Status {sortList.key === 'status' ? (sortList.dir === 1 ? '↑' : '↓') : <span style={{ color: 'var(--border)' }}>↕</span>}
-                    </th>
-                    <th style={{ textAlign: 'right', cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSortList('totalNilai')}>
-                      Total Nilai {sortList.key === 'totalNilai' ? (sortList.dir === 1 ? '↑' : '↓') : <span style={{ color: 'var(--border)' }}>↕</span>}
-                    </th>
-                    <th>Catatan</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr><td colSpan={7} style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)' }}>Memuat...</td></tr>
-                  ) : opnames.length === 0 ? (
-                    <tr><td colSpan={8} style={{ padding: '48px', textAlign: 'center', color: 'var(--muted)' }}>
-                      <div style={{ fontSize: '32px', marginBottom: '8px' }}>📋</div>
-                      <div>Belum ada data stock opname</div>
-                    </td></tr>
-                  ) : opnames.map(o => o).sort((a, b) => {
-                    let va, vb
-                    if (sortList.key === 'date') { va = new Date(a.date); vb = new Date(b.date) }
-                    else if (sortList.key === 'totalItems') { va = a.totalItems; vb = b.totalItems }
-                    else if (sortList.key === 'selisih') { va = a.itemsSelisih; vb = b.itemsSelisih }
-                    else if (sortList.key === 'status') { va = a.status; vb = b.status }
-                    else if (sortList.key === 'totalNilai') { va = a.totalNilai; vb = b.totalNilai }
-                    else { va = 0; vb = 0 }
-                    if (va < vb) return -1 * sortList.dir
-                    if (va > vb) return 1 * sortList.dir
-                    return 0
-                  }).map(o => (
-                    <tr key={o.id}>
-                      <td style={{ fontWeight: '600' }}>{fmtDate(o.date)}</td>
-                      <td>{o.user?.name}</td>
-                      <td style={{ textAlign: 'center' }}><span className="badge badge-gray">{o.totalItems}</span></td>
-                      <td style={{ textAlign: 'center' }}>
-                        {o.itemsSelisih > 0
-                          ? <span className="badge" style={{ background: '#FEF2F2', color: '#EF4444', border: '1px solid #FECACA' }}>{o.itemsSelisih} item</span>
-                          : <span className="badge" style={{ background: '#F0FDF4', color: '#10B981', border: '1px solid #A7F3D0' }}>Sesuai</span>
-                        }
-                      </td>
-                      <td style={{ textAlign: 'center' }}>
-                        <span className="badge" style={{
-                          background: o.status === 'SELESAI' ? '#F0FDF4' : '#FFFBEB',
-                          color: o.status === 'SELESAI' ? '#10B981' : '#F59E0B',
-                          border: `1px solid ${o.status === 'SELESAI' ? '#A7F3D0' : '#FDE68A'}`,
-                          fontWeight: 700
-                        }}>{o.status}</span>
-                      </td>
-                      <td style={{ textAlign: 'right', fontWeight: '700', color: '#8B5CF6', fontSize: '13px' }}>
-                        {o.totalNilai > 0 ? fmtRp(o.totalNilai) : <span style={{ color: 'var(--muted)', fontWeight: '400' }}>—</span>}
-                      </td>
-                      <td style={{ fontSize: '12px', color: 'var(--muted)' }}>{o.note}</td>
-                      <td>
-                        <div style={{ display: 'flex', gap: '5px' }}>
-                          <button className="btn" style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid #C7D4F0', padding: '5px 10px', fontSize: '12px' }} onClick={() => openDetail(o.id)}>
-                            {o.status === 'DRAFT' ? 'Isi' : 'Lihat'}
-                          </button>
-                          <button className="btn" style={{ background: '#F0FDF4', color: '#22C55E', border: '1px solid #A7F3D0', padding: '5px 10px', fontSize: '12px' }}
-                            onClick={() => { setWaOpname(o); setShowSendWA(true); setWaStatus(null); setWaTargets({ admin: false, group: false }) }}>
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                          </button>
-                          <button className="btn btn-danger" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => handleDelete(o.id)}>Hapus</button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {loading ? (
+            <div style={{ padding: '60px', textAlign: 'center', color: 'var(--muted)' }}>Memuat...</div>
+          ) : opnames.length === 0 ? (
+            <div className="card" style={{ padding: '48px', textAlign: 'center', color: 'var(--muted)' }}>
+              <div style={{ fontSize: '32px', marginBottom: '8px' }}>📋</div>
+              <div>Belum ada data stock opname</div>
             </div>
-            {!loading && totalPages > 1 && (
-              <div style={{ padding: '12px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'center' }}>
-                <button className="btn btn-ghost" style={{ padding: '5px 12px' }} disabled={page === 1} onClick={() => setPage(p => p - 1)}>‹ Prev</button>
-                <span style={{ fontSize: '13px', color: 'var(--muted)' }}>Hal {page} / {totalPages}</span>
-                <button className="btn btn-ghost" style={{ padding: '5px 12px' }} disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>Next ›</button>
-              </div>
-            )}
-          </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {sortedOpnames.map(o => {
+                const isDraft = o.status === 'DRAFT'
+                const pct = o.totalItems ? Math.round((o.totalItems - o.itemsSelisih) / o.totalItems * 100) : 0
+                return (
+                  <div key={o.id} className="card" style={{ padding: '14px 16px', cursor: 'pointer' }}
+                    onClick={() => openDetail(o.id)}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                      {/* Status icon */}
+                      <div style={{ width: '40px', height: '40px', borderRadius: '12px', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: isDraft ? '#FFFBEB' : '#F0FDF4', border: `1.5px solid ${isDraft ? '#FDE68A' : '#A7F3D0'}` }}>
+                        {isDraft
+                          ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="2.5" strokeLinecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                          : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+                        }
+                      </div>
+                      {/* Info */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                          <div>
+                            <div style={{ fontWeight: '800', fontSize: '14px', color: 'var(--text)' }}>{fmtDateShort(o.date)}</div>
+                            <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '2px' }}>{o.user?.name} · {o.totalItems} item</div>
+                          </div>
+                          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                            <span style={{ fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '6px', background: isDraft ? '#FFFBEB' : '#F0FDF4', color: isDraft ? '#D97706' : '#10B981', border: `1px solid ${isDraft ? '#FDE68A' : '#A7F3D0'}` }}>
+                              {o.status}
+                            </span>
+                          </div>
+                        </div>
+                        {/* Progress bar */}
+                        {isDraft && o.totalItems > 0 && (
+                          <div style={{ marginTop: '8px' }}>
+                            <div style={{ height: '5px', background: '#F3F4F6', borderRadius: '99px', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${pct}%`, background: '#F59E0B', borderRadius: '99px' }} />
+                            </div>
+                            <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '3px' }}>
+                              {o.totalItems - o.itemsSelisih} / {o.totalItems} item terisi
+                            </div>
+                          </div>
+                        )}
+                        {/* Stats */}
+                        <div style={{ display: 'flex', gap: '12px', marginTop: '8px', flexWrap: 'wrap' }}>
+                          {o.totalNilai > 0 && (
+                            <span style={{ fontSize: '12px', fontWeight: '700', color: '#8B5CF6' }}>{fmtRp(o.totalNilai)}</span>
+                          )}
+                          {o.itemsSelisih > 0 && (
+                            <span style={{ fontSize: '11px', color: '#EF4444', background: '#FEF2F2', border: '1px solid #FECACA', padding: '1px 6px', borderRadius: '5px', fontWeight: '600' }}>{o.itemsSelisih} selisih</span>
+                          )}
+                          {o.note && <span style={{ fontSize: '11px', color: 'var(--muted)', fontStyle: 'italic' }}>📝 {o.note}</span>}
+                        </div>
+                      </div>
+                    </div>
+                    {/* Tombol aksi */}
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '12px', paddingTop: '10px', borderTop: '1px solid var(--border)' }}
+                      onClick={e => e.stopPropagation()}>
+                      <button className="btn" style={{ flex: 1, justifyContent: 'center', background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid #C7D4F0', padding: '8px', fontSize: '13px', fontWeight: '700' }}
+                        onClick={() => openDetail(o.id)}>
+                        {isDraft ? '✏️ Isi Opname' : '👁 Lihat'}
+                      </button>
+                      <button className="btn" style={{ padding: '8px 12px', background: '#F0FDF4', color: '#22C55E', border: '1px solid #A7F3D0', fontSize: '13px' }}
+                        title="Kirim WA"
+                        onClick={() => { setWaOpname(o); setShowSendWA(true); setWaStatus(null); setWaTargets({ admin: false, group: false }) }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                      </button>
+                      <button className="btn btn-danger" style={{ padding: '8px 12px', fontSize: '13px' }}
+                        onClick={() => handleDelete(o.id)}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Pagination */}
+          {!loading && totalPages > 1 && (
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center', justifyContent: 'center', marginTop: '16px' }}>
+              <button className="btn btn-ghost" style={{ padding: '8px 16px' }} disabled={page === 1} onClick={() => setPage(p => p - 1)}>‹ Prev</button>
+              <span style={{ fontSize: '13px', color: 'var(--muted)' }}>Hal {page} / {totalPages}</span>
+              <button className="btn btn-ghost" style={{ padding: '8px 16px' }} disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>Next ›</button>
+            </div>
+          )}
         </div>
       </main>
 
       {/* Modal Buat Opname */}
       {showCreate && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400, backdropFilter: 'blur(6px)' }}
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 400, backdropFilter: 'blur(6px)' }}
           onClick={e => { if (e.target === e.currentTarget) setShowCreate(false) }}>
-          <div className="card fade-in" style={{ width: '420px', maxWidth: '96vw', overflow: 'hidden' }}>
+          <div className="card fade-in" style={{ width: '100%', maxWidth: '500px', borderRadius: '20px 20px 0 0', overflow: 'hidden' }}>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(135deg, #D8E4F4, #E8EEF8)' }}>
-              <div style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text)' }}>Buat Stock Opname</div>
-              <button onClick={() => setShowCreate(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '20px', lineHeight: 1 }}>×</button>
+              <div style={{ fontSize: '15px', fontWeight: '800', color: 'var(--text)' }}>Buat Stock Opname</div>
+              <button onClick={() => setShowCreate(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '22px', lineHeight: 1 }}>×</button>
             </div>
             <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <div>
                 <label className="label">Tanggal</label>
-                <input type="date" className="input" value={opnameDate} onChange={e => setOpnameDate(e.target.value)} />
+                <input type="date" className="input" style={{ fontSize: '16px' }} value={opnameDate} onChange={e => setOpnameDate(e.target.value)} />
               </div>
               <div>
                 <label className="label">Catatan <span style={{ color: 'var(--muted)', fontWeight: '400' }}>(opsional)</span></label>
-                <input className="input" placeholder="Misal: Opname bulanan Januari..." value={note} onChange={e => setNote(e.target.value)} autoFocus onKeyDown={e => e.key === 'Enter' && handleCreate()} />
+                <input className="input" style={{ fontSize: '16px' }} placeholder="Misal: Opname bulanan..." value={note} onChange={e => setNote(e.target.value)} autoFocus onKeyDown={e => e.key === 'Enter' && handleCreate()} />
               </div>
             </div>
-            <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: '8px', background: 'var(--surface2)' }}>
-              <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setShowCreate(false)}>Batal</button>
-              <button className="btn btn-primary" style={{ flex: 2, justifyContent: 'center' }} onClick={handleCreate} disabled={creating}>
+            <div style={{ padding: '14px 20px 24px', display: 'flex', gap: '8px', background: 'var(--surface2)' }}>
+              <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center', padding: '12px' }} onClick={() => setShowCreate(false)}>Batal</button>
+              <button className="btn btn-primary" style={{ flex: 2, justifyContent: 'center', padding: '12px' }} onClick={handleCreate} disabled={creating}>
                 {creating ? 'Membuat...' : 'Buat & Mulai Isi'}
               </button>
             </div>
@@ -777,40 +823,33 @@ export default function StockOpnamePage() {
               <div style={{ width: '40px', height: '40px', borderRadius: '12px', background: '#22C55E', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
               </div>
-              <div>
+              <div style={{ flex: 1 }}>
                 <div style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text)' }}>Kirim ke WhatsApp</div>
-                <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '1px' }}>PDF akan digenerate otomatis</div>
+                <div style={{ fontSize: '11px', color: 'var(--muted)' }}>PDF akan digenerate otomatis</div>
               </div>
-              {!waSending && <button onClick={() => setShowSendWA(false)} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '20px', lineHeight: 1 }}>×</button>}
+              {!waSending && <button onClick={() => setShowSendWA(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '22px', lineHeight: 1 }}>×</button>}
             </div>
             <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ padding: '10px 14px', background: 'var(--surface2)', borderRadius: '10px', border: '1px solid var(--border)', fontSize: '12px', color: 'var(--muted)' }}>
-                <div style={{ fontWeight: '700', color: 'var(--text)', marginBottom: '2px' }}>Stock Opname</div>
-                <div>{new Date(waOpname.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' })} · {waOpname.totalItems} item · {waOpname.status}</div>
-              </div>
-              {waStatus !== 'success' && (
-                <div>
-                  <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--text)', marginBottom: '10px' }}>Kirim ke:</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {[{ key: 'admin', label: 'Admin', desc: 'Pesan pribadi ke nomor admin', color: '#4A7CC7', bg: '#EFF4FF', bdr: '#C7D4F0' },
-                      { key: 'group', label: 'Grup', desc: 'Kirim ke grup WhatsApp', color: '#10B981', bg: '#F0FDF4', bdr: '#A7F3D0' }
-                    ].map(opt => (
-                      <label key={opt.key} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', borderRadius: '10px', border: '2px solid ' + (waTargets[opt.key] ? opt.bdr : 'var(--border)'), background: waTargets[opt.key] ? opt.bg : 'var(--surface)', cursor: 'pointer' }}>
-                        <input type="checkbox" checked={waTargets[opt.key]} onChange={e => setWaTargets(p => ({ ...p, [opt.key]: e.target.checked }))}
-                          style={{ width: '16px', height: '16px', accentColor: opt.color, cursor: 'pointer', flexShrink: 0 }} />
-                        <div>
-                          <div style={{ fontSize: '13px', fontWeight: '700', color: waTargets[opt.key] ? opt.color : 'var(--text)' }}>{opt.label}</div>
-                          <div style={{ fontSize: '11px', color: 'var(--muted)' }}>{opt.desc}</div>
-                        </div>
-                      </label>
-                    ))}
-                  </div>
+              {waStatus !== 'success' && waStatus !== 'sending' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {[{ key: 'admin', label: 'Admin', desc: 'Pesan pribadi ke nomor admin', color: '#4A7CC7', bg: '#EFF4FF', bdr: '#C7D4F0' },
+                    { key: 'group', label: 'Grup', desc: 'Kirim ke grup WhatsApp', color: '#10B981', bg: '#F0FDF4', bdr: '#A7F3D0' }
+                  ].map(opt => (
+                    <label key={opt.key} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px', borderRadius: '12px', border: `2px solid ${waTargets[opt.key] ? opt.bdr : 'var(--border)'}`, background: waTargets[opt.key] ? opt.bg : 'var(--surface)', cursor: 'pointer' }}>
+                      <input type="checkbox" checked={waTargets[opt.key]} onChange={e => setWaTargets(p => ({ ...p, [opt.key]: e.target.checked }))}
+                        style={{ width: '18px', height: '18px', accentColor: opt.color, cursor: 'pointer', flexShrink: 0 }} />
+                      <div>
+                        <div style={{ fontSize: '13px', fontWeight: '700', color: waTargets[opt.key] ? opt.color : 'var(--text)' }}>{opt.label}</div>
+                        <div style={{ fontSize: '11px', color: 'var(--muted)' }}>{opt.desc}</div>
+                      </div>
+                    </label>
+                  ))}
                 </div>
               )}
               {waStatus === 'sending' && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '14px', background: '#F0FDF4', borderRadius: '10px', border: '1px solid #A7F3D0' }}>
                   <span style={{ width: '18px', height: '18px', border: '2px solid #A7F3D0', borderTopColor: '#22C55E', borderRadius: '50%', animation: 'spin 0.7s linear infinite', display: 'inline-block', flexShrink: 0 }} />
-                  <div style={{ fontSize: '13px', color: '#15803D', fontWeight: '600' }}>Membuat PDF dan mengirim...</div>
+                  <div style={{ fontSize: '13px', color: '#15803D', fontWeight: '600' }}>Mengirim...</div>
                 </div>
               )}
               {waStatus === 'success' && (
@@ -828,13 +867,13 @@ export default function StockOpnamePage() {
                 </div>
               )}
             </div>
-            <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border)', background: 'var(--surface2)', display: 'flex', gap: '8px' }}>
+            <div style={{ padding: '14px 20px 20px', borderTop: '1px solid var(--border)', background: 'var(--surface2)', display: 'flex', gap: '8px' }}>
               {waStatus === 'success' ? (
-                <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center', background: '#22C55E', borderColor: '#22C55E' }} onClick={() => setShowSendWA(false)}>Tutup</button>
+                <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center', padding: '12px', background: '#22C55E', borderColor: '#22C55E' }} onClick={() => setShowSendWA(false)}>Tutup</button>
               ) : (
                 <>
-                  <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setShowSendWA(false)} disabled={waSending}>Batal</button>
-                  <button className="btn btn-primary" style={{ flex: 2, justifyContent: 'center', background: '#22C55E', borderColor: '#22C55E', opacity: (!waTargets.admin && !waTargets.group) ? 0.5 : 1 }}
+                  <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center', padding: '12px' }} onClick={() => setShowSendWA(false)} disabled={waSending}>Batal</button>
+                  <button className="btn btn-primary" style={{ flex: 2, justifyContent: 'center', padding: '12px', background: '#22C55E', borderColor: '#22C55E', opacity: (!waTargets.admin && !waTargets.group) ? 0.5 : 1 }}
                     onClick={handleSendWA} disabled={waSending || (!waTargets.admin && !waTargets.group)}>
                     {waSending ? 'Mengirim...' : 'Kirim PDF'}
                   </button>
@@ -844,8 +883,6 @@ export default function StockOpnamePage() {
           </div>
         </div>
       )}
-
-
     </div>
   )
 }

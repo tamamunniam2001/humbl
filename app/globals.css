@@ -459,3 +459,8 @@ input, select, textarea, button { font-family: inherit; }
   .table th { padding: 7px 10px; font-size: 10px; }
   .table td { padding: 8px 10px; font-size: 11px; }
 }
+
+/* ── Mobile utilities ── */
+@media (max-width: 600px) {
+  .hide-mobile { display: none !important; }
+}
