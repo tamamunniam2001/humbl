@@ -458,7 +458,7 @@ export default function StockOpnamePage() {
 
           {/* FAB Selesaikan di bawah */}
           {detail && isDraft && (
-            <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: '12px 16px', background: 'var(--bg)', borderTop: '1px solid var(--border)', zIndex: 20, display: 'flex', gap: '10px' }}>
+            <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, padding: '12px 16px', background: 'var(--bg)', borderTop: '1px solid var(--border)', zIndex: 60, display: 'flex', gap: '10px' }}>
               <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center', padding: '14px', fontSize: '14px', fontWeight: '800', background: '#10B981', borderColor: '#10B981' }}
                 onClick={handleFinish} disabled={finishing}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
