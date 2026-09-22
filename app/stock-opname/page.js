@@ -407,8 +407,19 @@ export default function StockOpnamePage() {
                           <div style={{ display: 'flex', gap: '10px', marginTop: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
                             {cat && <span style={{ fontSize: '11px', color: '#4A7CC7', background: '#EBF1FB', border: '1px solid #C0D0E8', padding: '1px 6px', borderRadius: '4px' }}>{cat}</span>}
                             {qtySebelumnyaTampil != null && (
-                              <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Sebelumnya: {fmt(qtySebelumnyaTampil)} {satuanTampil}</span>
+                              <span style={{ fontSize: '11px', color: 'var(--muted)' }}>Sblm: {fmt(qtySebelumnyaTampil)} {satuanTampil}</span>
                             )}
+                            {/* Selisih vs opname sebelumnya */}
+                            {qtySebelumnyaTampil != null && sudahIsi && (() => {
+                              const selisih = qtyTampil - qtySebelumnyaTampil
+                              if (selisih === 0) return <span style={{ fontSize: '10px', color: '#10B981', fontWeight: '700' }}>= sama</span>
+                              const naik = selisih > 0
+                              return (
+                                <span style={{ fontSize: '10px', fontWeight: '700', color: naik ? '#10B981' : '#EF4444' }}>
+                                  {naik ? '▲' : '▼'} {fmt(Math.abs(selisih))}
+                                </span>
+                              )
+                            })()}
                             {hargaPerSatuanTampil != null && (
                               <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
                                 {fmtRp(hargaPerSatuanTampil)}{labelSatuan ? `/${labelSatuan}` : ''}
@@ -477,22 +488,64 @@ export default function StockOpnamePage() {
 
               <div style={{ padding: '8px 20px 20px' }}>
                 {/* Header */}
-                <div style={{ marginBottom: '16px' }}>
+                <div style={{ marginBottom: '14px' }}>
                   <div style={{ fontSize: '16px', fontWeight: '800', color: 'var(--text)', lineHeight: 1.3 }}>
                     {editSheet.inventoryItem?.name || editSheet.itemName}
                   </div>
-                  <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '3px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    {(editSheet.inventoryItem?.category || editSheet.expenseItem?.category) && (
-                      <span>{editSheet.inventoryItem?.category || editSheet.expenseItem?.category}</span>
-                    )}
-                    {(() => {
-                      const qtySeb = (editSheet.satuanOpname && editSheet.konversi && editSheet.qtySebelumnya != null)
-                        ? editSheet.qtySebelumnya / editSheet.konversi : editSheet.qtySebelumnya
-                      const sat = (editSheet.satuanOpname && editSheet.konversi) ? editSheet.satuanOpname : (editSheet.inventoryItem?.satuan || editSheet.satuan || '')
-                      return qtySeb != null ? <span>Sebelumnya: {fmt(qtySeb)} {sat}</span> : null
-                    })()}
-                  </div>
+                  {(editSheet.inventoryItem?.category || editSheet.expenseItem?.category) && (
+                    <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>
+                      {editSheet.inventoryItem?.category || editSheet.expenseItem?.category}
+                    </div>
+                  )}
                 </div>
+
+                {/* Panel referensi opname sebelumnya */}
+                {(() => {
+                  const sat = (editSheet.satuanOpname && editSheet.konversi)
+                    ? editSheet.satuanOpname
+                    : (editSheet.inventoryItem?.satuan || editSheet.satuan || '')
+                  const qtySeb = (editSheet.satuanOpname && editSheet.konversi && editSheet.qtySebelumnya != null)
+                    ? editSheet.qtySebelumnya / editSheet.konversi
+                    : editSheet.qtySebelumnya
+                  const nilaiSeb = qtySeb != null
+                    ? (editSheet.qtySebelumnya ?? 0) * (editSheet.hargaPerSatuanDasar ?? editSheet.hargaTerakhir ?? 0)
+                    : null
+                  const qtyInput = Number(editVal) || 0
+                  const selisih = qtySeb != null ? qtyInput - qtySeb : null
+                  const prevDate = detail?.prevOpnameInfo?.date
+                    ? new Date(detail.prevOpnameInfo.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Jakarta' })
+                    : null
+
+                  if (qtySeb == null) return null
+
+                  return (
+                    <div style={{ marginBottom: '14px', padding: '10px 14px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '12px' }}>
+                      <div style={{ fontSize: '10px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
+                        Opname Sebelumnya{prevDate ? ` · ${prevDate}` : ''}
+                      </div>
+                      <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                        <div>
+                          <div style={{ fontSize: '10px', color: 'var(--muted)' }}>Qty</div>
+                          <div style={{ fontSize: '16px', fontWeight: '800', color: 'var(--text2)' }}>{fmt(qtySeb)} <span style={{ fontSize: '11px', fontWeight: '500' }}>{sat}</span></div>
+                        </div>
+                        {nilaiSeb != null && nilaiSeb > 0 && (
+                          <div>
+                            <div style={{ fontSize: '10px', color: 'var(--muted)' }}>Nilai</div>
+                            <div style={{ fontSize: '14px', fontWeight: '700', color: '#8B5CF6' }}>{fmtRp(Math.round(nilaiSeb))}</div>
+                          </div>
+                        )}
+                        {selisih !== null && (
+                          <div style={{ marginLeft: 'auto' }}>
+                            <div style={{ fontSize: '10px', color: 'var(--muted)' }}>Selisih</div>
+                            <div style={{ fontSize: '16px', fontWeight: '800', color: selisih === 0 ? '#10B981' : selisih > 0 ? '#4A7CC7' : '#EF4444' }}>
+                              {selisih === 0 ? '= sama' : `${selisih > 0 ? '+' : ''}${fmt(selisih)}`}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })()}
 
                 {/* Input Qty dengan tombol ± */}
                 {(() => {

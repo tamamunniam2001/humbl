@@ -110,7 +110,13 @@ export async function GET(req, { params }) {
     }
   })
 
-  return NextResponse.json({ ...opname, items })
+  return NextResponse.json({
+    ...opname,
+    items,
+    prevOpnameInfo: prevOpname
+      ? { id: prevOpname.id, date: prevOpname.date }
+      : null,
+  })
 }
 
 export async function PATCH(req, { params }) {
