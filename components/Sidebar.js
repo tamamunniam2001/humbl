@@ -58,6 +58,10 @@ const allNavGroups = [
   },
 ]
 
+// Item yang ditampilkan di bottom nav (mobile) — max 4 + tombol More
+const BOTTOM_NAV_HREFS_ADMIN    = ['/dashboard', '/kasir', '/kasir/laporan', '/stock-opname']
+const BOTTOM_NAV_HREFS_CASHIER  = ['/kasir', '/kasir/laporan', '/absensi', '/pengeluaran']
+
 export default function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
@@ -78,6 +82,13 @@ export default function Sidebar() {
     }))
     .filter(g => g.items.length > 0)
 
+  // Item untuk bottom nav
+  const pinnedHrefs = role === 'ADMIN' ? BOTTOM_NAV_HREFS_ADMIN : BOTTOM_NAV_HREFS_CASHIER
+  const allItems = navGroups.flatMap(g => g.items)
+  const bottomNavItems = pinnedHrefs
+    .map(href => allItems.find(i => i.href === href))
+    .filter(Boolean)
+
   useEffect(() => {
     const saved = localStorage.getItem('sidebar_collapsed')
     if (saved !== null) setCollapsed(saved === 'true')
@@ -87,9 +98,11 @@ export default function Sidebar() {
         initial[g.label] = true
     })
     setOpenGroups(initial)
-    // sync dark state
     setDark(document.documentElement.classList.contains('dark'))
   }, [pathname])
+
+  // Tutup drawer saat navigasi
+  useEffect(() => { setMobileOpen(false) }, [pathname])
 
   function toggleDark() {
     const next = !dark
@@ -116,28 +129,14 @@ export default function Sidebar() {
 
   return (
     <>
-      {/* Mobile overlay */}
-      <div className={`cart-overlay${mobileOpen ? ' open' : ''}`} onClick={() => setMobileOpen(false)} style={{ zIndex: 49 }} />
-
-      {/* Mobile toggle button */}
-      <button
-        onClick={() => setMobileOpen(!mobileOpen)}
-        className="mobile-menu-btn"
-        style={{
-          display: 'none', position: 'fixed', top: '14px', left: '14px',
-          zIndex: 60, background: '#0F172A', border: 'none', borderRadius: '9px',
-          width: '36px', height: '36px', cursor: 'pointer',
-          alignItems: 'center', justifyContent: 'center', color: '#94A3B8',
-        }}
-      >
-        <IconMenu />
-      </button>
-
-      <aside className={`sidebar${collapsed ? ' collapsed' : ''}${mobileOpen ? ' mobile-open' : ''}`}>
+      {/* ── DESKTOP: sidebar kiri ── */}
+      <aside className={`sidebar${collapsed ? ' collapsed' : ''}`}>
         {/* Logo + toggle */}
         <div style={{ padding: '16px 14px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', overflow: 'hidden' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden', minWidth: 0 }}>
-            <div style={{ width: '34px', height: '34px', flexShrink: 0, borderRadius: '10px', overflow: 'hidden', boxShadow: 'var(--shadow-accent)' }}><img src="/logo.png" alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /></div>
+            <div style={{ width: '34px', height: '34px', flexShrink: 0, borderRadius: '10px', overflow: 'hidden', boxShadow: 'var(--shadow-accent)' }}>
+              <img src="/logo.png" alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            </div>
             {!collapsed && (
               <div style={{ overflow: 'hidden' }}>
                 <div style={{ fontWeight: 700, fontSize: '14px', color: 'var(--text)', whiteSpace: 'nowrap' }}>Hambl</div>
@@ -170,7 +169,7 @@ export default function Sidebar() {
                       const active = pathname === item.href || (item.href !== '/kasir' && pathname.startsWith(item.href + '/'))
                       return (
                         <div key={item.href} className="sidebar-tooltip-wrap">
-                          <Link href={item.href} className={`sidebar-item${active ? ' active' : ''}`} onClick={() => setMobileOpen(false)}>
+                          <Link href={item.href} className={`sidebar-item${active ? ' active' : ''}`}>
                             <span className="item-icon">{item.icon}</span>
                           </Link>
                           <span className="tooltip">{item.label}</span>
@@ -182,13 +181,7 @@ export default function Sidebar() {
                   <>
                     <button
                       onClick={() => toggleGroup(group.label)}
-                      style={{
-                        width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                        padding: '6px 10px', marginTop: gi > 0 ? '4px' : '0',
-                        background: 'none', border: 'none', cursor: 'pointer', borderRadius: '7px',
-                        color: hasActive ? 'var(--sidebar-active-color)' : 'var(--muted)',
-                        fontFamily: 'inherit',
-                      }}
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', marginTop: gi > 0 ? '4px' : '0', background: 'none', border: 'none', cursor: 'pointer', borderRadius: '7px', color: hasActive ? 'var(--sidebar-active-color)' : 'var(--muted)', fontFamily: 'inherit' }}
                     >
                       <span style={{ fontSize: '11px', fontWeight: '700', letterSpacing: '0.5px', textTransform: 'uppercase' }}>{group.label}</span>
                       <span style={{ transition: 'transform 0.2s', transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)', display: 'flex' }}>
@@ -198,7 +191,7 @@ export default function Sidebar() {
                     {isOpen && group.items.map((item) => {
                       const active = pathname === item.href || (item.href !== '/kasir' && pathname.startsWith(item.href + '/'))
                       return (
-                        <Link key={item.href} href={item.href} className={`sidebar-item${active ? ' active' : ''}`} onClick={() => setMobileOpen(false)}>
+                        <Link key={item.href} href={item.href} className={`sidebar-item${active ? ' active' : ''}`}>
                           <span className="item-icon">{item.icon}</span>
                           <span className="item-label">{item.label}</span>
                           {active && <span className="item-dot" />}
@@ -214,13 +207,8 @@ export default function Sidebar() {
 
         {/* Footer */}
         <div className="sidebar-footer">
-          {/* Dark mode toggle */}
           <div className="sidebar-tooltip-wrap" style={{ marginBottom: '6px' }}>
-            <button
-              onClick={toggleDark}
-              className="sidebar-logout"
-              style={{ justifyContent: collapsed ? 'center' : 'flex-start' }}
-            >
+            <button onClick={toggleDark} className="sidebar-logout" style={{ justifyContent: collapsed ? 'center' : 'flex-start' }}>
               {dark ? <IconSun /> : <IconMoon />}
               <span className="logout-label">{dark ? 'Light Mode' : 'Dark Mode'}</span>
             </button>
@@ -235,11 +223,95 @@ export default function Sidebar() {
           </div>
         </div>
       </aside>
+
+      {/* ── MOBILE: bottom nav bar ── */}
+      <nav className="mobile-bottom-nav">
+        {bottomNavItems.map(item => {
+          const active = pathname === item.href || (item.href !== '/kasir' && pathname.startsWith(item.href + '/'))
+          return (
+            <Link key={item.href} href={item.href} className={`mobile-nav-item${active ? ' active' : ''}`}>
+              <span className="mobile-nav-icon">{item.icon}</span>
+              <span className="mobile-nav-label">{item.label}</span>
+            </Link>
+          )
+        })}
+        {/* Tombol More — buka drawer */}
+        <button className={`mobile-nav-item${mobileOpen ? ' active' : ''}`} onClick={() => setMobileOpen(v => !v)}>
+          <span className="mobile-nav-icon"><IconMenu /></span>
+          <span className="mobile-nav-label">Menu</span>
+        </button>
+      </nav>
+
+      {/* ── MOBILE: overlay + drawer dari kiri ── */}
+      {mobileOpen && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', zIndex: 98, backdropFilter: 'blur(2px)' }}
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+      <div className={`mobile-drawer${mobileOpen ? ' open' : ''}`}>
+        {/* Header drawer */}
+        <div style={{ padding: '20px 18px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--sidebar-border)', flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ width: '32px', height: '32px', borderRadius: '9px', overflow: 'hidden' }}>
+              <img src="/logo.png" alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            </div>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: '14px', color: 'var(--text)' }}>Hambl</div>
+              <div style={{ fontSize: '11px', color: 'var(--muted)' }}>{user.name || 'Admin Panel'}</div>
+            </div>
+          </div>
+          <button onClick={() => setMobileOpen(false)}
+            style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '9px', width: '34px', height: '34px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--muted)', flexShrink: 0 }}>
+            <IconX />
+          </button>
+        </div>
+
+        {/* Nav scroll */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '10px 10px' }}>
+          {navGroups.map((group, gi) => (
+            <div key={group.label} style={{ marginBottom: '4px' }}>
+              {gi > 0 && <div style={{ height: '1px', background: 'var(--sidebar-border)', margin: '8px 4px' }} />}
+              <div style={{ fontSize: '10px', fontWeight: '700', color: 'var(--muted)', letterSpacing: '0.6px', textTransform: 'uppercase', padding: '4px 8px 6px' }}>
+                {group.label}
+              </div>
+              {group.items.map(item => {
+                const active = pathname === item.href || (item.href !== '/kasir' && pathname.startsWith(item.href + '/'))
+                return (
+                  <Link key={item.href} href={item.href}
+                    className={`sidebar-item${active ? ' active' : ''}`}
+                    style={{ marginBottom: '2px' }}
+                    onClick={() => setMobileOpen(false)}>
+                    <span className="item-icon">{item.icon}</span>
+                    <span className="item-label">{item.label}</span>
+                    {active && <span className="item-dot" />}
+                  </Link>
+                )
+              })}
+            </div>
+          ))}
+        </div>
+
+        {/* Footer drawer */}
+        <div style={{ padding: '10px', borderTop: '1px solid var(--sidebar-border)', display: 'flex', gap: '8px', flexShrink: 0 }}>
+          <button onClick={toggleDark}
+            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px', borderRadius: '10px', border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text2)', fontSize: '13px', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
+            {dark ? <IconSun /> : <IconMoon />}
+            {dark ? 'Light' : 'Dark'}
+          </button>
+          <button onClick={logout}
+            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', padding: '10px', borderRadius: '10px', border: '1px solid var(--red-border)', background: 'var(--red-light)', color: 'var(--red)', fontSize: '13px', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit' }}>
+            <IconLogout />
+            Keluar
+          </button>
+        </div>
+      </div>
     </>
   )
 }
 
 function IconMoon() { return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg> }
+function IconX() { return <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> }
 function IconSun() { return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg> }
 function IconSelfOrder() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg> }
 function IconGrid() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg> }

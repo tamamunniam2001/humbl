@@ -450,14 +450,104 @@ input, select, textarea, button { font-family: inherit; }
 }
 
 @media (max-width: 768px) {
-  .sidebar { position: fixed; left: 0; top: 0; height: 100vh; transform: translateX(-100%); transition: transform 0.25s, width 0.25s; }
-  .sidebar.mobile-open { transform: translateX(0); }
+  /* Sembunyikan sidebar desktop di mobile */
+  .sidebar { display: none; }
+
+  /* Tambahkan padding bawah untuk konten agar tidak tertutup bottom nav */
+  .main { padding-bottom: 64px; }
+
   .content { padding: 12px; }
   .topbar { padding: 0 14px; height: 50px; }
   .form-grid { grid-template-columns: 1fr; }
   .mobile-menu-btn { display: flex; }
   .table th { padding: 7px 10px; font-size: 10px; }
   .table td { padding: 8px 10px; font-size: 11px; }
+}
+
+/* ── Mobile Bottom Nav ── */
+.mobile-bottom-nav {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .mobile-bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    z-index: 50;
+    background: var(--sidebar-bg);
+    border-top: 1px solid var(--sidebar-border);
+    padding: 0 4px env(safe-area-inset-bottom);
+    box-shadow: 0 -4px 20px rgba(15,22,35,0.08);
+  }
+}
+
+.mobile-nav-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 8px 4px;
+  text-decoration: none;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-family: inherit;
+  transition: color 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  min-width: 0;
+}
+.mobile-nav-item.active {
+  color: var(--accent);
+}
+.mobile-nav-icon {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.mobile-nav-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.mobile-nav-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  font-size: 9px;
+  letter-spacing: 0;
+}
+
+/* ── Mobile Drawer (slide dari kiri) ── */
+.mobile-drawer {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .mobile-drawer {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    width: 280px;
+    max-width: 85vw;
+    z-index: 99;
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--sidebar-border);
+    transform: translateX(-100%);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: var(--shadow-lg);
+  }
+  .mobile-drawer.open {
+    transform: translateX(0);
+  }
 }
 
 /* ── Mobile utilities ── */
