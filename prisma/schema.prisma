@@ -329,6 +329,7 @@ model StockOpnameItem {
   selisih         Float         @default(0)
   hargaManual     Float?        // harga satuan untuk item manual
   isRequested     Boolean       @default(false)
+  requestStatus   RequestStatus @default(BELUM_DIBELI) // status pemantauan permintaan (Pantau Bahan Baku)
   requestQty      Float?        // qty yang direquest untuk restock
   note            String?       @default("")
 
@@ -420,5 +421,12 @@ enum SelfOrderStatus {
 
 enum OpnameStatus {
   DRAFT
+  SELESAI
+}
+
+// Status pemantauan permintaan bahan baku (halaman Pantau Bahan Baku)
+enum RequestStatus {
+  BELUM_DIBELI
+  DIPESAN
   SELESAI
 }

@@ -7,6 +7,8 @@ const fmt = n => Number(n) % 1 !== 0 ? Number(n).toLocaleString('id-ID', { maxim
 const fmtRp = n => 'Rp ' + Number(n).toLocaleString('id-ID', { maximumFractionDigits: 0 })
 const fmtDate = d => new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' })
 const fmtDateShort = d => new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Jakarta' })
+// Label status permintaan restock (dipakai juga di halaman Pantau Bahan Baku)
+const REQUEST_STATUS_LABEL = { BELUM_DIBELI: 'Belum dibeli', DIPESAN: 'Dipesan', SELESAI: 'Selesai' }
 
 export default function StockOpnamePage() {
   const [opnames, setOpnames] = useState([])
@@ -211,14 +213,32 @@ export default function StockOpnamePage() {
     finally { setFinishing(false) }
   }
 
-  async function handleSaveRequest(itemId) {
+  async function setRequestState(itemId, isRequested) {
     try {
-      const item = detail.items.find(i => i.id === itemId)
-      const isRequested = !item.isRequested
       await api.patch(`/admin/stock-opname/${detail.id}`, { action: 'request-item', itemId, isRequested, requestQty: null })
-      setDetail(prev => ({ ...prev, items: prev.items.map(i => i.id === itemId ? { ...i, isRequested, requestQty: null } : i) }))
-      setRequestingId(null); setShowRequestModal(false)
-    } catch (e) { alert(e.response?.data?.message || 'Gagal menyimpan request') }
+      setDetail(prev => ({
+        ...prev,
+        items: prev.items.map(i => i.id === itemId
+          ? { ...i, isRequested, requestQty: null, requestStatus: isRequested ? 'BELUM_DIBELI' : i.requestStatus }
+          : i)
+      }))
+      return true
+    } catch (e) {
+      alert(e.response?.data?.message || 'Gagal menyimpan request')
+      return false
+    }
+  }
+
+  // Tombol Request di depan kartu → langsung nilai tanpa membuka sheet
+  function handleToggleRequest(e, item) {
+    e.stopPropagation()
+    return setRequestState(item.id, !item.isRequested)
+  }
+
+  async function handleSaveRequest(itemId) {
+    const item = detail.items.find(i => i.id === itemId)
+    const ok = await setRequestState(itemId, !item?.isRequested)
+    if (ok) { setRequestingId(null); setShowRequestModal(false) }
   }
 
   async function handleDelete(id) {
@@ -388,6 +408,23 @@ export default function StockOpnamePage() {
                           transition: 'border-color 0.15s',
                           WebkitTapHighlightColor: 'transparent',
                         }}>
+                        {/* Tombol Request — ditaruh di depan agar mudah ditekan */}
+                        <button
+                          onClick={e => handleToggleRequest(e, item)}
+                          title={item.isRequested ? 'Batalkan request restock' : 'Tandai perlu restock'}
+                          style={{
+                            flexShrink: 0, width: '42px', height: '42px', borderRadius: '11px',
+                            border: `1.5px solid ${item.isRequested ? '#FECACA' : '#FDE68A'}`,
+                            background: item.isRequested ? '#FEF2F2' : '#FFFBEB',
+                            color: item.isRequested ? '#EF4444' : '#D97706',
+                            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontFamily: 'inherit', WebkitTapHighlightColor: 'transparent',
+                          }}>
+                          {item.isRequested
+                            ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                            : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>}
+                        </button>
+
                         {/* Status dot */}
                         <div style={{ width: '10px', height: '10px', borderRadius: '50%', flexShrink: 0, background: sudahIsi ? '#10B981' : '#F59E0B', marginTop: '2px' }} />
 
@@ -401,7 +438,9 @@ export default function StockOpnamePage() {
                               <span style={{ fontSize: '10px', background: '#FFF7ED', color: '#D97706', border: '1px solid #FDE68A', padding: '1px 6px', borderRadius: '4px', fontWeight: '700', flexShrink: 0 }}>Manual</span>
                             )}
                             {item.isRequested && (
-                              <span style={{ fontSize: '10px', background: '#FEF2F2', color: '#EF4444', border: '1px solid #FECACA', padding: '1px 6px', borderRadius: '4px', fontWeight: '700', flexShrink: 0 }}>Request</span>
+                              <span style={{ fontSize: '10px', background: '#FEF2F2', color: '#EF4444', border: '1px solid #FECACA', padding: '1px 6px', borderRadius: '4px', fontWeight: '700', flexShrink: 0 }}>
+                                Request · {REQUEST_STATUS_LABEL[item.requestStatus] || 'Belum dibeli'}
+                              </span>
                             )}
                           </div>
                           <div style={{ display: 'flex', gap: '10px', marginTop: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
