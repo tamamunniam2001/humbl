@@ -574,3 +574,12 @@ input, select, textarea, button { font-family: inherit; }
  .input { padding: 8px 11px; font-size: 12px; }
   .label { font-size: 11px; }
 }
+
+/* ── Pantau Bahan Baku (mobile) ── */
+@media (max-width: 600px) {
+  /* Item menumpuk: info di atas, tombol aksi full-width di bawah */
+  .pantau-item { flex-direction: column; }
+  .pantau-item-actions { flex-direction: row !important; width: 100%; }
+  .pantau-item-actions > button { flex: 1; min-height: 36px; }
+}
+

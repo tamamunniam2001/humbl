@@ -5,11 +5,14 @@ import { verifyAuth, pageAccessOnly } from '@/lib/auth'
 const STATUSES = ['BELUM_DIBELI', 'DIPESAN', 'SELESAI']
 
 function mapItem(i) {
+  const expenseItem = i.expenseItem
   return {
     id: i.id,
-    name: i.inventoryItem?.name || i.expenseItem?.name || i.itemName || '',
-    category: i.inventoryItem?.category || i.expenseItem?.category || '',
-    satuan: i.inventoryItem?.satuan || i.expenseItem?.satuan || i.satuan || '',
+    name: i.inventoryItem?.name || expenseItem?.name || i.itemName || '',
+    category: i.inventoryItem?.category || expenseItem?.category || '',
+    satuan: i.inventoryItem?.satuan || expenseItem?.satuan || i.satuan || '',
+    satuanOpname: expenseItem?.satuanOpname || '',
+    konversi: Number(expenseItem?.konversi) || 1,
     qty: i.requestQty != null ? i.requestQty : i.qtyActual,
     qtyActual: i.qtyActual,
     status: i.requestStatus,
