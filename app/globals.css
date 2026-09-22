@@ -462,6 +462,9 @@ input, select, textarea, button { font-family: inherit; }
   .mobile-menu-btn { display: flex; }
   .table th { padding: 7px 10px; font-size: 10px; }
   .table td { padding: 8px 10px; font-size: 11px; }
+
+ /* Stack 2-column grids pada mobile */
+  .content > div[style*="320px 1fr"] { grid-template-columns: 1fr !important; }
 }
 
 /* ── Mobile Bottom Nav ── */
@@ -553,4 +556,21 @@ input, select, textarea, button { font-family: inherit; }
 /* ── Mobile utilities ── */
 @media (max-width: 600px) {
   .hide-mobile { display: none !important; }
+}
+
+/* ── Expense Setings Mobile ─ */
+@media (max-width: 768px) {
+  .exp-grid { grid-template-columns: 1fr !important; }
+  .exp-tabs { width: 100% !important; overflow-x: auto; }
+ .exp-tabs button { flex: 1; min-width: 120px; justify-content: center; }
+ .exp-grid .card { max-height: none; }
+  .topbar { padding: 10px 12px; }
+  .topbar-title { font-size: 14px; }
+  .topbar-sub { font-size: 11px; }
+  .btn { padding: 6px 10px; font-size: 11px; }
+  .card { padding: 14px; }
+  .table { font-size: 11px; }
+  .table th, .table td { padding: 6px 8px; }
+ .input { padding: 8px 11px; font-size: 12px; }
+  .label { font-size: 11px; }
 }
