@@ -457,7 +457,7 @@ model OperationalBelanja {
   total       Float
   status      BelanjaStatus  @default(DRAFT)
   approvedById String?
-  approvedBy  User?          @relation("ApprovedOperationalBelanja", fields: [approvedById], references: [id])
+  approvedByUser  User?          @relation("ApprovedOperationalBelanja", fields: [approvedById], references: [id])
   approvedAt  DateTime?
   adminNote   String?
   createdAt   DateTime       @default(now())
