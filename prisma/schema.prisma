@@ -431,3 +431,65 @@ enum RequestStatus {
   DIPESAN
   SELESAI
 }
+
+// --- Operational Modules ---
+enum BelanjaStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum SaldoReason {
+  RESTOCK
+  EXPENSE
+  ADJUST
+}
+
+model OperationalBelanja {
+  id          String         @id @default(cuid())
+  roleKey     String         // identitas role / unit operasional (mis. "operasional")
+  requesterId String?
+  requester   User?          @relation(fields: [requesterId], references: [id])
+  requesterName String
+  tanggal     DateTime
+  keterangan  String?
+  total       Float
+  status      BelanjaStatus  @default(DRAFT)
+  approvedById String?
+  approvedBy  User?          @relation("ApprovedOperationalBelanja", fields: [approvedById], references: [id])
+  approvedAt  DateTime?
+  adminNote   String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  items       OperationalBelanjaItem[]
+}
+
+model OperationalBelanjaItem {
+  id          String             @id @default(cuid())
+  belanjaId   String
+  belanja     OperationalBelanja @relation(fields: [belanjaId], references: [id])
+  itemId      String?
+  itemName    String
+  harga       Float
+  isi         Float?
+  qty         Float
+  satuan      String
+  keterangan  String?
+  subtotal    Float
+  isManual    Boolean            @default(false)
+}
+
+model OperationalSaldoLedger {
+  id           String      @id @default(cuid())
+  roleKey      String
+  type         SaldoReason
+  amount       Float
+  balanceAfter Float
+  note         String?
+  createdAt    DateTime    @default(now())
+  createdBy    String?
+
+  @@index([roleKey])
+  @@index([type])
+}
