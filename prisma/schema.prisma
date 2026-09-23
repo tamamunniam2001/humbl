@@ -453,7 +453,7 @@ model OperationalBelanja {
   id          String         @id @default(cuid())
   roleKey     String         // identitas role / unit operasional (mis. "operasional")
   requesterId String?
-  requester   User?          @relation(fields: [requesterId], references: [id])
+  requester   User?          @relation("OperationalBelanjaRequester", fields: [requesterId], references: [id])
   requesterName String
   tanggal     DateTime
   keterangan  String?
