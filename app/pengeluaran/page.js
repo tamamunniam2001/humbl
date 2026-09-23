@@ -20,13 +20,13 @@ export default function PengeluaranPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(null)
   const [manualOpen, setManualOpen] = useState(false)
-  const [manual, setManual] = useState({ name: '', keterangan: '', satuan: '', kategori: '', harga: '', qty: 1 })
+  const [manual, setManual] = useState({ name: '', keterangan: '', satuan: '', kategori: '', harga: '', isi: '', qty: 1 })
   const [activeCategory, setActiveCategory] = useState('Semua')
   const [importing, setImporting] = useState(false)
   const [importProgress, setImportProgress] = useState(0)
   const [importResult, setImportResult] = useState(null)
   const fileRef = useRef(null)
-  const [editCartItem, setEditCartItem] = useState(null) // { itemId, harga, qty, keterangan }
+  const [editCartItem, setEditCartItem] = useState(null) // { itemId, harga, isi, qty, keterangan }
 
   const [expenseCategories, setExpenseCategories] = useState([])
 
@@ -44,34 +44,21 @@ export default function PengeluaranPage() {
   })
 
   function updateCart(itemId, field, value) {
-    setCart(prev => ({ ...prev, [itemId]: { harga: '', qty: 1, keterangan: '', isi: '', modeSatuan: false, ...prev[itemId], [field]: value } }))
+    setCart(prev => ({ ...prev, [itemId]: { harga: '', qty: 1, keterangan: '', isi: '', ...prev[itemId], [field]: value } }))
   }
 
-  function computedHarga(entry) {
-    if (entry.modeSatuan) {
-      const isi = Number(entry.isi)
-      const total = Number(entry.hargaTotal)
-      if (isi > 0 && total > 0) return total / isi
-      return 0
-    }
-    return Number(entry.harga) || 0
+  // Harga satuan = harga ÷ isi (ml/gr/ps). Jika isi kosong, harga dianggap sudah per satuan.
+  function unitPrice(entry) {
+    const harga = Number(entry.harga) || 0
+    const isi = Number(entry.isi) || 0
+    return isi > 0 ? harga / isi : harga
   }
 
   function addToCart(item) {
     const entry = cart[item.id] || {}
-    if (entry.modeSatuan) {
-      const hargaTotal = Number(entry.hargaTotal)
-      const isi = Number(entry.isi)
-      const qty = Number(entry.qty) || 1
-      if (!hargaTotal) return alert('Isi harga total terlebih dahulu')
-      if (!isi) return alert('Isi jumlah isi (gram/pcs) terlebih dahulu')
-      const hargaPerSatuan = hargaTotal / isi
-      const totalQty = isi * qty
-      setCart(prev => ({ ...prev, [item.id]: { ...prev[item.id], harga: String(hargaPerSatuan), qty: String(totalQty), added: true } }))
-    } else {
-      if (!Number(entry.harga)) return alert('Isi harga terlebih dahulu')
-      setCart(prev => ({ ...prev, [item.id]: { ...prev[item.id], added: true } }))
-    }
+    if (!Number(entry.harga)) return alert('Isi harga terlebih dahulu')
+    const isi = Number(entry.isi) || 0
+    setCart(prev => ({ ...prev, [item.id]: { ...prev[item.id], isi: isi > 0 ? String(isi) : '', qty: String(Number(entry.qty) || 1), added: true } }))
   }
 
   function removeFromCart(itemId) {
@@ -121,9 +108,10 @@ export default function PengeluaranPage() {
     e.preventDefault()
     if (!manual.name || !manual.harga) return
     const id = `manual_${Date.now()}`
-    setCart(prev => ({ ...prev, [id]: { harga: manual.harga, qty: manual.qty, keterangan: manual.keterangan, satuan: manual.satuan, category: manual.kategori || '', added: true, isManual: true } }))
+    const isi = Number(manual.isi) || 0
+    setCart(prev => ({ ...prev, [id]: { harga: manual.harga, isi: isi > 0 ? String(isi) : '', qty: manual.qty, keterangan: manual.keterangan, satuan: manual.satuan, category: manual.kategori || '', added: true, isManual: true } }))
     setItems(prev => [...prev, { id, name: manual.name, code: null, category: manual.kategori || null, isManual: true }])
-    setManual({ name: '', keterangan: '', satuan: '', kategori: '', harga: '', qty: 1 })
+    setManual({ name: '', keterangan: '', satuan: '', kategori: '', harga: '', isi: '', qty: 1 })
     setManualOpen(false)
   }
 
@@ -191,7 +179,7 @@ export default function PengeluaranPage() {
   return (
     <div className="page">
       <Sidebar />
-      <main className="main" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', height: '100vh' }}>
+      <main className="main pg-main" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', height: '100vh' }}>
 
         {/* Topbar */}
         <div className="topbar">
@@ -199,7 +187,7 @@ export default function PengeluaranPage() {
             <div className="topbar-title">Pengeluaran</div>
             <div className="topbar-sub">Catat pengeluaran harian</div>
           </div>
-          <div style={{ display: 'flex', gap: '8px' }}>
+          <div className="pg-topbar-actions" style={{ display: 'flex', gap: '8px' }}>
             <button className="btn btn-ghost" onClick={downloadTemplate}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               Template
@@ -227,7 +215,7 @@ export default function PengeluaranPage() {
         )}
         {importing && (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(30,42,59,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500, backdropFilter: 'blur(4px)' }}>
-            <div className="card fade-in" style={{ padding: '32px 40px', textAlign: 'center', minWidth: '320px' }}>
+            <div className="card fade-in" style={{ padding: '32px 24px', textAlign: 'center', width: '90vw', maxWidth: '380px' }}>
               <div style={{ width: '56px', height: '56px', background: '#F0FDF4', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', border: '2px solid #A7F3D0' }}>
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2.5" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
               </div>
@@ -241,10 +229,10 @@ export default function PengeluaranPage() {
           </div>
         )}
 
-        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        <div className="pg-layout" style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
           {/* ── Left: Item List ── */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', borderRight: '1px solid var(--border)' }}>
+          <div className="pg-list" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', borderRight: '1px solid var(--border)' }}>
 
             {/* Search + Filter */}
             <div style={{ padding: '16px 20px 12px', background: 'var(--surface)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
@@ -271,7 +259,7 @@ export default function PengeluaranPage() {
             </div>
 
             {/* Items */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
+            <div className="pg-items" style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
               {filtered.length === 0 && (
                 <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--muted)' }}>
                   <div style={{ fontSize: '36px', marginBottom: '10px' }}>🔍</div>
@@ -322,10 +310,13 @@ export default function PengeluaranPage() {
                         </div>
 
                         {isAdded && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0, marginLeft: '12px' }}>
+                          <div className="pg-added-row" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0, marginLeft: '12px' }}>
                             <div style={{ textAlign: 'right' }}>
                               <div style={{ fontSize: '15px', fontWeight: '800', color: 'var(--accent)' }}>{fmt(harga * qty)}</div>
                               <div style={{ fontSize: '11px', color: 'var(--muted)' }}>{fmt(harga)} × {qty}</div>
+                              {Number(entry.isi) > 0 && (
+                                <div style={{ fontSize: '10px', color: 'var(--muted)' }}>Harga satuan: {fmt(unitPrice(entry))}/{item.satuan || entry.satuan || 'isi'}</div>
+                              )}
                             </div>
                             <button onClick={() => removeFromCart(item.id)}
                               style={{ width: '30px', height: '30px', borderRadius: '8px', border: '1px solid #FECACA', background: 'var(--red-light)', color: 'var(--red)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -337,53 +328,29 @@ export default function PengeluaranPage() {
 
                       {/* Input row */}
                       {!isAdded && (() => {
-                        const modeSatuan = !!entry.modeSatuan
-                        const hargaTotal = Number(entry.hargaTotal) || 0
                         const isi = Number(entry.isi) || 0
-                        const hargaPerSatuan = modeSatuan && isi > 0 && hargaTotal > 0 ? hargaTotal / isi : 0
+                        const hargaSatuan = unitPrice(entry)
                         return (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            {/* Toggle mode */}
-                            <div style={{ display: 'flex', gap: '4px', background: 'var(--surface2)', borderRadius: '8px', padding: '3px', border: '1px solid var(--border)', alignSelf: 'flex-start' }}>
-                              {['biasa', 'satuan'].map(mode => (
-                                <button key={mode} onClick={() => updateCart(item.id, 'modeSatuan', mode === 'satuan')}
-                                  style={{ padding: '3px 10px', borderRadius: '6px', border: 'none', fontSize: '11px', fontWeight: '600', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s',
-                                    background: (modeSatuan ? 'satuan' : 'biasa') === mode ? 'var(--accent)' : 'transparent',
-                                    color: (modeSatuan ? 'satuan' : 'biasa') === mode ? '#fff' : 'var(--muted)' }}>
-                                  {mode === 'biasa' ? 'Harga/satuan' : 'Harga total ÷ isi'}
-                                </button>
-                              ))}
-                            </div>
-
-                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                              <input className="input" placeholder="Keterangan" value={entry.keterangan || ''}
+                            <div className="pg-input-row" style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                              <input className="input pg-ket" placeholder="Keterangan" value={entry.keterangan || ''}
                                 onChange={e => updateCart(item.id, 'keterangan', e.target.value)}
-                                style={{ flex: 1, fontSize: '12px', padding: '7px 11px' }} />
+                                style={{ flex: 1, fontSize: '12px', padding: '7px 11px', minWidth: 0 }} />
 
-                              {modeSatuan ? (
-                                <>
-                                  <div style={{ position: 'relative', flexShrink: 0 }}>
-                                    <span style={{ position: 'absolute', left: '9px', top: '50%', transform: 'translateY(-50%)', fontSize: '11px', color: 'var(--muted)', fontWeight: '600', pointerEvents: 'none' }}>Rp</span>
-                                    <input className="input" type="number" step="any" placeholder="Harga total" value={entry.hargaTotal || ''}
-                                      onChange={e => updateCart(item.id, 'hargaTotal', e.target.value)}
-                                      style={{ width: '110px', fontSize: '12px', padding: '7px 11px 7px 28px' }} />
-                                  </div>
-                                  <div style={{ position: 'relative', flexShrink: 0 }}>
-                                    <input className="input" type="number" step="any" placeholder={`Isi (${item.satuan || 'gram'})`} value={entry.isi || ''}
-                                      onChange={e => updateCart(item.id, 'isi', e.target.value)}
-                                      style={{ width: '80px', fontSize: '12px', padding: '7px 8px', textAlign: 'center' }} />
-                                  </div>
-                                </>
-                              ) : (
-                                <div style={{ position: 'relative', flexShrink: 0 }}>
-                                  <span style={{ position: 'absolute', left: '9px', top: '50%', transform: 'translateY(-50%)', fontSize: '11px', color: 'var(--muted)', fontWeight: '600', pointerEvents: 'none' }}>Rp</span>
-                                  <input className="input" type="number" step="any" placeholder={item.avgHarga ? String(item.avgHarga) : 'Harga'} value={entry.harga || ''}
-                                    onChange={e => updateCart(item.id, 'harga', e.target.value)}
-                                    style={{ width: '120px', fontSize: '12px', padding: '7px 11px 7px 28px' }} />
-                                </div>
-                              )}
+                              <div className="pg-nw" style={{ position: 'relative', flexShrink: 0 }}>
+                                <span style={{ position: 'absolute', left: '9px', top: '50%', transform: 'translateY(-50%)', fontSize: '11px', color: 'var(--muted)', fontWeight: '600', pointerEvents: 'none' }}>Rp</span>
+                                <input className="input" type="number" step="any" placeholder={item.avgHarga ? String(item.avgHarga) : 'Harga'} value={entry.harga || ''}
+                                  onChange={e => updateCart(item.id, 'harga', e.target.value)}
+                                  style={{ width: '120px', fontSize: '12px', padding: '7px 11px 7px 28px' }} />
+                              </div>
 
-                              <input className="input" type="number" step="any" min="0" value={entry.qty || 1}
+                              <div className="pg-nw" style={{ position: 'relative', flexShrink: 0 }}>
+                                <input className="input" type="number" step="any" min="0" placeholder={`Isi (${item.satuan || entry.satuan || 'ml/gr/ps'})`} value={entry.isi || ''}
+                                  onChange={e => updateCart(item.id, 'isi', e.target.value)}
+                                  style={{ width: '96px', fontSize: '12px', padding: '7px 8px', textAlign: 'center' }} />
+                              </div>
+
+                              <input className="input pg-qty" type="number" step="any" min="0" value={entry.qty || 1}
                                 onChange={e => updateCart(item.id, 'qty', e.target.value)}
                                 style={{ width: '56px', textAlign: 'center', fontSize: '12px', padding: '7px 8px', flexShrink: 0 }} />
                               <button onClick={() => addToCart(item)}
@@ -392,14 +359,14 @@ export default function PengeluaranPage() {
                               </button>
                             </div>
 
-                            {/* Preview */}
-                            {modeSatuan && hargaPerSatuan > 0 && (
+                            {/* Preview harga satuan (harga ÷ isi) */}
+                            {Number(entry.harga) > 0 && (
                               <div style={{ fontSize: '11px', color: 'var(--muted)', paddingLeft: '2px' }}>
-                                Harga/{item.satuan || 'satuan'}: <strong style={{ color: 'var(--accent)' }}>
-                                  Rp {hargaPerSatuan.toLocaleString('id-ID', { maximumFractionDigits: 10 })}
+                                Harga satuan: <strong style={{ color: 'var(--accent)' }}>
+                                  Rp {hargaSatuan.toLocaleString('id-ID', { maximumFractionDigits: 10 })}
                                 </strong>
-                                {' · '}QTY: <strong style={{ color: 'var(--accent)' }}>{isi * qty} {item.satuan || ''}</strong>
-                                {' · '}Total: <strong style={{ color: 'var(--red)' }}>{fmt(hargaTotal * qty)}</strong>
+                                {isi > 0 ? `/${item.satuan || entry.satuan || 'isi'}` : ''}
+                                {' · '}Total: <strong style={{ color: 'var(--red)' }}>{fmt((Number(entry.harga) || 0) * qty)}</strong>
                               </div>
                             )}
                           </div>
@@ -413,7 +380,7 @@ export default function PengeluaranPage() {
           </div>
 
           {/* ── Right: Summary Panel ── */}
-          <div style={{ width: '320px', flexShrink: 0, display: 'flex', flexDirection: 'column', background: 'var(--surface)', overflow: 'hidden' }}>
+          <div className="pg-cart" style={{ width: '320px', flexShrink: 0, display: 'flex', flexDirection: 'column', background: 'var(--surface)', overflow: 'hidden' }}>
 
             {/* Panel header */}
             <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', background: 'linear-gradient(135deg, #EBF1FB, #F5F8FE)' }}>
@@ -425,7 +392,7 @@ export default function PengeluaranPage() {
             </div>
 
             {/* Cart items */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }}>
+            <div className="pg-cart-items" style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }}>
               {cartItems.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px 16px', color: 'var(--muted)' }}>
                   <div style={{ fontSize: '28px', marginBottom: '8px' }}>🧾</div>
@@ -446,11 +413,11 @@ export default function PengeluaranPage() {
                               {item.isManual && <span style={{ marginLeft: '5px', fontSize: '9px', background: 'var(--orange-light)', color: 'var(--orange)', padding: '1px 5px', borderRadius: '4px', fontWeight: '700' }}>Manual</span>}
                             </div>
                             {e.keterangan && <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '1px' }}>{e.keterangan}</div>}
-                            <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '2px' }}>{fmt(harga)} × {qty}</div>
+                            <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '2px' }}>{fmt(harga)} × {qty}{Number(e.isi) > 0 ? ` · ${fmt(harga / Number(e.isi))}/${item.satuan || e.satuan || 'isi'}` : ''}</div>
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
                             <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--red)' }}>{fmt(harga * qty)}</div>
-                            <button onClick={() => setEditCartItem({ itemId: item.id, harga: String(harga), qty: String(qty), keterangan: e.keterangan || '' })}
+                            <button onClick={() => setEditCartItem({ itemId: item.id, harga: String(harga), isi: e.isi || '', qty: String(qty), keterangan: e.keterangan || '' })}
                               style={{ width: '24px', height: '24px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--accent-light)', color: 'var(--accent)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                             </button>
@@ -522,9 +489,9 @@ export default function PengeluaranPage() {
                 <input className="input" placeholder="pcs, kg, liter..." value={manual.satuan}
                   onChange={e => setManual({ ...manual, satuan: e.target.value })} />
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div className="pg-grid3" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
                 <div>
-                  <label className="label">Harga Total</label>
+                  <label className="label">Harga</label>
                   <div style={{ position: 'relative' }}>
                     <span style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)', fontSize: '12px', color: 'var(--muted)', fontWeight: '600' }}>Rp</span>
                     <input className="input" type="number" step="any" placeholder="0" value={manual.harga}
@@ -533,15 +500,20 @@ export default function PengeluaranPage() {
                   </div>
                 </div>
                 <div>
+                  <label className="label">Isi (ml/gr/ps)</label>
+                  <input className="input" type="number" step="any" min="0" placeholder="0" value={manual.isi}
+                    onChange={e => setManual({ ...manual, isi: e.target.value })} />
+                </div>
+                <div>
                   <label className="label">Qty</label>
                   <input className="input" type="number" step="any" min="0" value={manual.qty}
                     onChange={e => setManual({ ...manual, qty: e.target.value })} />
                 </div>
               </div>
-              {Number(manual.harga) > 0 && Number(manual.qty) > 1 && (
+              {Number(manual.harga) > 0 && Number(manual.isi) > 0 && (
                 <div style={{ padding: '10px 14px', background: 'var(--green-light)', borderRadius: '9px', border: '1px solid #A7DFC8', fontSize: '12px', color: 'var(--green)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-                  Harga per satuan: {fmt(Math.round(Number(manual.harga) / Number(manual.qty)))}{manual.satuan ? `/${manual.satuan}` : ''}
+                  Harga satuan: {fmt(Number(manual.harga) / Number(manual.isi))}{manual.satuan ? `/${manual.satuan}` : ''}
                 </div>
               )}
               <div style={{ display: 'flex', gap: '8px', paddingTop: '4px' }}>
@@ -573,7 +545,7 @@ export default function PengeluaranPage() {
                   <input className="input" placeholder="Keterangan..." value={editCartItem.keterangan}
                     onChange={e => setEditCartItem(p => ({ ...p, keterangan: e.target.value }))} autoFocus />
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="pg-grid3" style={{ display: 'grid', gridTemplateColumns: '1.1fr 1fr 0.8fr', gap: '12px' }}>
                   <div>
                     <label className="label">Harga</label>
                     <div style={{ position: 'relative' }}>
@@ -584,6 +556,11 @@ export default function PengeluaranPage() {
                     </div>
                   </div>
                   <div>
+                    <label className="label">Isi (ml/gr/ps)</label>
+                    <input className="input" type="number" step="any" min="0" placeholder="0" value={editCartItem.isi || ''}
+                      onChange={e => setEditCartItem(p => ({ ...p, isi: e.target.value }))} />
+                  </div>
+                  <div>
                     <label className="label">Qty</label>
                     <input className="input" type="number" step="any" min="0" value={editCartItem.qty}
                       onChange={e => setEditCartItem(p => ({ ...p, qty: e.target.value }))}
@@ -592,14 +569,19 @@ export default function PengeluaranPage() {
                 </div>
                 {Number(editCartItem.harga) > 0 && (
                   <div style={{ padding: '10px 14px', background: 'var(--red-light)', borderRadius: '9px', border: '1px solid #FECACA', fontSize: '13px', fontWeight: '700', color: 'var(--red)', textAlign: 'center' }}>
-                    {fmt(Number(editCartItem.harga) * (Number(editCartItem.qty) || 1))}
+                    {Number(editCartItem.isi) > 0 && (
+                      <div style={{ fontSize: '11px', fontWeight: '600', opacity: 0.85, marginBottom: '2px' }}>
+                        Harga satuan: {fmt(Number(editCartItem.harga) / Number(editCartItem.isi))}{item?.satuan ? `/${item.satuan}` : ''}
+                      </div>
+                    )}
+                    Total: {fmt(Number(editCartItem.harga) * (Number(editCartItem.qty) || 1))}
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setEditCartItem(null)}>Batal</button>
                   <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} onClick={() => {
                     if (!Number(editCartItem.harga)) return alert('Isi harga terlebih dahulu')
-                    setCart(prev => ({ ...prev, [editCartItem.itemId]: { ...prev[editCartItem.itemId], harga: editCartItem.harga, qty: editCartItem.qty, keterangan: editCartItem.keterangan } }))
+                    setCart(prev => ({ ...prev, [editCartItem.itemId]: { ...prev[editCartItem.itemId], harga: editCartItem.harga, isi: Number(editCartItem.isi) > 0 ? String(editCartItem.isi) : '', qty: editCartItem.qty, keterangan: editCartItem.keterangan } }))
                     setEditCartItem(null)
                   }}>Simpan</button>
                 </div>
@@ -611,7 +593,7 @@ export default function PengeluaranPage() {
 
       {/* Hasil Import */}
       {importResult && (
-        <div style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 600, maxWidth: '380px', width: '100%' }}>
+        <div className="pg-toast" style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 600, maxWidth: '380px', width: '100%' }}>
           <div className="slide-down" style={{ padding: '14px 18px', borderRadius: '12px', border: `1px solid ${importResult.error ? '#FECACA' : '#A7F3D0'}`, background: importResult.error ? '#FEF2F2' : '#F0FDF4', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
               <span style={{ fontSize: '16px', marginTop: '1px' }}>{importResult.error ? '❌' : '✅'}</span>
@@ -644,7 +626,29 @@ export default function PengeluaranPage() {
         </div>
       )}
 
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ── Pengeluaran: mobile friendly ── */
+        .pg-added-row { flex-wrap: wrap; }
+        @media (max-width: 768px) {
+          .pg-main { height: auto !important; min-height: 100vh; overflow: visible !important; }
+          .pg-layout { flex-direction: column; overflow: visible !important; }
+          .pg-list { border-right: none !important; overflow: visible !important; }
+          .pg-items { overflow: visible !important; }
+          .pg-cart { width: 100% !important; max-width: none !important; overflow: visible !important; border-top: 1px solid var(--border); }
+          .pg-cart-items { overflow: visible !important; }
+          .pg-topbar-actions { flex-wrap: wrap; justify-content: flex-end; }
+          .pg-input-row { flex-wrap: wrap; }
+          .pg-ket { flex: 1 1 100% !important; min-width: 0; }
+          .pg-nw { flex: 1 1 0; min-width: 76px; }
+          .pg-nw > input { width: 100% !important; }
+          .pg-qty { flex: 0 1 64px; width: auto !important; }
+          .pg-grid3 { grid-template-columns: 1fr 1fr !important; }
+          .pg-added-row { margin-left: 0 !important; width: 100%; justify-content: space-between; }
+          .pg-toast { left: 12px !important; right: 12px !important; bottom: 76px !important; max-width: none !important; width: auto !important; }
+        }
+      `}</style>
     </div>
   )
 }
