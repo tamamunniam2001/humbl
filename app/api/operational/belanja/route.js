@@ -1,5 +1,5 @@
 import prisma from '@/lib/prisma';
-import { verifyAuth } from '@/auth';
+import { verifyAuth } from '@/lib/auth';
 
 export async function GET(request) {
   const { user, error } = verifyAuth(request);
