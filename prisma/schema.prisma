@@ -203,6 +203,7 @@ model ExpenseItem {
   satuan       String?         @default("")
   satuanOpname String?         @default("")
   konversi     Float?          // 1 satuanOpname = konversi satuan
+  minimalStok  Float?          // batas minimal dalam satuan opname; stok ≤ ini otomatis muncul di Pantau Bahan Baku
   isActive     Boolean         @default(true)
   createdAt    DateTime        @default(now())
   details      ExpenseDetail[]

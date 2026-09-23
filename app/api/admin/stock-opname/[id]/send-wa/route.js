@@ -123,30 +123,6 @@ function generatePDFBuffer(opname, items) {
   doc.text('TOTAL NILAI STOK', ML + 15, y + 14)
   doc.text(fmtRp(totalNilai), cols.nilai + colW.nilai, y + 14, { align: 'right' })
 
-  // Restock
-  const requested = items.filter(i => i.isRequested)
-  if (requested.length > 0) {
-    y += 36
-    doc.setFillColor(255, 247, 237)
-    doc.rect(ML, y, W, 18, 'F')
-    doc.setFillColor(245, 158, 11)
-    doc.rect(ML, y, 4, 18, 'F')
-    doc.setTextColor(146, 64, 14)
-    doc.setFontSize(9)
-    doc.setFont('helvetica', 'bold')
-    doc.text(`Perlu Restock (${requested.length} item)`, ML + 12, y + 12)
-    y += 18
-    requested.forEach((item, idx) => {
-      doc.setFillColor(idx % 2 === 0 ? 255 : 255, idx % 2 === 0 ? 251 : 247, idx % 2 === 0 ? 235 : 237)
-      doc.rect(ML, y, W, 14, 'F')
-      doc.setTextColor(146, 64, 14)
-      doc.setFontSize(7.5)
-      doc.setFont('helvetica', 'normal')
-      doc.text(`${idx + 1}. ${item.inventoryItem?.name || item.itemName}`, ML + 12, y + 10)
-      y += 14
-    })
-  }
-
   doc.setTextColor(148, 163, 184)
   doc.setFontSize(7)
   doc.setFont('helvetica', 'normal')

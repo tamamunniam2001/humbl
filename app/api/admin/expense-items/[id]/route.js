@@ -17,9 +17,9 @@ export async function PUT(req, { params }) {
   const ct = requireJson(req)
   if (ct) return ct
   const { id } = await params
-  const { code, name, category, satuan, satuanOpname, konversi } = await req.json()
+  const { code, name, category, satuan, satuanOpname, konversi, minimalStok } = await req.json()
   try {
-    const item = await prisma.expenseItem.update({ where: { id }, data: { code: code || null, name, category: category || '', satuan: satuan || '', satuanOpname: satuanOpname || '', konversi: konversi !== '' && konversi != null ? Number(konversi) : null } })
+    const item = await prisma.expenseItem.update({ where: { id }, data: { code: code || null, name, category: category || '', satuan: satuan || '', satuanOpname: satuanOpname || '', konversi: konversi !== '' && konversi != null ? Number(konversi) : null, minimalStok: minimalStok !== '' && minimalStok != null ? Number(minimalStok) : null } })
     return NextResponse.json(item)
   } catch (e) {
     if (e.code === 'P2002') return NextResponse.json({ message: 'Kode sudah digunakan' }, { status: 400 })

@@ -89,7 +89,7 @@ export default function PantauBahanPage() {
         <div className="topbar" style={{ flexWrap: 'wrap', gap: '8px', height: 'auto', minHeight: '60px' }}>
           <div style={{ flex: 1, minWidth: '180px' }}>
             <div className="topbar-title">Pantau Bahan Baku</div>
-            <div className="topbar-sub">{items.length} bahan direquest dari stock opname</div>
+            <div className="topbar-sub">{items.length} bahan stok ≤ minimal stok (otomatis)</div>
           </div>
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
             <input className="input" placeholder="Cari bahan..." value={search} onChange={e => setSearch(e.target.value)}
@@ -157,6 +157,9 @@ export default function PantauBahanPage() {
                             <span className="badge badge-gray" style={{ fontSize: '10px' }}>{fmt(getOpnameQty(item).value)} {getOpnameQty(item).unit}</span>
                           </div>
                           <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '6px' }}>Opname {fmtDate(item.opnameDate)}</div>
+                          {item.minimalStok != null && (
+                            <div style={{ fontSize: '11px', color: '#D97706', marginTop: '2px', fontWeight: '600' }}>⚠️ Minimal {fmt(item.minimalStok)} {item.satuanOpname || item.satuan}</div>
+                          )}
                           {item.note && (
                             <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px', fontStyle: 'italic' }}>📝 {item.note}</div>
                           )}

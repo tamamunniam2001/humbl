@@ -3,7 +3,7 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import Sidebar from '@/components/Sidebar'
 import api from '@/lib/api'
 
-const empty = { code: '', name: '', category: '', satuan: '', satuanOpname: '', konversi: '' }
+const empty = { code: '', name: '', category: '', satuan: '', satuanOpname: '', konversi: '', minimalStok: '' }
 
 export default function ExpenseSettingsPage() {
   const [items, setItems] = useState([])
@@ -85,10 +85,11 @@ export default function ExpenseSettingsPage() {
   const handleFormSatuan = useCallback(e => setForm(f => ({ ...f, satuan: e.target.value })), [])
   const handleFormSatuanOpname = useCallback(e => setForm(f => ({ ...f, satuanOpname: e.target.value })), [])
   const handleFormKonversi = useCallback(e => setForm(f => ({ ...f, konversi: e.target.value })), [])
+  const handleFormMinimalStok = useCallback(e => setForm(f => ({ ...f, minimalStok: e.target.value })), [])
   const handleFormCategory = useCallback(e => setForm(f => ({ ...f, category: e.target.value })), [])
   const handleNewCat = useCallback(e => setNewCat(e.target.value), [])
   const handleEditItem = useCallback((item) => {
-    setForm({ code: item.code || '', name: item.name, category: item.category || '', satuan: item.satuan || '', satuanOpname: item.satuanOpname || '', konversi: item.konversi || '' })
+    setForm({ code: item.code || '', name: item.name, category: item.category || '', satuan: item.satuan || '', satuanOpname: item.satuanOpname || '', konversi: item.konversi || '', minimalStok: item.minimalStok ?? '' })
     setEditId(item.id)
   }, [])
 
@@ -235,6 +236,12 @@ export default function ExpenseSettingsPage() {
                   1 {form.satuanOpname} = {form.konversi} {form.satuan}
                   </div>
                   )}
+                  <label className="label">Minimal Stok <span style={{ color: 'var(--muted)', fontWeight: '400' }}>(opsional)</span></label>
+                  <input className="input" type="number" step="any" min="0" placeholder={`Misal: 2 ${form.satuanOpname || form.satuan || ''}`.trim()} value={form.minimalStok}
+                    onChange={handleFormMinimalStok} style={{ marginBottom: '6px' }} />
+                  <div style={{ marginBottom: '12px', fontSize: '11px', color: 'var(--muted)', lineHeight: 1.5 }}>
+                    Dalam satuan {form.satuanOpname || form.satuan || 'opname'}. Jika stok opname ≤ angka ini, otomatis masuk Pantau Bahan Baku.
+                  </div>
                   <label className="label">Kategori <span style={{ color: 'var(--muted)', fontWeight: '400' }}>(opsional)</span></label>
                   <input className="input" placeholder="Pilih atau ketik kategori..." value={form.category}
                     onChange={handleFormCategory} style={{ marginBottom: '16px' }} list="cat-list" />
@@ -259,8 +266,8 @@ export default function ExpenseSettingsPage() {
                </div>
                 </div>
                 <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', maxHeight: 'calc(100vh - 320px)', overflowY: 'auto' }}>
-                  <table className="table" style={{ minWidth: '580px' }}>
-                    <thead><tr><th>Kode</th><th>Nama</th><th>Satuan</th><th>Konversi Opname</th><th>Kategori</th><th>Aksi</th></tr></thead>
+                  <table className="table" style={{ minWidth: '700px' }}>
+                    <thead><tr><th>Kode</th><th>Nama</th><th>Satuan</th><th>Konversi Opname</th><th>Minimal Stok</th><th>Kategori</th><th>Aksi</th></tr></thead>
                     <tbody>
                    {filteredItems.map(item => (
                         <tr key={item.id}>
@@ -271,6 +278,10 @@ export default function ExpenseSettingsPage() {
                             ? <span className="badge" style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid #C7D4F0' }}>1 {item.satuanOpname} = {item.konversi} {item.satuan}</span>
                          : <span style={{ color: 'var(--muted)', fontSize: '12px' }}>—</span>}
                     </td>
+                        <td>{item.minimalStok != null
+                          ? <span className="badge badge-orange">{item.minimalStok} {item.satuanOpname || item.satuan}</span>
+                          : <span style={{ color: 'var(--muted)', fontSize: '12px' }}>—</span>}
+                        </td>
                         <td>{item.category ? <span className="badge badge-blue">{item.category}</span> : null}</td>
                           <td>
                             <div style={{ display: 'flex', gap: '6px' }}>
@@ -283,7 +294,7 @@ export default function ExpenseSettingsPage() {
                         </tr>
                       ))}
                   {filteredItems.length === 0 && (
-                       <tr><td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)' }}>{search ? 'Tidak ada item ditemukan' : 'Belum ada item'}</td></tr>
+                       <tr><td colSpan={7} style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)' }}>{search ? 'Tidak ada item ditemukan' : 'Belum ada item'}</td></tr>
                       )}
                     </tbody>
                </table>

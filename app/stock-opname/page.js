@@ -7,8 +7,6 @@ const fmt = n => Number(n) % 1 !== 0 ? Number(n).toLocaleString('id-ID', { maxim
 const fmtRp = n => 'Rp ' + Number(n).toLocaleString('id-ID', { maximumFractionDigits: 0 })
 const fmtDate = d => new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' })
 const fmtDateShort = d => new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Jakarta' })
-// Label status permintaan restock (dipakai juga di halaman Pantau Bahan Baku)
-const REQUEST_STATUS_LABEL = { BELUM_DIBELI: 'Belum dibeli', DIPESAN: 'Dipesan', SELESAI: 'Selesai' }
 
 export default function StockOpnamePage() {
   const [opnames, setOpnames] = useState([])
@@ -40,9 +38,6 @@ export default function StockOpnamePage() {
   const [addingManual, setAddingManual] = useState(false)
   const [search, setSearch] = useState('')
   const [reopening, setReopening] = useState(false)
-  const [requestingId, setRequestingId] = useState(null)
-  const [showRequestModal, setShowRequestModal] = useState(false)
-  const [showLaporanRequest, setShowLaporanRequest] = useState(false)
   const [showSendWA, setShowSendWA] = useState(false)
   const [waSending, setWaSending] = useState(false)
   const [waTargets, setWaTargets] = useState({ admin: false, group: false })
@@ -207,38 +202,8 @@ export default function StockOpnamePage() {
     try {
       await api.patch(`/admin/stock-opname/${detail.id}`, { action: 'selesai' })
       setDetail(prev => ({ ...prev, status: 'SELESAI' })); load()
-      const hasRequest = detail.items.some(i => i.isRequested)
-      if (hasRequest) setShowLaporanRequest(true)
     } catch (e) { alert(e.response?.data?.message || 'Gagal menyelesaikan') }
     finally { setFinishing(false) }
-  }
-
-  async function setRequestState(itemId, isRequested) {
-    try {
-      await api.patch(`/admin/stock-opname/${detail.id}`, { action: 'request-item', itemId, isRequested, requestQty: null })
-      setDetail(prev => ({
-        ...prev,
-        items: prev.items.map(i => i.id === itemId
-          ? { ...i, isRequested, requestQty: null, requestStatus: isRequested ? 'BELUM_DIBELI' : i.requestStatus }
-          : i)
-      }))
-      return true
-    } catch (e) {
-      alert(e.response?.data?.message || 'Gagal menyimpan request')
-      return false
-    }
-  }
-
-  // Tombol Request di depan kartu → langsung nilai tanpa membuka sheet
-  function handleToggleRequest(e, item) {
-    e.stopPropagation()
-    return setRequestState(item.id, !item.isRequested)
-  }
-
-  async function handleSaveRequest(itemId) {
-    const item = detail.items.find(i => i.id === itemId)
-    const ok = await setRequestState(itemId, !item?.isRequested)
-    if (ok) { setRequestingId(null); setShowRequestModal(false) }
   }
 
   async function handleDelete(id) {
@@ -408,23 +373,6 @@ export default function StockOpnamePage() {
                           transition: 'border-color 0.15s',
                           WebkitTapHighlightColor: 'transparent',
                         }}>
-                        {/* Tombol Request — ditaruh di depan agar mudah ditekan */}
-                        <button
-                          onClick={e => handleToggleRequest(e, item)}
-                          title={item.isRequested ? 'Batalkan request restock' : 'Tandai perlu restock'}
-                          style={{
-                            flexShrink: 0, width: '42px', height: '42px', borderRadius: '11px',
-                            border: `1.5px solid ${item.isRequested ? '#FECACA' : '#FDE68A'}`,
-                            background: item.isRequested ? '#FEF2F2' : '#FFFBEB',
-                            color: item.isRequested ? '#EF4444' : '#D97706',
-                            cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontFamily: 'inherit', WebkitTapHighlightColor: 'transparent',
-                          }}>
-                          {item.isRequested
-                            ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                            : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>}
-                        </button>
-
                         {/* Status dot */}
                         <div style={{ width: '10px', height: '10px', borderRadius: '50%', flexShrink: 0, background: sudahIsi ? '#10B981' : '#F59E0B', marginTop: '2px' }} />
 
@@ -436,11 +384,6 @@ export default function StockOpnamePage() {
                             </span>
                             {item.isManual && (
                               <span style={{ fontSize: '10px', background: '#FFF7ED', color: '#D97706', border: '1px solid #FDE68A', padding: '1px 6px', borderRadius: '4px', fontWeight: '700', flexShrink: 0 }}>Manual</span>
-                            )}
-                            {item.isRequested && (
-                              <span style={{ fontSize: '10px', background: '#FEF2F2', color: '#EF4444', border: '1px solid #FECACA', padding: '1px 6px', borderRadius: '4px', fontWeight: '700', flexShrink: 0 }}>
-                                Request · {REQUEST_STATUS_LABEL[item.requestStatus] || 'Belum dibeli'}
-                              </span>
                             )}
                           </div>
                           <div style={{ display: 'flex', gap: '10px', marginTop: '4px', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -686,14 +629,6 @@ export default function StockOpnamePage() {
                       Hapus
                     </button>
                   )}
-                  <button onClick={() => {
-                    const item = detail.items.find(i => i.id === editSheet.id)
-                    const isReq = !item?.isRequested
-                    handleSaveRequest(editSheet.id).then(() => {})
-                  }}
-                    style={{ padding: '14px', borderRadius: '12px', border: `1.5px solid ${editSheet.isRequested ? '#FECACA' : '#FDE68A'}`, background: editSheet.isRequested ? '#FEF2F2' : '#FFFBEB', color: editSheet.isRequested ? '#EF4444' : '#D97706', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                    {editSheet.isRequested ? '✓ Request' : 'Request'}
-                  </button>
                   <button onClick={() => setEditSheet(null)}
                     style={{ flex: 1, padding: '14px', borderRadius: '12px', border: '1.5px solid var(--border)', background: 'var(--surface2)', color: 'var(--text2)', fontSize: '14px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
                     Batal
@@ -749,58 +684,6 @@ export default function StockOpnamePage() {
           </div>
         )}
 
-        {/* Modal Request */}
-        {showRequestModal && requestingId && (() => {
-          const item = detail.items.find(i => i.id === requestingId)
-          return (
-            <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400, backdropFilter: 'blur(6px)' }}
-              onClick={e => { if (e.target === e.currentTarget) { setShowRequestModal(false); setRequestingId(null) } }}>
-              <div className="card fade-in" style={{ width: '340px', maxWidth: '96vw', overflow: 'hidden' }}>
-                <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', textAlign: 'center' }}>
-                  <div style={{ fontSize: '15px', fontWeight: '800', color: 'var(--text)' }}>{item?.isRequested ? 'Batalkan Request?' : 'Tandai Perlu Restock?'}</div>
-                  <div style={{ fontSize: '13px', color: 'var(--muted)' }}>{item?.inventoryItem?.name || item?.itemName}</div>
-                </div>
-                <div style={{ padding: '0 20px 20px', display: 'flex', gap: '8px' }}>
-                  <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center', padding: '12px' }} onClick={() => { setShowRequestModal(false); setRequestingId(null) }}>Batal</button>
-                  <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center', padding: '12px', background: item?.isRequested ? '#EF4444' : '#F59E0B', borderColor: item?.isRequested ? '#EF4444' : '#F59E0B' }}
-                    onClick={() => handleSaveRequest(requestingId)}>
-                    {item?.isRequested ? 'Batalkan' : 'Tandai'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )
-        })()}
-
-        {/* Popup Laporan Request */}
-        {showLaporanRequest && detail && (() => {
-          const requested = detail.items.filter(i => i.isRequested)
-          return (
-            <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500, backdropFilter: 'blur(6px)' }}>
-              <div className="card fade-in" style={{ width: '420px', maxWidth: '96vw', overflow: 'hidden', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
-                <div style={{ padding: '20px 24px 16px', background: 'linear-gradient(135deg, #FFF7ED, #FFFBEB)', flexShrink: 0 }}>
-                  <div style={{ fontSize: '15px', fontWeight: '800', color: 'var(--text)' }}>Daftar Restock ({requested.length} item)</div>
-                </div>
-                <div style={{ overflowY: 'auto', flex: 1, padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  {requested.map((item, i) => (
-                    <div key={item.id} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', background: 'var(--surface2)', borderRadius: '10px', border: '1px solid var(--border)' }}>
-                      <span style={{ fontSize: '11px', fontWeight: '800', color: '#D97706', width: '20px', flexShrink: 0 }}>{i + 1}</span>
-                      <div>
-                        <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text)' }}>{item.inventoryItem?.name || item.itemName}</div>
-                        {(item.expenseItem?.category || item.inventoryItem?.category) && (
-                          <div style={{ fontSize: '11px', color: 'var(--muted)' }}>{item.expenseItem?.category || item.inventoryItem?.category}</div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div style={{ padding: '14px 16px', borderTop: '1px solid var(--border)', background: 'var(--surface2)', flexShrink: 0 }}>
-                  <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '12px', background: '#F59E0B', borderColor: '#F59E0B' }} onClick={() => setShowLaporanRequest(false)}>Tutup</button>
-                </div>
-              </div>
-            </div>
-          )
-        })()}
       </div>
     )
   }

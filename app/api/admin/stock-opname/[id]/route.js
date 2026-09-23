@@ -178,16 +178,6 @@ export async function PATCH(req, { params }) {
     return NextResponse.json({ success: true })
   }
 
-  // Toggle request item
-  if (body.action === 'request-item') {
-    const { itemId, isRequested, requestQty } = body
-    const updated = await prisma.stockOpnameItem.update({
-      where: { id: itemId },
-      data: { isRequested: Boolean(isRequested), requestQty: requestQty != null ? Number(requestQty) : null },
-    })
-    return NextResponse.json(updated)
-  }
-
   // Update satu item opname
   if (body.itemId !== undefined) {
     const { itemId, qtyActual, note, hargaTerakhir } = body
