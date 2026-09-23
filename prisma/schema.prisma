@@ -21,6 +21,9 @@ model User {
   dailyReports   DailyReport[]
   expenses       Expense[]
   stockOpnames   StockOpname[]
+  // OperationalBelanja relations (added to satisfy Prisma validation)
+  operationalBelanjaAsRequester OperationalBelanja[] @relation("OperationalBelanjaRequester")
+  operationalBelanjaAsApprovedBy OperationalBelanja[] @relation("ApprovedOperationalBelanja")
 }
 
 model CustomRole {
