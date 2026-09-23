@@ -27,6 +27,8 @@ export default function PengeluaranPage() {
   const [importResult, setImportResult] = useState(null)
   const fileRef = useRef(null)
   const [editCartItem, setEditCartItem] = useState(null) // { itemId, harga, isi, qty, keterangan }
+  const [cartOpen, setCartOpen] = useState(false)      // bottom-sheet keranjang (mobile)
+  const [cartFlash, setCartFlash] = useState(false)    // sorot singkat panel keranjang (desktop)
 
   const [expenseCategories, setExpenseCategories] = useState([])
 
@@ -34,6 +36,13 @@ export default function PengeluaranPage() {
     api.get('/admin/expense-items').then(r => setItems(r.data)).catch(() => {})
     api.get('/admin/expense-categories').then(r => setExpenseCategories(r.data.map(c => c.name))).catch(() => {})
   }, [])
+
+  // Kunci scroll body saat bottom-sheet keranjang terbuka (mobile)
+  useEffect(() => {
+    if (cartOpen) document.body.style.overflow = 'hidden'
+    else document.body.style.overflow = ''
+    return () => { document.body.style.overflow = '' }
+  }, [cartOpen])
 
   const categories = ['Semua', ...Array.from(new Set(items.filter(i => !i.isManual && i.category).map(i => i.category)))]
 
@@ -63,6 +72,15 @@ export default function PengeluaranPage() {
 
   function removeFromCart(itemId) {
     setCart(prev => { const next = { ...prev }; delete next[itemId]; return next })
+  }
+
+  // Buka keranjang: mobile → bottom sheet, desktop → sorot panel kanan
+  function openCart() {
+    if (window.innerWidth <= 768) { setCartOpen(true); return }
+    const el = document.getElementById('pg-cart')
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    setCartFlash(true)
+    window.setTimeout(() => setCartFlash(false), 1400)
   }
 
   function downloadTemplate() {
@@ -135,7 +153,7 @@ export default function PengeluaranPage() {
         })),
       })
       setSaved(res.data)
-      setCart({}); setCatatan('')
+      setCart({}); setCatatan(''); setCartOpen(false)
       setItems(prev => prev.filter(i => !i.isManual))
     } catch (e) {
       alert(e.response?.data?.message || 'Gagal menyimpan')
@@ -181,28 +199,37 @@ export default function PengeluaranPage() {
       <Sidebar />
       <main className="main pg-main" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', height: '100vh' }}>
 
-        {/* Topbar */}
-        <div className="topbar">
+        {/* Topbar: judul + ikon keranjang */}
+        <div className="topbar pg-topbar">
           <div>
             <div className="topbar-title">Pengeluaran</div>
             <div className="topbar-sub">Catat pengeluaran harian</div>
           </div>
-          <div className="pg-topbar-actions" style={{ display: 'flex', gap: '8px' }}>
-            <button className="btn btn-ghost" onClick={downloadTemplate}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              Template
-            </button>
-            <input ref={fileRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={handleImport} />
-            <button className="btn" style={{ background: '#F0FDF4', color: '#10B981', border: '1px solid #A7F3D0' }}
-              onClick={() => fileRef.current.click()} disabled={importing}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              Import CSV
-            </button>
-            <button className="btn btn-ghost" onClick={() => setManualOpen(true)} style={{ gap: '7px' }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Input Manual
+          <div className="pg-topbar-actions">
+            <button className="pg-cart-btn" type="button" onClick={openCart} aria-label="Buka keranjang">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+              <span className="pg-cart-btn-label">Keranjang</span>
+              {cartItems.length > 0 && <span className="pg-cart-badge">{cartItems.length}</span>}
             </button>
           </div>
+        </div>
+
+        {/* Toolbar aksi — baris terpisah supaya header tidak sempit/mepet */}
+        <div className="pg-toolbar">
+          <button className="btn btn-ghost" onClick={downloadTemplate}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Template
+          </button>
+          <input ref={fileRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={handleImport} />
+          <button className="btn" style={{ background: '#F0FDF4', color: '#10B981', border: '1px solid #A7F3D0' }}
+            onClick={() => fileRef.current.click()} disabled={importing}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Import CSV
+          </button>
+          <button className="btn btn-ghost" onClick={() => setManualOpen(true)} style={{ gap: '7px' }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Input Manual
+          </button>
         </div>
 
         {/* Progress Bar Import */}
@@ -235,7 +262,7 @@ export default function PengeluaranPage() {
           <div className="pg-list" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', borderRight: '1px solid var(--border)' }}>
 
             {/* Search + Filter */}
-            <div style={{ padding: '16px 20px 12px', background: 'var(--surface)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+            <div className="pg-search" style={{ padding: '16px 20px 12px', background: 'var(--surface)', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
               <div style={{ position: 'relative', marginBottom: '12px' }}>
                 <svg style={{ position: 'absolute', left: '13px', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)' }} width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 <input className="input" style={{ paddingLeft: '40px', background: 'var(--surface2)' }}
@@ -243,7 +270,7 @@ export default function PengeluaranPage() {
                   value={search} onChange={e => setSearch(e.target.value)} />
               </div>
               {categories.length > 1 && (
-                <div style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '2px' }}>
+                <div className="pg-chips" style={{ display: 'flex', gap: '6px', overflowX: 'auto', paddingBottom: '2px' }}>
                   {categories.map(cat => (
                     <button key={cat} onClick={() => setActiveCategory(cat)}
                       style={{ padding: '5px 14px', borderRadius: '20px', border: '1.5px solid', fontSize: '12px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'inherit', transition: 'all 0.15s',
@@ -379,8 +406,18 @@ export default function PengeluaranPage() {
             </div>
           </div>
 
+          {/* Backdrop bottom-sheet keranjang (mobile) */}
+          {cartOpen && <div className="pg-cart-backdrop" onClick={() => setCartOpen(false)} />}
+
           {/* ── Right: Summary Panel ── */}
-          <div className="pg-cart" style={{ width: '320px', flexShrink: 0, display: 'flex', flexDirection: 'column', background: 'var(--surface)', overflow: 'hidden' }}>
+          <div id="pg-cart" className={`pg-cart${cartOpen ? ' open' : ''}${cartFlash ? ' flash' : ''}`} style={{ width: '320px', flexShrink: 0, display: 'flex', flexDirection: 'column', background: 'var(--surface)', overflow: 'hidden' }}>
+            {/* Handle + tombol tutup (hanya tampil di mobile) */}
+            <div className="pg-cart-sheetbar">
+              <span className="pg-cart-handle" />
+              <button className="pg-cart-close" type="button" onClick={() => setCartOpen(false)} aria-label="Tutup keranjang">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
 
             {/* Panel header */}
             <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', background: 'linear-gradient(135deg, #EBF1FB, #F5F8FE)' }}>
@@ -435,7 +472,7 @@ export default function PengeluaranPage() {
             </div>
 
             {/* Catatan + Save */}
-            <div style={{ padding: '14px 16px', borderTop: '1px solid var(--border)', background: 'var(--surface2)' }}>
+            <div className="pg-cart-footer" style={{ padding: '14px 16px', borderTop: '1px solid var(--border)', background: 'var(--surface2)' }}>
               <textarea className="input" rows={2} placeholder="Catatan pengeluaran... (opsional)" value={catatan}
                 onChange={e => setCatatan(e.target.value)} style={{ resize: 'none', fontSize: '12px', marginBottom: '10px' }} />
               <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '12px', fontSize: '14px', opacity: cartItems.length ? 1 : 0.5, cursor: cartItems.length ? 'pointer' : 'not-allowed' }}
@@ -451,6 +488,21 @@ export default function PengeluaranPage() {
           </div>
         </div>
       </main>
+
+      {/* FAB keranjang (mobile) — ringkasan item + pintasan buka sheet */}
+      {cartItems.length > 0 && !importResult && (
+        <button className="pg-cart-fab" type="button" onClick={openCart}>
+          <span className="pg-cart-fab-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+            <span className="pg-cart-badge">{cartItems.length}</span>
+          </span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: 'block', fontSize: '11px', fontWeight: 600, opacity: 0.9 }}>{cartItems.length} item di keranjang</span>
+            <span style={{ display: 'block', fontSize: '15px', fontWeight: 800, letterSpacing: '-0.3px' }}>{fmt(total)}</span>
+          </span>
+          <span style={{ fontSize: '12px', fontWeight: 700, whiteSpace: 'nowrap' }}>Lihat</span>
+        </button>
+      )}
 
       {/* ── Modal Input Manual ── */}
       {manualOpen && (
@@ -632,17 +684,55 @@ export default function PengeluaranPage() {
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pgFlash { 0%, 100% { box-shadow: inset 0 0 0 2px rgba(79,110,247,0); } 50% { box-shadow: inset 0 0 0 2px var(--accent); } }
+
+        /* ── Pengeluaran: header, toolbar & keranjang ── */
+        .pg-added-row { flex-wrap: wrap; }
+        .pg-topbar-actions { display: flex; align-items: center; gap: 8px; }
+        .pg-toolbar {
+          display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+          padding: 10px 24px; background: var(--surface);
+          border-bottom: 1px solid var(--border);
+        }
+        .pg-cart-btn {
+          position: relative;
+          display: flex; align-items: center; gap: 7px;
+          padding: 8px 13px; border-radius: 10px;
+          border: 1.5px solid var(--border); background: var(--surface);
+          color: var(--text2); font-family: inherit; font-size: 12px; font-weight: 700;
+          cursor: pointer; transition: border-color 0.15s, background 0.15s, color 0.15s;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .pg-cart-btn:hover { border-color: var(--accent); background: var(--accent-light); color: var(--accent); }
+        .pg-cart-badge {
+          position: absolute; top: -7px; right: -7px;
+          min-width: 18px; height: 18px; padding: 0 4px;
+          border-radius: 99px; background: var(--red); color: #fff;
+          font-size: 10px; font-weight: 800; line-height: 1;
+          display: flex; align-items: center; justify-content: center;
+          border: 2px solid var(--surface);
+        }
+        .pg-cart-sheetbar, .pg-cart-backdrop, .pg-cart-fab { display: none; }
+        .pg-cart.flash { animation: pgFlash 0.6s ease-in-out 2; }
 
         /* ── Pengeluaran: mobile friendly ── */
-        .pg-added-row { flex-wrap: wrap; }
         @media (max-width: 768px) {
-          .pg-main { height: auto !important; min-height: 100vh; overflow: visible !important; }
+          /* Header lega: judul + ikon keranjang, aksi di baris toolbar */
+          .pg-topbar { height: auto !important; min-height: 56px; padding-top: 9px !important; padding-bottom: 9px !important; flex-wrap: wrap; gap: 8px; }
+          .pg-toolbar { padding: 10px 12px !important; gap: 6px; }
+          .pg-toolbar .btn { flex: 1 1 0; min-width: 0; justify-content: center; padding: 9px 6px !important; font-size: 11px !important; white-space: nowrap; overflow: hidden; }
+          .pg-cart-btn { padding: 7px 11px !important; }
+
+          /* Layout menumpuk */
+          .pg-main { height: auto !important; min-height: 100vh; overflow: visible !important; padding-bottom: 132px !important; }
           .pg-layout { flex-direction: column; overflow: visible !important; }
           .pg-list { border-right: none !important; overflow: visible !important; }
-          .pg-items { overflow: visible !important; }
-          .pg-cart { width: 100% !important; max-width: none !important; overflow: visible !important; border-top: 1px solid var(--border); }
-          .pg-cart-items { overflow: visible !important; }
-          .pg-topbar-actions { flex-wrap: wrap; justify-content: flex-end; }
+          .pg-items { overflow: visible !important; padding: 12px !important; }
+          .pg-search { padding: 12px 12px 10px !important; }
+          .pg-chips { overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding-bottom: 4px !important; }
+          .pg-chips::-webkit-scrollbar { display: none; }
+
+          /* Input baris item */
           .pg-input-row { flex-wrap: wrap; }
           .pg-ket { flex: 1 1 100% !important; min-width: 0; }
           .pg-nw { flex: 1 1 0; min-width: 76px; }
@@ -650,6 +740,39 @@ export default function PengeluaranPage() {
           .pg-qty { flex: 0 1 64px; width: auto !important; }
           .pg-grid3 { grid-template-columns: 1fr 1fr !important; }
           .pg-added-row { margin-left: 0 !important; width: 100%; justify-content: space-between; }
+
+          /* Keranjang = bottom sheet */
+          .pg-cart-backdrop { display: block; position: fixed; inset: 0; background: rgba(15,23,42,0.5); z-index: 205; backdrop-filter: blur(2px); }
+          .pg-cart {
+            position: fixed; left: 0; right: 0; bottom: 0;
+            width: auto !important; max-width: none !important;
+            max-height: 86vh; z-index: 210;
+            border-radius: 20px 20px 0 0;
+            border-top: 1px solid var(--border) !important;
+            box-shadow: 0 -8px 40px rgba(15,23,42,0.28);
+            transform: translateY(100%); transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+            padding-bottom: env(safe-area-inset-bottom);
+          }
+          .pg-cart.open { transform: translateY(0); }
+          .pg-cart-sheetbar { display: block; position: relative; padding: 9px 46px 5px; }
+          .pg-cart-handle { display: block; width: 44px; height: 5px; margin: 0 auto; border-radius: 99px; background: var(--border2); }
+          .pg-cart-close { display: flex; align-items: center; justify-content: center; position: absolute; right: 10px; top: 4px; width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface2); color: var(--muted); cursor: pointer; }
+          .pg-cart-items { flex: 1 1 auto !important; overflow-y: auto !important; -webkit-overflow-scrolling: touch; padding: 12px !important; }
+          .pg-cart-footer { padding-bottom: calc(14px + env(safe-area-inset-bottom)) !important; }
+
+          /* FAB keranjang (ringkasan + pintasan sheet) */
+          .pg-cart-fab {
+            display: flex; align-items: center; gap: 10px;
+            position: fixed; left: 12px; right: 12px; bottom: 70px; z-index: 60;
+            padding: 10px 14px; border: none; border-radius: 15px;
+            background: var(--accent); color: #fff;
+            box-shadow: 0 10px 28px rgba(79,110,247,0.42);
+            cursor: pointer; font-family: inherit; text-align: left;
+            -webkit-tap-highlight-color: transparent;
+          }
+          .pg-cart-fab-icon { position: relative; display: flex; align-items: center; justify-content: center; }
+          .pg-cart-fab .pg-cart-badge { border-color: var(--accent); background: #fff; color: var(--red); }
+
           .pg-toast { left: 12px !important; right: 12px !important; bottom: 76px !important; max-width: none !important; width: auto !important; }
         }
       `}</style>
