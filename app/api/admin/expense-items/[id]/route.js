@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { verifyAuth, adminOnly } from '@/lib/auth'
+import { verifyAuth, adminOnly, pageAccessOnly } from '@/lib/auth'
 
 const requireJson = req => {
   const method = req.method
@@ -12,7 +12,9 @@ const requireJson = req => {
 export async function PUT(req, { params }) {
   const { error, user } = verifyAuth(req)
   if (error) return error
-  const denied = adminOnly(user)
+  // Edit item (termasuk isi minimal stok) mengikuti akses halaman /expense-settings:
+  // ADMIN selalu boleh; role custom (mis. "Operasional") harus punya halaman itu di allowedPaths
+  const denied = pageAccessOnly(user, '/expense-settings')
   if (denied) return denied
   const ct = requireJson(req)
   if (ct) return ct

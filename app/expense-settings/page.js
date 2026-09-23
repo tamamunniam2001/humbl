@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import Sidebar from '@/components/Sidebar'
 import api from '@/lib/api'
+import Cookies from 'js-cookie'
 
 const empty = { code: '', name: '', category: '', satuan: '', satuanOpname: '', konversi: '', minimalStok: '' }
 
@@ -17,6 +18,11 @@ export default function ExpenseSettingsPage() {
   const [importResult, setImportResult] = useState(null)
   const [syncing, setSyncing] = useState(false)
   const fileRef = useRef(null)
+
+  // Sembunyikan aksi khusus ADMIN (import/tambah/hapus) — role operasional hanya
+  // mengedit item (mis. mengisi minimal stok); deteksi role mengikuti pola Sidebar
+  const user = (() => { try { return JSON.parse(Cookies.get('user') || '{}') } catch { return {} } })()
+  const isAdmin = user.role === 'ADMIN'
 
   async function load() {
     const res = await api.get('/admin/expense-items')
@@ -152,12 +158,16 @@ export default function ExpenseSettingsPage() {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               Template CSV
             </button>
-            <input ref={fileRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={handleImport} />
-            <button className="btn" style={{ background: '#F0FDF4', color: '#10B981', border: '1px solid #A7F3D0' }}
-              onClick={handleClickImport} disabled={importing}>
-             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            {importing ? 'Mengimpor...' : 'Import CSV'}
-            </button>
+            {isAdmin && (
+              <>
+                <input ref={fileRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={handleImport} />
+                <button className="btn" style={{ background: '#F0FDF4', color: '#10B981', border: '1px solid #A7F3D0' }}
+                  onClick={handleClickImport} disabled={importing}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                  {importing ? 'Mengimpor...' : 'Import CSV'}
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -249,9 +259,10 @@ export default function ExpenseSettingsPage() {
                     {catNames.map(c => <option key={c} value={c} />)}
                   </datalist>
                   <div style={{ display: 'flex', gap: '8px' }}>
-                 <button type="submit" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
+                 {(editId || isAdmin) && <button type="submit" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>
                    {editId ? 'Simpan' : 'Tambah'}
-                  </button>
+                  </button>}
+                    {!editId && !isAdmin && <div style={{ flex: 1, fontSize: '11px', color: 'var(--muted)', alignSelf: 'center', lineHeight: 1.5 }}>Operasional: tekan <b>Edit</b> pada item untuk mengisi minimal stok.</div>}
                     {editId && <button type="button" className="btn btn-ghost" onClick={handleCancelEdit}>Batal</button>}
                   </div>
                 </form>
@@ -287,8 +298,10 @@ export default function ExpenseSettingsPage() {
                             <div style={{ display: 'flex', gap: '6px' }}>
                            <button className="btn" style={{ background: '#EFF4FF', color: 'var(--accent)', border: '1px solid #C7D4F0', padding: '5px 12px', fontSize: '12px' }}
                             onClick={() => handleEditItem(item)}>Edit</button>
-                           <button className="btn btn-danger" style={{ padding: '5px 12px', fontSize: '12px' }}
-                             onClick={() => handleDelete(item.id)}>Hapus</button>
+                           {isAdmin && (
+                             <button className="btn btn-danger" style={{ padding: '5px 12px', fontSize: '12px' }}
+                               onClick={() => handleDelete(item.id)}>Hapus</button>
+                           )}
                           </div>
                         </td>
                         </tr>
