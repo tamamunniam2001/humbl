@@ -1,23 +1,24 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth'
+import { wibDayRange, wibShiftForTransaction } from '@/lib/wib'
 
 export async function GET(req, { params }) {
   const { error } = verifyAuth(req)
   if (error) return error
   const { id } = await params
 
-  const report = await prisma.dailyReport.findUnique({ where: { id }, select: { date: true } })
+  const report = await prisma.dailyReport.findUnique({ where: { id }, select: { date: true, createdAt: true, shift: true } })
   if (!report) return NextResponse.json({ message: 'Laporan tidak ditemukan' }, { status: 404 })
 
-  const TZ_OFFSET = 7 * 60 * 60 * 1000
-  const dateWIB = new Date(new Date(report.date).getTime() + TZ_OFFSET)
-  const y = dateWIB.getUTCFullYear(), m = dateWIB.getUTCMonth(), d = dateWIB.getUTCDate()
-  const dayStart = new Date(Date.UTC(y, m, d) - TZ_OFFSET)
-  const dayEnd = new Date(Date.UTC(y, m, d, 23, 59, 59, 999) - TZ_OFFSET)
+  const dayRange = wibDayRange(report.date)
+  const reports = await prisma.dailyReport.findMany({
+    where: { date: { gte: dayRange.gte, lte: dayRange.lte } },
+    select: { shift: true, date: true },
+  })
 
   const transactions = await prisma.transaction.findMany({
-    where: { status: 'COMPLETED', createdAt: { gte: dayStart, lte: dayEnd } },
+    where: { status: 'COMPLETED', deletedAt: null, createdAt: { gte: dayRange.gte, lte: dayRange.lte } },
     select: {
       id: true, invoiceNo: true, total: true, payMethod: true, createdAt: true,
       customerName: true,
@@ -26,5 +27,5 @@ export async function GET(req, { params }) {
     orderBy: { createdAt: 'asc' },
   })
 
-  return NextResponse.json(transactions)
+  return NextResponse.json(transactions.filter(tx => wibShiftForTransaction(tx.createdAt, reports) === report.shift))
 }

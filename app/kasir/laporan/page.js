@@ -4,16 +4,11 @@ import { usePathname } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import api from '@/lib/api'
 import Cookies from 'js-cookie'
+import { isSameWibDay, wibDateKey } from '@/lib/wib'
 
 const fmt = (n) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(n || 0)
 const fmtDate = (d) => new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
-const isToday = (d) => {
-  const date = new Date(d)
-  const now = new Date()
-  return date.getFullYear() === now.getFullYear() &&
-    date.getMonth() === now.getMonth() &&
-    date.getDate() === now.getDate()
-}
+const isToday = (d) => isSameWibDay(d, new Date())
 
 const SHIFT_LABELS = { SHIFT_1: 'Shift 1', SHIFT_2: 'Shift 2', SHIFT_3: 'Shift 3' }
 const SHIFT_COLORS = {
@@ -81,9 +76,9 @@ export default function LaporanHarianPage() {
   const totalPengeluaran = (r) => (r.pengeluaran || []).reduce((s, p) => s + (p.harga * p.qty), 0)
   const kasAkhir = (r) => (r.kasAwal || 0) + (r.uangDisetor || 0) - totalPengeluaran(r)
 
-  // Group reports by date (YYYY-MM-DD)
+  // Group laporan berdasarkan tanggal kalender WIB
   const grouped = reports.reduce((acc, r) => {
-    const key = new Date(r.date).toLocaleDateString('en-CA')
+    const key = wibDateKey(r.date)
     if (!acc[key]) acc[key] = []
     acc[key].push(r)
     return acc
@@ -459,23 +454,14 @@ function EditModal({ report: r, onClose, onSaved, fmt, fmtDate, isAdmin }) {
   function addPengeluaran() { setPengeluaran(prev => [...prev, { barang: '', qty: 1, harga: 0 }]) }
   function updateP(i, field, val) { setPengeluaran(prev => prev.map((p, n) => n === i ? { ...p, [field]: val } : p)) }
 
-  // Sinkron nilai penjualan dari transaksi aktual sesuai jam shift
+  // Sinkronkan nilai penjualan dari transaksi aktif sesuai rentang shift WIB
   async function handleSync() {
-    const SHIFT_RANGES = {
-      SHIFT_1: { startHour: 7,  endHour: 13 },
-      SHIFT_2: { startHour: 12, endHour: 18 },
-      SHIFT_3: { startHour: 17, endHour: 23 },
-    }
     const currentShift = isAdmin ? shift : r.shift
-    const shiftDef = SHIFT_RANGES[currentShift]
-    if (!shiftDef) return alert('Shift tidak dikenal')
+    if (!currentShift) return alert('Shift tidak dikenal')
     setSyncing(true)
     try {
-      const dateWIB = new Date(r.date).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })
-      const from = new Date(`${dateWIB}T${String(shiftDef.startHour).padStart(2,'0')}:00:00+07:00`)
-      const to   = new Date(`${dateWIB}T${String(shiftDef.endHour - 1).padStart(2,'0')}:59:59.999+07:00`)
-      const res = await api.get(`/transactions?slim=1&all=1&from=${from.toISOString()}&to=${to.toISOString()}`)
-      const txs = (res.data.transactions || []).filter(t => t.status === 'COMPLETED' && !t.deletedAt)
+      const res = await api.get(`/daily-reports/${r.id}/transactions`)
+      const txs = (res.data || []).filter(t => t.status === 'COMPLETED' && !t.deletedAt)
       const totP   = txs.reduce((s, t) => s + t.total, 0)
       const totC   = txs.filter(t => t.payMethod === 'CASH').reduce((s, t) => s + t.total, 0)
       const totQ   = txs.filter(t => t.payMethod === 'QRIS').reduce((s, t) => s + t.total, 0)

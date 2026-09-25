@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth'
+import { wibDayRange, wibDateKey } from '@/lib/wib'
 
 function isSameOrigin(req) {
   const host = req.headers.get('host')
@@ -24,8 +25,12 @@ export async function GET(req) {
   const limit = 30 // hari per halaman
 
   const where = { status: 'COMPLETED', deletedAt: null }
-  if (from) where.createdAt = { ...(where.createdAt || {}), gte: new Date(from) }
-  if (to) where.createdAt = { ...(where.createdAt || {}), lte: new Date(to + 'T23:59:59.999Z') }
+  if (from || to) {
+    const range = {}
+    if (from) range.gte = wibDayRange(from).gte
+    if (to) range.lte = wibDayRange(to).lte
+    where.createdAt = { ...(where.createdAt || {}), ...range }
+  }
 
   const transactions = await prisma.transaction.findMany({
     where,
@@ -52,10 +57,10 @@ export async function GET(req) {
     orderBy: { createdAt: 'desc' },
   })
 
-  // Group by date (YYYY-MM-DD in local timezone)
+  // Group by tanggal kalender WIB
   const grouped = {}
   for (const tx of transactions) {
-    const dateKey = new Date(tx.createdAt).toLocaleDateString('en-CA') // YYYY-MM-DD
+    const dateKey = wibDateKey(tx.createdAt)
     if (!grouped[dateKey]) grouped[dateKey] = []
     grouped[dateKey].push(tx)
   }

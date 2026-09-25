@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth'
+import { wibDayRange } from '@/lib/wib'
 
 export async function GET(req) {
   const { error, user } = verifyAuth(req)
@@ -10,7 +11,12 @@ export async function GET(req) {
   const from = searchParams.get('from')
   const to = searchParams.get('to')
   const where = {}
-  if (from && to) where.date = { gte: new Date(from), lte: new Date(new Date(to).setHours(23, 59, 59, 999)) }
+  if (from || to) {
+    const range = {}
+    if (from) range.gte = wibDayRange(from).gte
+    if (to) range.lte = wibDayRange(to).lte
+    where.date = { ...(where.date || {}), ...range }
+  }
   const last = searchParams.get('last')
   if (last) {
     const report = await prisma.dailyReport.findFirst({ where, include: { cashier: { select: { name: true } } }, orderBy: { date: 'desc' } })
