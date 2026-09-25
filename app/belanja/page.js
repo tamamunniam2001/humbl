@@ -78,6 +78,8 @@ const pgStyles = (
     .pg-edit-item-head > input:first-child { flex: 1; min-width: 0; }
     .pg-edit-item-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .pg-edit-item-total { flex: 1 1 100%; text-align: right; font-size: 12.5px; font-weight: 800; color: var(--red); }
+    .pg-unit-hint { font-size: 11px; color: var(--muted); padding-left: 2px; }
+    .pg-isi { width: 88px; }
     .pg-modal-body { overflow-y: auto; -webkit-overflow-scrolling: touch; }
 
     /* ── Belanja Operasional: mobile friendly ── */
@@ -112,6 +114,7 @@ const pgStyles = (
       .pg-ket { flex: 1 1 100% !important; min-width: 0; }
       .pg-nw { flex: 1 1 0; min-width: 76px; }
       .pg-nw > input { width: 100% !important; }
+      .pg-isi { flex: 1 1 0 !important; min-width: 76px !important; width: auto !important; }
       .pg-qty { flex: 0 1 64px; width: auto !important; }
       .pg-added-row { margin-left: 0 !important; width: 100%; justify-content: space-between; }
 
@@ -218,6 +221,7 @@ export default function BelanjaPage() {
   const [editId, setEditId] = useState(null)
   const [editForm, setEditForm] = useState({ tanggal: '', keterangan: '', items: [] })
   const [savingEdit, setSavingEdit] = useState(false)
+  const [deletingId, setDeletingId] = useState(null)
   const [editParam, setEditParam] = useState(null) // deep link ?edit=<id> dari halaman Saldo
   const [toastMsg, setToastMsg] = useState('')
 
@@ -468,7 +472,7 @@ export default function BelanjaPage() {
           itemId: it.itemId || null,
           name: it.itemName,
           harga: Number(it.harga) || 0,
-          isi: it.isi,
+          isi: Number(it.isi) > 0 ? Number(it.isi) : null,
           qty: Number(it.qty) || 1,
           satuan: it.satuan || '',
           keterangan: it.keterangan || '',
@@ -482,6 +486,33 @@ export default function BelanjaPage() {
       alert(err.response?.data?.message || 'Gagal memperbarui pengajuan belanja')
     } finally {
       setSavingEdit(false)
+    }
+  }
+
+  // ── Hapus riwayat pengajuan belanja (Khusus Admin) ──
+  async function handleDeleteBelanja(item) {
+    if (!isAdmin) {
+      alert('Hanya Admin yang berhak menghapus riwayat pengajuan belanja')
+      return
+    }
+
+    const label = item.keterangan ? `"${item.keterangan}" (${fmt(item.total)})` : `${fmt(item.total)} oleh ${item.requesterName}`
+    const confirmMsg = item.status === 'APPROVED'
+      ? `Yakin ingin menghapus riwayat pengajuan belanja ini: ${label}?\n\nPerhatian: Pengajuan ini sudah berstatus DISETUJUI (ACC). Menghapus pengajuan ini hanya membersihkan riwayat pengajuan belanja, tanpa mengubah data pembukuan Toko/Ledger yang sudah tercatat.`
+      : `Yakin ingin menghapus riwayat pengajuan belanja ini: ${label}?`
+
+    if (!window.confirm(confirmMsg)) return
+
+    setDeletingId(item.id)
+    try {
+      await api.delete(`/operational/belanja/${item.id}`)
+      fetchHistory()
+      fetchSaldo()
+      setToastMsg('Riwayat pengajuan belanja berhasil dihapus')
+    } catch (err) {
+      alert(err.response?.data?.message || 'Gagal menghapus riwayat pengajuan belanja')
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -508,7 +539,10 @@ export default function BelanjaPage() {
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: i < saved.items.length - 1 ? '1px solid var(--border)' : 'none' }}>
                   <div>
                     <div style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text)' }}>{item.itemName}</div>
-                    <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>{fmt(item.harga)} × {item.qty} {item.satuan}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>
+                      {fmt(item.harga)} × {item.qty} {item.satuan}
+                      {Number(item.isi) > 0 ? ` · ${fmt(Number(item.harga) / Number(item.isi))}/${item.satuan || 'isi'}` : ''}
+                    </div>
                   </div>
                   <div style={{ fontSize: '14px', fontWeight: '700', color: 'var(--text)' }}>{fmt(item.subtotal)}</div>
                 </div>
@@ -615,7 +649,12 @@ export default function BelanjaPage() {
                         <div style={{ background: 'var(--surface2)', borderRadius: '10px', padding: '10px 14px', fontSize: '12px' }}>
                           {item.items?.map((sub, idx) => (
                             <div key={idx} className="pg-hist-item">
-                              <span>{sub.itemName} ({sub.qty} {sub.satuan || ''})</span>
+                              <span>
+                                {sub.itemName} ({sub.qty} {sub.satuan || ''})
+                                {Number(sub.isi) > 0 && (
+                                  <span style={{ color: 'var(--muted)' }}> · {fmt(Number(sub.harga) / Number(sub.isi))}/{sub.satuan || 'isi'}</span>
+                                )}
+                              </span>
                               <span>{fmt(sub.subtotal)}</span>
                             </div>
                           ))}
@@ -624,17 +663,33 @@ export default function BelanjaPage() {
                         {item.keterangan && <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '8px', fontStyle: 'italic' }}>Catatan: &quot;{item.keterangan}&quot;</div>}
                         {item.adminNote && <div style={{ fontSize: '12px', color: '#EF4444', marginTop: '4px', fontWeight: '600' }}>Catatan Admin: &quot;{item.adminNote}&quot;</div>}
 
-                        {/* Aksi edit — Admin & Operasional, hanya saat status masih PENDING */}
-                        {canEditItem(item) && (
-                          <div className="pg-hist-actions">
+                        {/* Aksi baris riwayat */}
+                        <div className="pg-hist-actions">
+                          {/* Aksi edit — Admin & Operasional, hanya saat status masih PENDING */}
+                          {canEditItem(item) && (
                             <button type="button" className="btn" onClick={() => openEdit(item)}
                               title="Ubah tanggal, catatan, atau rincian item pengajuan"
                               style={{ background: 'var(--orange-light)', color: 'var(--orange)', border: '1px solid var(--orange-light)', fontWeight: '700' }}>
                               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
                               Edit Rincian
                             </button>
-                          </div>
-                        )}
+                          )}
+
+                          {/* Aksi hapus riwayat pengajuan belanja — Khusus Admin */}
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              className="btn btn-danger"
+                              onClick={() => handleDeleteBelanja(item)}
+                              disabled={deletingId === item.id}
+                              title="Hapus riwayat pengajuan belanja ini"
+                              style={{ padding: '7px 12px', fontSize: '12px' }}
+                            >
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                              {deletingId === item.id ? 'Menghapus...' : 'Hapus'}
+                            </button>
+                          )}
+                        </div>
                       </div>
                     )
                   })}
@@ -757,7 +812,10 @@ export default function BelanjaPage() {
                               <div className="pg-added-row" style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0, marginLeft: '12px' }}>
                                 <div style={{ textAlign: 'right' }}>
                                   <div style={{ fontSize: '15px', fontWeight: '800', color: 'var(--accent)' }}>{fmt(harga * qty)}</div>
-                                  <div style={{ fontSize: '11px', color: 'var(--muted)' }}>{fmt(harga)} × {qty}</div>
+                                  <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                                    {fmt(harga)} × {qty}
+                                    {Number(entry.isi) > 0 ? ` · ${fmt(unitPrice(entry))}/${item.satuan || 'isi'}` : ''}
+                                  </div>
                                 </div>
                                 <button onClick={() => removeFromCart(item.id)}
                                   style={{ width: '30px', height: '30px', borderRadius: '8px', border: '1px solid #FECACA', background: 'var(--red-light)', color: 'var(--red)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -782,6 +840,13 @@ export default function BelanjaPage() {
                                       style={{ width: '120px', fontSize: '12px', padding: '7px 11px 7px 28px' }} />
                                   </div>
 
+                                  <input className="input pg-isi" type="number" step="any" min="0"
+                                    placeholder={`Isi${item.satuan ? ` (${item.satuan})` : ''}`}
+                                    title="Isi per kemasan (ml/gram/pcs) — dipakai untuk menghitung harga per ml/gram di rekap pengeluaran"
+                                    value={entry.isi || ''}
+                                    onChange={e => updateCart(item.id, 'isi', e.target.value)}
+                                    style={{ width: '88px', textAlign: 'center', fontSize: '12px', padding: '7px 8px', flexShrink: 0 }} />
+
                                   <input className="input pg-qty" type="number" step="any" min="0" value={entry.qty || 1}
                                     onChange={e => updateCart(item.id, 'qty', e.target.value)}
                                     style={{ width: '56px', textAlign: 'center', fontSize: '12px', padding: '7px 8px', flexShrink: 0 }} />
@@ -791,6 +856,14 @@ export default function BelanjaPage() {
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                                   </button>
                                 </div>
+
+                                {/* Hitung harga per ml/gram dari isi kemasan */}
+                                {Number(entry.isi) > 0 && Number(entry.harga) > 0 && (
+                                  <div className="pg-unit-hint">
+                                    Harga per {item.satuan || 'ml/gram'}: <strong style={{ color: 'var(--accent)' }}>{fmt(unitPrice(entry))}</strong>
+                                    {' · '}{fmt(Number(entry.harga))} ÷ {Number(entry.isi)} {item.satuan || ''}
+                                  </div>
+                                )}
                               </div>
                             )
                           })()}
@@ -835,6 +908,8 @@ export default function BelanjaPage() {
                         const e = cart[item.id]
                         const harga = Number(e.harga) || 0
                         const qty = Number(e.qty) || 1
+                        const isi = Number(e.isi) || 0
+                        const satuan = item.satuan || e.satuan || ''
                         return (
                           <div key={i} style={{ padding: '10px 12px', background: 'var(--surface2)', borderRadius: '10px', border: '1px solid var(--border)' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -844,7 +919,10 @@ export default function BelanjaPage() {
                                   {item.isManual && <span style={{ marginLeft: '5px', fontSize: '9px', background: 'var(--orange-light)', color: 'var(--orange)', padding: '1px 5px', borderRadius: '4px', fontWeight: '700' }}>Manual</span>}
                                 </div>
                                 {e.keterangan && <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '1px' }}>{e.keterangan}</div>}
-                                <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '2px' }}>{fmt(harga)} × {qty}</div>
+                                <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '2px' }}>
+                                  {fmt(harga)} × {qty}
+                                  {isi > 0 ? ` · isi ${isi} ${satuan} → ${fmt(harga / isi)}/${satuan || 'isi'}` : ''}
+                                </div>
                               </div>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
                                 <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--red)' }}>{fmt(harga * qty)}</div>
@@ -957,6 +1035,25 @@ export default function BelanjaPage() {
                     onChange={e => setManual({ ...manual, qty: e.target.value })} />
                 </div>
               </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label className="label">Satuan <span style={{ color: 'var(--muted)', fontWeight: '400' }}>(ml/gr/ps)</span></label>
+                  <input className="input" placeholder="ml, gram, pcs..." value={manual.satuan}
+                    onChange={e => setManual({ ...manual, satuan: e.target.value })} />
+                </div>
+                <div>
+                  <label className="label">Isi per Kemasan</label>
+                  <input className="input" type="number" step="any" min="0" placeholder="0" value={manual.isi}
+                    onChange={e => setManual({ ...manual, isi: e.target.value })} />
+                </div>
+              </div>
+              {Number(manual.harga) > 0 && Number(manual.isi) > 0 && (
+                <div style={{ padding: '10px 14px', background: 'var(--green-light)', borderRadius: '9px', border: '1px solid #A7DFC8', fontSize: '12px', color: 'var(--green)', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                  Harga per {manual.satuan || 'ml/gram'}: {fmt(Number(manual.harga) / Number(manual.isi))}
+                </div>
+              )}
               <div style={{ display: 'flex', gap: '8px', paddingTop: '4px' }}>
                 <button type="button" className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setManualOpen(false)}>Batal</button>
                 <button type="submit" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>Tambah</button>
@@ -1049,8 +1146,18 @@ export default function BelanjaPage() {
                           <input className="input" placeholder="Satuan" value={it.satuan}
                             onChange={e => setEditItemField(idx, 'satuan', e.target.value)}
                             style={{ flex: '1 1 90px', minWidth: 0, fontSize: '12.5px' }} />
+                          <input className="input" type="number" step="any" min="0" title="Isi per kemasan (ml/gram/pcs)"
+                            placeholder="Isi" value={it.isi ?? ''}
+                            onChange={e => setEditItemField(idx, 'isi', e.target.value)}
+                            style={{ flex: '0 1 80px', fontSize: '12.5px', textAlign: 'center' }} />
                           <div className="pg-edit-item-total">{fmt((Number(it.harga) || 0) * (Number(it.qty) || 1))}</div>
                         </div>
+
+                        {Number(it.isi) > 0 && Number(it.harga) > 0 && (
+                          <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                            Harga per {it.satuan || 'ml/gram'}: <strong style={{ color: 'var(--accent)' }}>{fmt(Number(it.harga) / Number(it.isi))}</strong>
+                          </div>
+                        )}
 
                         <input className="input" placeholder="Keterangan item (opsional)" value={it.keterangan}
                           onChange={e => setEditItemField(idx, 'keterangan', e.target.value)}

@@ -45,6 +45,7 @@ export async function PATCH(req, { params }) {
               keterangan: item.keterangan || '',
               satuan: item.satuan || '',
               harga: item.harga,
+              isi: item.isi,
               qty: item.qty,
               subtotal: item.subtotal,
             })),
@@ -76,6 +77,39 @@ export async function PATCH(req, { params }) {
   }
 
   return NextResponse.json({ message: 'Status tidak valid' }, { status: 400 })
+}
+
+export async function DELETE(req, { params }) {
+  const { user, error } = verifyAuth(req)
+  if (error) return error
+  const adminCheck = adminOnly(user)
+  if (adminCheck) return adminCheck
+
+  const { id } = await params
+
+  try {
+    const belanja = await prisma.operationalBelanja.findUnique({
+      where: { id },
+      include: { items: true },
+    })
+
+    if (!belanja) {
+      return NextResponse.json({ message: 'Pengajuan belanja tidak ditemukan' }, { status: 404 })
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.operationalBelanjaItem.deleteMany({ where: { belanjaId: id } })
+      await tx.operationalBelanja.delete({ where: { id } })
+    })
+
+    return NextResponse.json({
+      success: true,
+      message: `Riwayat pengajuan belanja berhasil dihapus`,
+    })
+  } catch (err) {
+    console.error('Error DELETE /api/admin/operational-belanja/[id]:', err)
+    return NextResponse.json({ message: 'Gagal menghapus riwayat pengajuan belanja' }, { status: 500 })
+  }
 }
 
 export async function GET(req, { params }) {

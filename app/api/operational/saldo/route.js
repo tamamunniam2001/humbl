@@ -30,20 +30,22 @@ export async function POST(req) {
   const { user, error } = verifyAuth(req)
   if (error) return error
 
-  // Hanya Admin yang bisa mengisi saldo
+  // Hanya Admin yang bisa mengubah (menambah / mengurangi) saldo
   const adminCheck = adminOnly(user)
   if (adminCheck) {
-    return NextResponse.json({ message: 'Hanya Admin yang memiliki akses untuk mengisi saldo operasional' }, { status: 403 })
+    return NextResponse.json({ message: 'Hanya Admin yang memiliki akses untuk mengelola saldo operasional' }, { status: 403 })
   }
 
   try {
     const body = await req.json()
-    const { amount, note } = body
+    const { amount, note, action } = body
 
     const numAmount = Number(amount)
     if (isNaN(numAmount) || numAmount <= 0) {
       return NextResponse.json({ message: 'Nominal saldo tidak valid' }, { status: 400 })
     }
+
+    const isDeduct = action === 'DEDUCT'
 
     // Hitung saldo terkini dari ledger terakhir
     const lastLedger = await prisma.operationalSaldoLedger.findFirst({
@@ -52,15 +54,22 @@ export async function POST(req) {
     })
 
     const lastBalance = lastLedger ? lastLedger.balanceAfter : 0
-    const balanceAfter = lastBalance + numAmount
+
+    if (isDeduct && lastBalance < numAmount) {
+      return NextResponse.json({
+        message: `Saldo tidak mencukupi untuk dikurangi. Saldo saat ini: Rp ${lastBalance.toLocaleString('id-ID')}`,
+      }, { status: 400 })
+    }
+
+    const balanceAfter = isDeduct ? lastBalance - numAmount : lastBalance + numAmount
 
     const newLedger = await prisma.operationalSaldoLedger.create({
       data: {
         roleKey: 'operasional',
-        type: 'RESTOCK',
+        type: isDeduct ? 'ADJUST' : 'RESTOCK',
         amount: numAmount,
         balanceAfter,
-        note: note || 'Pengisian Saldo Operasional oleh Admin',
+        note: note || (isDeduct ? 'Pengurangan Saldo Operasional oleh Admin' : 'Pengisian Saldo Operasional oleh Admin'),
         createdBy: user.name || user.email || 'Admin',
       },
     })
@@ -72,6 +81,6 @@ export async function POST(req) {
     })
   } catch (err) {
     console.error('Error POST /api/operational/saldo:', err)
-    return NextResponse.json({ message: 'Gagal menambah saldo' }, { status: 500 })
+    return NextResponse.json({ message: 'Gagal memproses saldo' }, { status: 500 })
   }
 }

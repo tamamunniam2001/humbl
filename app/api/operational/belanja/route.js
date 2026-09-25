@@ -67,7 +67,7 @@ export async function POST(req) {
             itemId: i.itemId || null,
             itemName: i.name,
             harga: Number(i.harga) || 0,
-            isi: i.isi ? Number(i.isi) : null,
+            isi: Number(i.isi) > 0 ? Number(i.isi) : null,
             qty: Number(i.qty) || 1,
             satuan: i.satuan || '',
             keterangan: i.keterangan || '',

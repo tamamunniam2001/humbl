@@ -223,3 +223,41 @@ export async function PATCH(req, { params }) {
     return NextResponse.json({ message: 'Gagal memperbarui status pengajuan belanja' }, { status: 500 })
   }
 }
+
+export async function DELETE(req, { params }) {
+  const { user, error } = verifyAuth(req)
+  if (error) return error
+
+  // Hanya Admin yang berhak menghapus riwayat pengajuan belanja
+  const adminCheck = adminOnly(user)
+  if (adminCheck) return adminCheck
+
+  const { id } = await params
+
+  try {
+    const belanja = await prisma.operationalBelanja.findUnique({
+      where: { id },
+      include: { items: true },
+    })
+
+    if (!belanja) {
+      return NextResponse.json({ message: 'Pengajuan belanja tidak ditemukan' }, { status: 404 })
+    }
+
+    // Catatan: Jika status APPROVED, transaksi Expense & Ledger sudah terjadi di masa lalu.
+    // Menghapus record riwayat pengajuan belanja membersihkan pengajuan tanpa merusak buku besar toko,
+    // atau jika PENDING/REJECTED langsung dibersihkan.
+    await prisma.$transaction(async (tx) => {
+      await tx.operationalBelanjaItem.deleteMany({ where: { belanjaId: id } })
+      await tx.operationalBelanja.delete({ where: { id } })
+    })
+
+    return NextResponse.json({
+      success: true,
+      message: `Riwayat pengajuan belanja "${belanja.keterangan || belanja.requesterName}" berhasil dihapus`,
+    })
+  } catch (err) {
+    console.error('Error DELETE /api/operational/belanja/[id]:', err)
+    return NextResponse.json({ message: 'Gagal menghapus riwayat pengajuan belanja' }, { status: 500 })
+  }
+}

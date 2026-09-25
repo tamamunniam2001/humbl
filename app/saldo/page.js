@@ -19,8 +19,9 @@ export default function SaldoPage() {
   const [loading, setLoading] = useState(true)
   const [filterType, setFilterType] = useState('ALL') // ALL, RESTOCK, EXPENSE
 
-  // Topup modal states
+  // Topup / Deduct modal states
   const [topupOpen, setTopupOpen] = useState(false)
+  const [saldoAction, setSaldoAction] = useState('RESTOCK') // 'RESTOCK' | 'DEDUCT'
   const [topupAmount, setTopupAmount] = useState('')
   const [topupNote, setTopupNote] = useState('')
   const [submittingTopup, setSubmittingTopup] = useState(false)
@@ -67,7 +68,7 @@ export default function SaldoPage() {
   async function handleTopupSubmit(e) {
     e.preventDefault()
     if (!isAdmin) {
-      alert('Hanya Admin yang dapat mengisi saldo operasional.')
+      alert('Hanya Admin yang dapat mengelola saldo operasional.')
       return
     }
 
@@ -76,20 +77,26 @@ export default function SaldoPage() {
       return alert('Masukkan nominal saldo yang valid')
     }
 
+    const isDeduct = saldoAction === 'DEDUCT'
+    if (isDeduct && saldo < num) {
+      return alert(`Saldo tidak mencukupi untuk dikurangi. Saldo saat ini: ${fmt(saldo)}`)
+    }
+
     setSubmittingTopup(true)
     try {
       const res = await api.post('/operational/saldo', {
         amount: num,
-        note: topupNote || 'Pengisian Saldo Operasional oleh Admin',
+        action: isDeduct ? 'DEDUCT' : 'RESTOCK',
+        note: topupNote || (isDeduct ? 'Pengurangan Saldo Operasional oleh Admin' : 'Pengisian Saldo Operasional oleh Admin'),
       })
-      alert(`Berhasil menambah saldo Rp ${num.toLocaleString('id-ID')}!`)
+      alert(isDeduct ? `Berhasil mengurangi saldo Rp ${num.toLocaleString('id-ID')}!` : `Berhasil menambah saldo Rp ${num.toLocaleString('id-ID')}!`)
       setTopupOpen(false)
       setTopupAmount('')
       setTopupNote('')
       setSaldo(res.data.saldo)
       fetchSaldoData()
     } catch (err) {
-      alert(err.response?.data?.message || 'Gagal menambah saldo')
+      alert(err.response?.data?.message || 'Gagal memproses saldo')
     } finally {
       setSubmittingTopup(false)
     }
@@ -117,11 +124,12 @@ export default function SaldoPage() {
   const filteredLedger = ledger.filter(item => {
     if (filterType === 'RESTOCK') return item.type === 'RESTOCK'
     if (filterType === 'EXPENSE') return item.type === 'EXPENSE'
+    if (filterType === 'ADJUST') return item.type === 'ADJUST'
     return true
   })
 
   const totalRestock = ledger.filter(l => l.type === 'RESTOCK').reduce((acc, l) => acc + l.amount, 0)
-  const totalExpense = ledger.filter(l => l.type === 'EXPENSE').reduce((acc, l) => acc + l.amount, 0)
+  const totalExpense = ledger.filter(l => l.type === 'EXPENSE' || l.type === 'ADJUST').reduce((acc, l) => acc + l.amount, 0)
 
   return (
     <div className="page">
@@ -134,25 +142,36 @@ export default function SaldoPage() {
             <div className="topbar-title">Saldo Operasional</div>
             <div className="topbar-sub">Pantau saldo, pengisian, dan riwayat belanja operasional</div>
           </div>
-          <div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             {isAdmin ? (
-              <button
-                className="btn btn-primary"
-                onClick={() => setTopupOpen(true)}
-                style={{ gap: '8px', padding: '10px 18px', background: 'linear-gradient(135deg, #10B981, #059669)', border: 'none' }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                + Isi Saldo
-              </button>
+              <>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => { setSaldoAction('RESTOCK'); setTopupAmount(''); setTopupNote(''); setTopupOpen(true) }}
+                  style={{ gap: '6px', padding: '9px 15px', background: 'linear-gradient(135deg, #10B981, #059669)', border: 'none' }}
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  + Isi Saldo
+                </button>
+                <button
+                  className="btn"
+                  onClick={() => { setSaldoAction('DEDUCT'); setTopupAmount(''); setTopupNote(''); setTopupOpen(true) }}
+                  style={{ gap: '6px', padding: '9px 15px', background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA', fontWeight: '700' }}
+                  title="Kurangi saldo operasional secara manual"
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  - Kurang Saldo
+                </button>
+              </>
             ) : (
               <button
                 className="btn btn-ghost"
-                onClick={() => alert('Hanya Admin yang diizinkan untuk melakukan pengisian saldo operasional.')}
+                onClick={() => alert('Hanya Admin yang diizinkan untuk mengelola saldo operasional.')}
                 style={{ gap: '6px', fontSize: '13px', background: 'var(--surface2)', border: '1px solid var(--border)' }}
-                title="Pengisian saldo khusus Admin"
+                title="Kelola saldo khusus Admin"
               >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                Isi Saldo (Admin Only)
+                Kelola Saldo (Admin Only)
               </button>
             )}
           </div>
@@ -291,7 +310,17 @@ export default function SaldoPage() {
                     boxShadow: filterType === 'EXPENSE' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
                   }}
                 >
-                  Belanja (Pengeluaran)
+                  Belanja
+                </button>
+                <button
+                  onClick={() => setFilterType('ADJUST')}
+                  style={{ padding: '6px 14px', borderRadius: '7px', fontSize: '12px', fontWeight: '600', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+                    background: filterType === 'ADJUST' ? 'var(--surface)' : 'transparent',
+                    color: filterType === 'ADJUST' ? '#DC2626' : 'var(--muted)',
+                    boxShadow: filterType === 'ADJUST' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                  }}
+                >
+                  Pengurangan
                 </button>
               </div>
             </div>
@@ -320,6 +349,12 @@ export default function SaldoPage() {
                   <tbody>
                     {filteredLedger.map(item => {
                       const isTopup = item.type === 'RESTOCK'
+                      const isAdjust = item.type === 'ADJUST'
+                      const badgeLabel = isTopup ? '+ Isi Saldo' : isAdjust ? '- Kurang Saldo' : '- Pengeluaran'
+                      const badgeColor = isTopup ? '#10B981' : isAdjust ? '#D97706' : '#EF4444'
+                      const badgeBg = isTopup ? '#ECFDF5' : isAdjust ? '#FFFBEB' : '#FEF2F2'
+                      const badgeBorder = isTopup ? '#A7F3D0' : isAdjust ? '#FDE68A' : '#FECACA'
+
                       return (
                         <tr key={item.id} style={{ borderBottom: '1px solid var(--border)' }}>
                           <td style={{ padding: '12px 10px', color: 'var(--muted)', whiteSpace: 'nowrap' }}>
@@ -328,11 +363,11 @@ export default function SaldoPage() {
                           <td style={{ padding: '12px 10px' }}>
                             <span style={{
                               padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: '700',
-                              background: isTopup ? '#ECFDF5' : '#FEF2F2',
-                              color: isTopup ? '#10B981' : '#EF4444',
-                              border: `1px solid ${isTopup ? '#A7F3D0' : '#FECACA'}`
+                              background: badgeBg,
+                              color: badgeColor,
+                              border: `1px solid ${badgeBorder}`
                             }}>
-                              {isTopup ? '+ Isi Saldo' : '- Pengeluaran'}
+                              {badgeLabel}
                             </span>
                           </td>
                           <td style={{ padding: '12px 10px', color: 'var(--text)', fontWeight: '500' }}>
@@ -341,7 +376,7 @@ export default function SaldoPage() {
                           <td style={{ padding: '12px 10px', color: 'var(--muted)', fontSize: '12px' }}>
                             {item.createdBy || 'Admin'}
                           </td>
-                          <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: '700', color: isTopup ? '#10B981' : '#EF4444', whiteSpace: 'nowrap' }}>
+                          <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: '700', color: isTopup ? '#10B981' : isAdjust ? '#D97706' : '#EF4444', whiteSpace: 'nowrap' }}>
                             {isTopup ? '+' : '-'} {fmt(item.amount)}
                           </td>
                           <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: '700', color: 'var(--text)', whiteSpace: 'nowrap' }}>
@@ -359,24 +394,35 @@ export default function SaldoPage() {
         </div>
       </main>
 
-      {/* Modal Topup Saldo (Admin Only) */}
+      {/* Modal Kelola Saldo (Isi / Kurang) - Admin Only */}
       {topupOpen && (
         <div
           style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500, backdropFilter: 'blur(4px)' }}
           onClick={e => { if (e.target === e.currentTarget) setTopupOpen(false) }}
         >
           <div className="card fade-in" style={{ width: '420px', maxWidth: '94vw', borderRadius: '16px', overflow: 'hidden' }}>
-            <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border)', background: 'linear-gradient(135deg, #ECFDF5, #F0FDF4)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{
+              padding: '18px 20px',
+              borderBottom: '1px solid var(--border)',
+              background: saldoAction === 'DEDUCT' ? 'linear-gradient(135deg, #FEF2F2, #FFF1F2)' : 'linear-gradient(135deg, #ECFDF5, #F0FDF4)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}>
               <div>
-                <div style={{ fontSize: '16px', fontWeight: '800', color: '#065F46' }}>Isi Saldo Operasional</div>
-                <div style={{ fontSize: '12px', color: '#047857', marginTop: '2px' }}>Fitur khusus Admin untuk menambah saldo</div>
+                <div style={{ fontSize: '16px', fontWeight: '800', color: saldoAction === 'DEDUCT' ? '#991B1B' : '#065F46' }}>
+                  {saldoAction === 'DEDUCT' ? 'Kurangi Saldo Operasional' : 'Isi Saldo Operasional'}
+                </div>
+                <div style={{ fontSize: '12px', color: saldoAction === 'DEDUCT' ? '#B91C1C' : '#047857', marginTop: '2px' }}>
+                  {saldoAction === 'DEDUCT' ? 'Fitur Admin untuk penyesuaian / pengurangan saldo' : 'Fitur khusus Admin untuk menambah saldo'}
+                </div>
               </div>
-              <button onClick={() => setTopupOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#047857', fontSize: '20px', lineHeight: 1 }}>×</button>
+              <button onClick={() => setTopupOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: saldoAction === 'DEDUCT' ? '#991B1B' : '#047857', fontSize: '20px', lineHeight: 1 }}>×</button>
             </div>
 
             <form onSubmit={handleTopupSubmit} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
-                <label className="label">Nominal Top Up Saldo</label>
+                <label className="label">Nominal {saldoAction === 'DEDUCT' ? 'Pengurangan' : 'Top Up'} Saldo</label>
                 <div style={{ position: 'relative' }}>
                   <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontWeight: '700', color: 'var(--muted)' }}>Rp</span>
                   <input
@@ -398,7 +444,7 @@ export default function SaldoPage() {
                 <input
                   type="text"
                   className="input"
-                  placeholder="Misal: Kas Operasional Mingguan"
+                  placeholder={saldoAction === 'DEDUCT' ? 'Misal: Koreksi kas / pengembalian dana' : 'Misal: Kas Operasional Mingguan'}
                   value={topupNote}
                   onChange={e => setTopupNote(e.target.value)}
                 />
@@ -406,15 +452,31 @@ export default function SaldoPage() {
 
               <div style={{ padding: '12px', background: 'var(--surface2)', borderRadius: '10px', fontSize: '12px', color: 'var(--muted)' }}>
                 Saldo saat ini: <strong style={{ color: 'var(--text)' }}>{fmt(saldo)}</strong><br />
-                Saldo setelah isi: <strong style={{ color: '#10B981' }}>{fmt(saldo + (Number(topupAmount) || 0))}</strong>
+                {saldoAction === 'DEDUCT' ? (
+                  <>Saldo setelah dikurangi: <strong style={{ color: (saldo - (Number(topupAmount) || 0)) < 0 ? '#EF4444' : '#DC2626' }}>{fmt(Math.max(0, saldo - (Number(topupAmount) || 0)))}</strong></>
+                ) : (
+                  <>Saldo setelah isi: <strong style={{ color: '#10B981' }}>{fmt(saldo + (Number(topupAmount) || 0))}</strong></>
+                )}
               </div>
 
               <div style={{ display: 'flex', gap: '10px', paddingTop: '4px' }}>
                 <button type="button" className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setTopupOpen(false)}>
                   Batal
                 </button>
-                <button type="submit" className="btn" disabled={submittingTopup} style={{ flex: 1, justifyContent: 'center', background: '#10B981', color: '#fff', border: 'none' }}>
-                  {submittingTopup ? 'Memproses...' : 'Konfirmasi Top Up'}
+                <button
+                  type="submit"
+                  className="btn"
+                  disabled={submittingTopup}
+                  style={{
+                    flex: 1,
+                    justifyContent: 'center',
+                    background: saldoAction === 'DEDUCT' ? '#DC2626' : '#10B981',
+                    color: '#fff',
+                    border: 'none',
+                    fontWeight: '700',
+                  }}
+                >
+                  {submittingTopup ? 'Memproses...' : (saldoAction === 'DEDUCT' ? 'Konfirmasi Pengurangan' : 'Konfirmasi Top Up')}
                 </button>
               </div>
             </form>
@@ -441,9 +503,16 @@ export default function SaldoPage() {
               <div style={{ background: 'var(--bg)', borderRadius: '10px', padding: '12px 14px', border: '1px solid var(--border)' }}>
                 <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--muted)', marginBottom: '8px' }}>Rincian Item Belanja:</div>
                 {actionBelanja.items?.map((item, idx) => (
-                  <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px', fontSize: '13px' }}>
-                    <span>{item.itemName} ({item.qty} {item.satuan || ''})</span>
-                    <span style={{ fontWeight: '700' }}>{fmt(item.subtotal)}</span>
+                  <div key={idx} style={{ marginBottom: '6px', fontSize: '13px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>{item.itemName} ({item.qty} {item.satuan || ''})</span>
+                      <span style={{ fontWeight: '700' }}>{fmt(item.subtotal)}</span>
+                    </div>
+                    {Number(item.isi) > 0 && (
+                      <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '1px' }}>
+                        {fmt(item.harga)} × {item.qty} · isi {item.isi} {item.satuan || ''} → <strong style={{ color: 'var(--accent)' }}>{fmt(Number(item.harga) / Number(item.isi))}/{item.satuan || 'isi'}</strong>
+                      </div>
+                    )}
                   </div>
                 ))}
                 <div style={{ borderTop: '1px solid var(--border)', marginTop: '8px', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', fontWeight: '800', fontSize: '15px' }}>
