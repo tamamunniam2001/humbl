@@ -16,8 +16,18 @@ const formatDuration = (start, end) => {
   return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
 }
 
+const formatDurationSeconds = (seconds) => {
+  if (seconds == null) return '-'
+  return formatDuration(new Date(0), new Date(Math.max(0, seconds) * 1000))
+}
+
 export default function RekapAbsensiPage() {
-  const [data, setData] = useState({ records: [], total: 0, totalPages: 1 })
+  const [data, setData] = useState({
+    records: [],
+    total: 0,
+    totalPages: 1,
+    summary: { total: 0, active: 0, completed: 0, staffCount: 0, averageDurationSeconds: null, totalDurationSeconds: 0, checklistDone: 0, checklistTotal: 0, checklistPercent: 0 },
+  })
   const [employees, setEmployees] = useState([])
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
@@ -39,7 +49,7 @@ export default function RekapAbsensiPage() {
       if (to) params.append('to', to)
       if (employeeId) params.append('employeeId', employeeId)
       const res = await api.get(`/admin/attendance?${params}`)
-      setData(res.data)
+      setData({ ...res.data, summary: res.data.summary || {} })
     } catch { }
     finally { setLoading(false) }
   }
@@ -83,6 +93,33 @@ export default function RekapAbsensiPage() {
               Filter
             </button>
             {(from || to || employeeId) && <button className="btn btn-ghost" onClick={handleReset}>Reset</button>}
+          </div>
+
+          <div className="card" style={{ padding: '18px 20px', marginBottom: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', gap: '12px', flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text)' }}>Ringkasan Absensi</div>
+                <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '2px' }}>
+                  {employeeId ? employees.find(e => e.id === employeeId)?.name || 'Staff terpilih' : 'Semua staff'}
+                </div>
+              </div>
+              {loading && <span style={{ color: 'var(--muted)', fontSize: '12px' }}>Memuat ringkasan...</span>}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: '10px' }}>
+              {[
+                { label: 'Total Catatan', value: data.summary.total || 0, color: 'var(--accent)', bg: 'var(--accent-light)' },
+                { label: 'Sesi Aktif', value: data.summary.active || 0, color: 'var(--green)', bg: 'var(--green-light)' },
+                { label: 'Sudah Selesai', value: data.summary.completed || 0, color: 'var(--text2)', bg: 'var(--surface2)' },
+                { label: 'Rata-rata Durasi', value: formatDurationSeconds(data.summary.averageDurationSeconds), color: 'var(--orange)', bg: 'var(--orange-light)' },
+                { label: 'Total Durasi', value: formatDurationSeconds(data.summary.totalDurationSeconds), color: 'var(--green)', bg: 'var(--green-light)' },
+                { label: 'Checklist Selesai', value: `${data.summary.checklistPercent || 0}%`, color: 'var(--accent)', bg: 'var(--accent-light)' },
+              ].map(item => (
+                <div key={item.label} style={{ padding: '12px 14px', borderRadius: '10px', background: item.bg, border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: '10px', color: 'var(--muted)', fontWeight: '700', letterSpacing: '0.4px' }}>{item.label.toUpperCase()}</div>
+                  <div style={{ marginTop: '5px', color: item.color, fontSize: '18px', fontWeight: '800', fontVariantNumeric: 'tabular-nums' }}>{item.value}</div>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="card" style={{ overflow: 'hidden' }}>
