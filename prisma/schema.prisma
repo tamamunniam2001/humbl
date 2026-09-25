@@ -263,6 +263,7 @@ model Attendance {
   checklist    Json      @default("[]")
   selfieUrl    String?   @default("")
   clockOut     DateTime?
+  isActive     Boolean   @default(false)
   createdAt    DateTime  @default(now())
 
   @@index([employeeId])

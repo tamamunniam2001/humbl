@@ -9,14 +9,34 @@ const TABS = [
   { key: 'CLOSING_3', label: 'Shift 3', jam: '18.00 – 23.00' },
 ]
 
+const formatDateTime = (value) => new Date(value).toLocaleString('id-ID', {
+  day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+})
+
+const formatTime = (value) => new Date(value).toLocaleTimeString('id-ID', {
+  hour: '2-digit', minute: '2-digit',
+})
+
+const formatDuration = (start, end) => {
+  const totalSeconds = Math.max(0, Math.floor((new Date(end).getTime() - new Date(start).getTime()) / 1000))
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+}
+
 export default function AbsensiPage() {
   const [tab, setTab] = useState('CLOSING_1')
   const [employees, setEmployees] = useState([])
   const [sopItems, setSopItems] = useState([])
   const [employeeId, setEmployeeId] = useState('')
-  const [kasAwal, setKasAwal] = useState('')
   const [checklist, setChecklist] = useState({})
   const [saving, setSaving] = useState(false)
+  const [activeAttendances, setActiveAttendances] = useState([])
+  const [activeLoading, setActiveLoading] = useState(true)
+  const [activeError, setActiveError] = useState('')
+  const [finishingId, setFinishingId] = useState('')
+  const [now, setNow] = useState(() => Date.now())
   const [savedData, setSavedData] = useState(null)
   const [selfieUrl, setSelfieUrl] = useState('')
   const [selfiePreview, setSelfiePreview] = useState('')
@@ -74,45 +94,87 @@ export default function AbsensiPage() {
   }
 
   useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    let isMounted = true
+
     Promise.all([api.get('/admin/employees'), api.get('/admin/sop')]).then(([e, s]) => {
+      if (!isMounted) return
       setEmployees(e.data.filter(x => x.isActive))
       setSopItems(s.data)
     }).catch(() => {})
+
+    api.get('/attendance/active')
+      .then(({ data }) => {
+        if (isMounted) setActiveAttendances(data)
+      })
+      .catch(() => {
+        if (isMounted) setActiveError('Status absensi aktif tidak dapat dimuat. Muat ulang halaman untuk mencoba lagi.')
+      })
+      .finally(() => {
+        if (isMounted) setActiveLoading(false)
+      })
+
+    return () => { isMounted = false }
   }, [])
 
   const filtered = sopItems.filter(s => s.type === tab)
   const activeTab = TABS.find(t => t.key === tab)
+  const selectedEmployeeHasActiveAttendance = activeAttendances.some(attendance => attendance.employeeId === employeeId)
+  const saveDisabled = saving || !employeeId || uploading || activeLoading || Boolean(activeError) || selectedEmployeeHasActiveAttendance
+  const summaryChecklist = Array.isArray(savedData?.checklist) ? savedData.checklist : []
 
   function toggleCheck(id) {
     setChecklist(prev => ({ ...prev, [id]: !prev[id] }))
   }
 
   function reset() {
-    setEmployeeId(''); setKasAwal(''); setChecklist({})
+    setEmployeeId(''); setChecklist({})
     setSelfieUrl(''); setSelfiePreview('')
   }
 
   async function handleSave() {
     if (!employeeId) return alert('Pilih nama staff terlebih dahulu')
-    if (!kasAwal) return alert('Kas Awal di Laci Kasir wajib diisi')
+    if (activeLoading) return alert('Status absensi aktif sedang dimuat. Tunggu sebentar.')
+    if (activeError) return alert('Status absensi aktif belum dapat dimuat. Muat ulang halaman sebelum melanjutkan.')
+    if (selectedEmployeeHasActiveAttendance) return alert('Absensi staff ini masih aktif. Klik tombol Selesai pada bar Absen Aktif terlebih dahulu.')
     setSaving(true)
     try {
-      await api.post('/attendance', {
+      const { data: attendance } = await api.post('/attendance', {
         employeeId, type: tab,
-        kasAwal: Number(kasAwal) || 0,
         checklist: filtered.map(s => ({ id: s.id, text: s.text, checked: !!checklist[s.id] })),
         selfieUrl,
       })
-      setSavedData({
-        type: tab, label: activeTab.label, jam: activeTab.jam,
-        staff: employees.find(e => e.id === employeeId)?.name || '-',
-        kasAwal: Number(kasAwal) || 0,
-        checklist: filtered.map(s => ({ text: s.text, checked: !!checklist[s.id] })),
-        selfieUrl, selfiePreview,
-      })
+      setActiveAttendances(previous => [attendance, ...previous.filter(item => item.id !== attendance.id)])
+      reset()
     } catch (e) {
+      if (e.response?.status === 409 && e.response.data?.attendance) {
+        setActiveAttendances(previous => [e.response.data.attendance, ...previous.filter(item => item.id !== e.response.data.attendance.id)])
+      }
       alert(e.response?.data?.message || 'Gagal menyimpan absensi')
     } finally { setSaving(false) }
+  }
+
+  async function handleFinishAttendance(id) {
+    if (!id || finishingId) return
+    setFinishingId(id)
+    try {
+      const { data: attendance } = await api.patch(`/attendance/${id}/clock-out`)
+      const shift = TABS.find(t => t.key === attendance.type)
+      setActiveAttendances(previous => previous.filter(item => item.id !== attendance.id))
+      setSavedData({
+        ...attendance,
+        staff: attendance.employee?.name || '-',
+        label: shift?.label || attendance.type,
+        jam: shift?.jam || '',
+        checklist: Array.isArray(attendance.checklist) ? attendance.checklist : [],
+      })
+    } catch (e) {
+      alert(e.response?.data?.message || 'Gagal menyelesaikan absensi')
+    } finally { setFinishingId('') }
   }
 
   return (
@@ -126,6 +188,49 @@ export default function AbsensiPage() {
 
         <div className="content">
           <div style={{ maxWidth: '560px', margin: '0 auto' }}>
+
+            {activeError && (
+              <div style={{ marginBottom: '16px', padding: '12px 14px', borderRadius: '10px', background: '#FEF2F2', border: '1px solid #FECACA', color: '#B91C1C', fontSize: '13px' }}>
+                {activeError}
+              </div>
+            )}
+            {activeLoading && activeAttendances.length === 0 && (
+              <div style={{ marginBottom: '16px', padding: '12px 14px', borderRadius: '10px', background: 'var(--surface2)', border: '1px solid var(--border)', color: 'var(--muted)', fontSize: '13px' }}>
+                Memuat status absensi aktif...
+              </div>
+            )}
+            {activeAttendances.map(attendance => {
+              const shift = TABS.find(t => t.key === attendance.type)
+              const checklist = Array.isArray(attendance.checklist) ? attendance.checklist : []
+              const doneCount = checklist.filter(item => item.checked).length
+              return (
+                <div key={attendance.id} aria-live="polite"
+                  style={{ marginBottom: '12px', padding: '16px 18px', borderRadius: '12px', background: 'var(--green-light)', border: '1px solid #A7DFC8', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: '220px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '7px', color: 'var(--green)', fontSize: '11px', fontWeight: '800', letterSpacing: '0.8px' }}>
+                      <span aria-hidden="true" style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--green)' }} />
+                      ABSEN AKTIF
+                    </div>
+                    <div style={{ marginTop: '5px', color: 'var(--text)', fontSize: '15px', fontWeight: '800' }}>
+                      {attendance.employee?.name || '-'}
+                      {shift && <span style={{ marginLeft: '8px', color: 'var(--muted)', fontSize: '12px', fontWeight: '600' }}>{shift.label} · {shift.jam}</span>}
+                    </div>
+                    <div style={{ marginTop: '5px', color: 'var(--muted)', fontSize: '12px' }}>
+                      Aktif sejak <strong style={{ color: 'var(--text2)' }}>{formatDateTime(attendance.date)}</strong>
+                    </div>
+                    <div style={{ marginTop: '5px', color: 'var(--muted)', fontSize: '12px' }}>
+                      Durasi <strong style={{ color: 'var(--green)', fontSize: '14px', fontVariantNumeric: 'tabular-nums' }}>{formatDuration(attendance.date, now)}</strong>
+                      {checklist.length > 0 && <span> · Checklist {doneCount}/{checklist.length} selesai</span>}
+                    </div>
+                  </div>
+                  <button type="button" className="btn btn-primary" onClick={() => handleFinishAttendance(attendance.id)}
+                    disabled={Boolean(finishingId)}
+                    style={{ padding: '11px 20px', fontSize: '13px', fontWeight: '800', cursor: finishingId ? 'wait' : 'pointer' }}>
+                    {finishingId === attendance.id ? 'Menyimpan...' : 'Selesai'}
+                  </button>
+                </div>
+              )
+            })}
 
             {/* Tab */}
             <div style={{ display: 'flex', background: 'var(--surface2)', borderRadius: '12px', padding: '4px', marginBottom: '24px', border: '1px solid var(--border)', gap: '2px' }}>
@@ -148,19 +253,11 @@ export default function AbsensiPage() {
                 <label className="label">Nama Staff</label>
                 <select className="input" value={employeeId} onChange={e => setEmployeeId(e.target.value)}>
                   <option value="">Pilih staff bertugas...</option>
-                  {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+                  {employees.map(e => {
+                    const isActive = activeAttendances.some(attendance => attendance.employeeId === e.id)
+                    return <option key={e.id} value={e.id} disabled={isActive}>{e.name}{isActive ? ' — absen aktif' : ''}</option>
+                  })}
                 </select>
-              </div>
-
-              {/* Kas Awal */}
-              <div>
-                <label className="label">Kas Awal di Laci Kasir</label>
-                <div style={{ position: 'relative' }}>
-                  <span style={{ position: 'absolute', left: '13px', top: '50%', transform: 'translateY(-50%)', fontSize: '13px', fontWeight: '600', color: 'var(--muted)' }}>Rp</span>
-                  <input className="input" type="number" placeholder="0" value={kasAwal}
-                    onChange={e => setKasAwal(e.target.value)}
-                    style={{ paddingLeft: '40px' }} />
-                </div>
               </div>
 
               {/* Foto Selfie */}
@@ -224,9 +321,9 @@ export default function AbsensiPage() {
 
             {/* Tombol Simpan */}
             <button
-              onClick={handleSave} disabled={saving || !employeeId || uploading}
-              style={{ width: '100%', marginTop: '20px', padding: '15px', borderRadius: '12px', border: 'none', background: saving || !employeeId || uploading ? '#94A3B8' : 'var(--text)', color: '#fff', fontSize: '14px', fontWeight: '800', cursor: saving || !employeeId || uploading ? 'not-allowed' : 'pointer', fontFamily: 'inherit', letterSpacing: '0.5px', transition: 'all 0.15s' }}>
-              {saving ? 'Menyimpan...' : uploading ? 'Mengunggah foto...' : 'SIMPAN LAPORAN ABSEN'}
+              onClick={handleSave} disabled={saveDisabled}
+              style={{ width: '100%', marginTop: '20px', padding: '15px', borderRadius: '12px', border: 'none', background: saveDisabled ? '#94A3B8' : 'var(--text)', color: '#fff', fontSize: '14px', fontWeight: '800', cursor: saveDisabled ? 'not-allowed' : 'pointer', fontFamily: 'inherit', letterSpacing: '0.5px', transition: 'all 0.15s' }}>
+              {activeLoading ? 'Memuat status absensi...' : saving ? 'Menyimpan...' : uploading ? 'Mengunggah foto...' : selectedEmployeeHasActiveAttendance ? 'ABSEN SUDAH AKTIF' : 'SIMPAN LAPORAN ABSEN'}
             </button>
           </div>
         </div>
@@ -269,9 +366,9 @@ export default function AbsensiPage() {
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
               </div>
               <div>
-                <div style={{ fontSize: '17px', fontWeight: '800', color: '#fff' }}>Absensi Tersimpan!</div>
+                <div style={{ fontSize: '17px', fontWeight: '800', color: '#fff' }}>Absensi Selesai</div>
                 <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.85)', marginTop: '2px' }}>
-                  {savedData.label}{savedData.jam ? ` · ${savedData.jam}` : ''} · {new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'long', year: 'numeric' })}
+                  {savedData.label}{savedData.jam ? ` · ${savedData.jam}` : ''} · {formatDateTime(savedData.date)}
                 </div>
               </div>
             </div>
@@ -287,15 +384,26 @@ export default function AbsensiPage() {
                 </div>
               )}
 
-              {/* Info Staff + Kas Awal */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', flexShrink: 0 }}>
+              {/* Info Staff */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px', flexShrink: 0 }}>
                 <div style={{ background: 'var(--accent-light)', borderRadius: '10px', padding: '14px 16px', border: '1px solid #C7D4F0' }}>
                   <div style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '5px', fontWeight: '700', letterSpacing: '0.5px' }}>STAFF</div>
                   <div style={{ fontSize: '15px', fontWeight: '700', color: 'var(--accent)' }}>{savedData.staff}</div>
                 </div>
-                <div style={{ background: 'var(--green-light)', borderRadius: '10px', padding: '14px 16px', border: '1px solid #A7DFC8' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '5px', fontWeight: '700', letterSpacing: '0.5px' }}>KAS AWAL LACI</div>
-                  <div style={{ fontSize: '15px', fontWeight: '800', color: 'var(--green)' }}>Rp {Number(savedData.kasAwal).toLocaleString('id-ID')}</div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: '10px', flexShrink: 0 }}>
+                <div style={{ padding: '12px 14px', borderRadius: '10px', background: 'var(--surface2)', border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: '10px', color: 'var(--muted)', fontWeight: '700', letterSpacing: '0.5px' }}>MASUK</div>
+                  <div style={{ marginTop: '4px', color: 'var(--text)', fontSize: '14px', fontWeight: '800' }}>{formatTime(savedData.date)}</div>
+                </div>
+                <div style={{ padding: '12px 14px', borderRadius: '10px', background: 'var(--surface2)', border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: '10px', color: 'var(--muted)', fontWeight: '700', letterSpacing: '0.5px' }}>KELUAR</div>
+                  <div style={{ marginTop: '4px', color: 'var(--text)', fontSize: '14px', fontWeight: '800' }}>{formatTime(savedData.clockOut)}</div>
+                </div>
+                <div style={{ padding: '12px 14px', borderRadius: '10px', background: 'var(--green-light)', border: '1px solid #A7DFC8' }}>
+                  <div style={{ fontSize: '10px', color: 'var(--muted)', fontWeight: '700', letterSpacing: '0.5px' }}>DURASI</div>
+                  <div style={{ marginTop: '4px', color: 'var(--green)', fontSize: '14px', fontWeight: '800', fontVariantNumeric: 'tabular-nums' }}>{formatDuration(savedData.date, savedData.clockOut)}</div>
                 </div>
               </div>
 
@@ -303,13 +411,13 @@ export default function AbsensiPage() {
               <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexShrink: 0 }}>
                   <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--muted)', letterSpacing: '0.6px', textTransform: 'uppercase' }}>Checklist SOP {savedData.label}</div>
-                  <span style={{ fontSize: '13px', fontWeight: '700', color: savedData.checklist.filter(c => c.checked).length === savedData.checklist.length ? 'var(--green)' : 'var(--accent)', background: savedData.checklist.filter(c => c.checked).length === savedData.checklist.length ? 'var(--green-light)' : 'var(--accent-light)', padding: '3px 10px', borderRadius: '20px', border: `1px solid ${savedData.checklist.filter(c => c.checked).length === savedData.checklist.length ? '#A7DFC8' : '#C7D4F0'}` }}>
-                    {savedData.checklist.filter(c => c.checked).length}/{savedData.checklist.length} selesai
+                  <span style={{ fontSize: '13px', fontWeight: '700', color: summaryChecklist.filter(c => c.checked).length === summaryChecklist.length ? 'var(--green)' : 'var(--accent)', background: summaryChecklist.filter(c => c.checked).length === summaryChecklist.length ? 'var(--green-light)' : 'var(--accent-light)', padding: '3px 10px', borderRadius: '20px', border: `1px solid ${summaryChecklist.filter(c => c.checked).length === summaryChecklist.length ? '#A7DFC8' : '#C7D4F0'}` }}>
+                    {summaryChecklist.filter(c => c.checked).length}/{summaryChecklist.length} selesai
                   </span>
                 </div>
                 <div style={{ border: '1px solid var(--border)', borderRadius: '12px', overflow: 'hidden' }}>
-                  {savedData.checklist.map((item, i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '12px 16px', borderBottom: i < savedData.checklist.length - 1 ? '1px solid var(--border)' : 'none', background: item.checked ? 'var(--accent-light)' : 'transparent' }}>
+                  {summaryChecklist.map((item, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '12px 16px', borderBottom: i < summaryChecklist.length - 1 ? '1px solid var(--border)' : 'none', background: item.checked ? 'var(--accent-light)' : 'transparent' }}>
                       <div style={{ width: '22px', height: '22px', borderRadius: '6px', background: item.checked ? 'var(--accent)' : 'var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                         {item.checked && <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>}
                       </div>
@@ -322,13 +430,9 @@ export default function AbsensiPage() {
 
             {/* Footer */}
             <div style={{ padding: '16px 28px', borderTop: '1px solid var(--border)', display: 'flex', gap: '10px', flexShrink: 0 }}>
-              <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center', padding: '12px' }}
-                onClick={() => { setSavedData(null); reset() }}>
-                Absensi Lagi
-              </button>
-              <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center', padding: '12px' }}
-                onClick={() => { setSavedData(null); reset() }}>
-                Selesai
+              <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '12px' }}
+                onClick={() => setSavedData(null)}>
+                Tutup
               </button>
             </div>
           </div>

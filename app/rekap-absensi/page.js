@@ -6,7 +6,15 @@ import Cookies from 'js-cookie'
 
 const fmtDate = (d) => new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
 const fmtTime = (d) => new Date(d).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
-const fmt = (n) => 'Rp ' + Number(n).toLocaleString('id-ID')
+
+const formatDuration = (start, end) => {
+  if (!start || !end) return '-'
+  const totalSeconds = Math.max(0, Math.floor((new Date(end).getTime() - new Date(start).getTime()) / 1000))
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+}
 
 export default function RekapAbsensiPage() {
   const [data, setData] = useState({ records: [], total: 0, totalPages: 1 })
@@ -81,14 +89,14 @@ export default function RekapAbsensiPage() {
             <table className="table">
               <thead>
                 <tr>
-                  {['Tanggal', 'Waktu', 'Staff', 'Shift', 'Kas Awal Laci', 'Selfie', 'Checklist', ''].map(h => <th key={h}>{h}</th>)}
+                  {['Tanggal', 'Waktu', 'Staff', 'Shift', 'Status', 'Durasi', 'Selfie', 'Checklist', ''].map(h => <th key={h}>{h}</th>)}
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={8} style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)' }}>Memuat...</td></tr>
+                  <tr><td colSpan={9} style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)' }}>Memuat...</td></tr>
                 ) : data.records.length === 0 ? (
-                  <tr><td colSpan={8} style={{ padding: '48px', textAlign: 'center', color: 'var(--muted)' }}>
+                  <tr><td colSpan={9} style={{ padding: '48px', textAlign: 'center', color: 'var(--muted)' }}>
                     <div style={{ fontSize: '32px', marginBottom: '8px' }}>📋</div>
                     <div>Belum ada data absensi</div>
                   </td></tr>
@@ -105,7 +113,14 @@ export default function RekapAbsensiPage() {
                       <td>
                         <span className="badge badge-orange">{r.type.replace('CLOSING_', 'Shift ')}</span>
                       </td>
-                      <td style={{ fontWeight: '600', color: 'var(--green)' }}>{fmt(r.kasAwal)}</td>
+                      <td>
+                        <span className="badge" style={{ background: r.isActive ? 'var(--green-light)' : 'var(--surface2)', color: r.isActive ? 'var(--green)' : 'var(--muted)', border: `1px solid ${r.isActive ? '#A7DFC8' : 'var(--border)'}` }}>
+                          {r.isActive ? 'Aktif' : 'Selesai'}
+                        </span>
+                      </td>
+                      <td style={{ color: r.isActive ? 'var(--green)' : 'var(--text2)', fontSize: '12px', fontWeight: '600', fontVariantNumeric: 'tabular-nums' }}>
+                        {r.clockOut ? formatDuration(r.date, r.clockOut) : r.isActive ? 'Berjalan...' : '-'}
+                      </td>
                       <td>
                         {r.selfieUrl ? (
                           <img src={r.selfieUrl} alt="selfie" style={{ width: '36px', height: '36px', borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--accent)', cursor: 'pointer' }}
@@ -151,7 +166,7 @@ export default function RekapAbsensiPage() {
             onClose={() => setSelected(null)}
             onDeleted={() => { setSelected(null); load() }}
             onUpdated={(updated) => { setSelected(updated); load() }}
-            fmt={fmt} fmtDate={fmtDate} fmtTime={fmtTime}
+            fmtDate={fmtDate} fmtTime={fmtTime}
           />
         )}
       </main>
@@ -159,7 +174,7 @@ export default function RekapAbsensiPage() {
   )
 }
 
-function DetailModal({ record: r, employees, isAdmin, onClose, onDeleted, onUpdated, fmt, fmtDate, fmtTime }) {
+function DetailModal({ record: r, employees, isAdmin, onClose, onDeleted, onUpdated, fmtDate, fmtTime }) {
   const checklist = r.checklist || []
   const done = checklist.filter(c => c.checked).length
   const [photos, setPhotos] = useState([])
@@ -168,7 +183,7 @@ function DetailModal({ record: r, employees, isAdmin, onClose, onDeleted, onUpda
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [form, setForm] = useState({ employeeId: r.employeeId, type: r.type, kasAwal: r.kasAwal })
+  const [form, setForm] = useState({ employeeId: r.employeeId, type: r.type })
 
   useEffect(() => {
     setPhotoLoading(true)
@@ -184,7 +199,6 @@ function DetailModal({ record: r, employees, isAdmin, onClose, onDeleted, onUpda
       const res = await api.patch(`/admin/attendance/${r.id}`, {
         employeeId: form.employeeId,
         type: form.type,
-        kasAwal: Number(form.kasAwal) || 0,
         checklist: r.checklist,
       })
       setEditing(false)
@@ -262,18 +276,11 @@ function DetailModal({ record: r, employees, isAdmin, onClose, onDeleted, onUpda
                   {SHIFT_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
-              <div>
-                <label className="label">Kas Awal di Laci Kasir</label>
-                <div style={{ position: 'relative' }}>
-                  <span style={{ position: 'absolute', left: '13px', top: '50%', transform: 'translateY(-50%)', fontSize: '13px', fontWeight: '600', color: 'var(--muted)' }}>Rp</span>
-                  <input className="input" type="number" value={form.kasAwal} onChange={e => setForm(f => ({ ...f, kasAwal: e.target.value }))} style={{ paddingLeft: '40px' }} />
-                </div>
-              </div>
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} onClick={handleSave} disabled={saving}>
                   {saving ? 'Menyimpan...' : 'Simpan Perubahan'}
                 </button>
-                <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={() => { setEditing(false); setForm({ employeeId: r.employeeId, type: r.type, kasAwal: r.kasAwal }) }}>
+                <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={() => { setEditing(false); setForm({ employeeId: r.employeeId, type: r.type }) }}>
                   Batal
                 </button>
               </div>
@@ -294,9 +301,13 @@ function DetailModal({ record: r, employees, isAdmin, onClose, onDeleted, onUpda
                   <div style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '4px' }}>SHIFT</div>
                   <div style={{ fontSize: '14px', fontWeight: '700', color: 'var(--orange)' }}>{r.type.replace('CLOSING_', 'Shift ')}</div>
                 </div>
+                <div style={{ flex: 1, background: 'var(--surface2)', borderRadius: '10px', padding: '12px', border: '1px solid var(--border)' }}>
+                  <div style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '4px' }}>STATUS</div>
+                  <div style={{ fontSize: '14px', fontWeight: '700', color: r.isActive ? 'var(--green)' : 'var(--muted)' }}>{r.isActive ? 'Aktif' : 'Selesai'}</div>
+                </div>
                 <div style={{ flex: 1, background: 'var(--green-light)', borderRadius: '10px', padding: '12px', border: '1px solid #A7DFC8' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '4px' }}>KAS AWAL LACI</div>
-                  <div style={{ fontSize: '14px', fontWeight: '700', color: 'var(--green)' }}>{fmt(r.kasAwal)}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '4px' }}>DURASI</div>
+                  <div style={{ fontSize: '14px', fontWeight: '700', color: 'var(--green)', fontVariantNumeric: 'tabular-nums' }}>{r.clockOut ? formatDuration(r.date, r.clockOut) : r.isActive ? 'Berjalan...' : '-'}</div>
                 </div>
                 <div style={{ flex: 1, background: 'var(--surface2)', borderRadius: '10px', padding: '12px', border: '1px solid var(--border)' }}>
                   <div style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '4px' }}>CHECKLIST</div>
