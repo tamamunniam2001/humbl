@@ -252,17 +252,18 @@ model ExpenseDetail {
 }
 
 model Attendance {
-  id           String   @id @default(cuid())
-  date         DateTime @default(now())
+  id           String    @id @default(cuid())
+  date         DateTime  @default(now())
   type         SopType
   employeeId   String
-  employee     Employee @relation(fields: [employeeId], references: [id])
+  employee     Employee  @relation(fields: [employeeId], references: [id])
   helperId     String?
   helper       Employee? @relation("AttendanceHelper", fields: [helperId], references: [id])
-  kasAwal      Int      @default(0)
-  checklist    Json     @default("[]")
-  selfieUrl    String?  @default("")
-  createdAt    DateTime @default(now())
+  kasAwal      Int       @default(0)
+  checklist    Json      @default("[]")
+  selfieUrl    String?   @default("")
+  clockOut     DateTime?
+  createdAt    DateTime  @default(now())
 
   @@index([employeeId])
   @@index([date])

@@ -1,21 +1,51 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { verifyAuth, adminOnly } from '@/lib/auth'
+import { verifyAuth, adminOnly, pageAccessOnly } from '@/lib/auth'
 
-export async function GET(req, context) {
-  const { user, error } = verifyAuth(req)
+const detailInclude = {
+  items: true,
+  requester: { select: { id: true, name: true, email: true } },
+  approvedBy: { select: { id: true, name: true, email: true } },
+}
+
+// Normalisasi rincian item dari body request (dipakai aksi EDIT)
+function normalizeItems(items) {
+  return items.map(i => {
+    const harga = Number(i.harga) || 0
+    const qty = Number(i.qty) || 1
+    const isi = Number(i.isi) > 0 ? Number(i.isi) : null
+    return {
+      itemId: i.itemId || null,
+      itemName: String(i.name || i.itemName || '').trim(),
+      harga,
+      isi,
+      qty,
+      satuan: i.satuan || '',
+      keterangan: i.keterangan || '',
+      subtotal: harga * qty,
+      isManual: !i.itemId,
+    }
+  })
+}
+
+// Hak ubah pengajuan: ADMIN selalu boleh, selain itu pembuat pengajuan atau
+// user yang memang diberi akses halaman /belanja (custom role "operasional").
+function canEditBelanja(user, belanja) {
+  if (user?.role === 'ADMIN') return true
+  if (belanja.requesterId && user?.id && belanja.requesterId === user.id) return true
+  return !pageAccessOnly(user, '/belanja')
+}
+
+export async function GET(req, { params }) {
+  const { error } = verifyAuth(req)
   if (error) return error
 
-  const { id } = context.params
+  const { id } = await params
 
   try {
     const belanja = await prisma.operationalBelanja.findUnique({
       where: { id },
-      include: {
-        items: true,
-        requester: { select: { id: true, name: true, email: true } },
-        approvedBy: { select: { id: true, name: true, email: true } },
-      },
+      include: detailInclude,
     })
 
     if (!belanja) {
@@ -29,18 +59,72 @@ export async function GET(req, context) {
   }
 }
 
-export async function PATCH(req, context) {
+// Aksi EDIT: ubah tanggal, catatan, dan rincian item pengajuan yang masih PENDING
+// Boleh dipakai Admin maupun user Operasional (pembuat pengajuan / pemegang akses halaman /belanja)
+async function handleEdit(user, id, body) {
+  try {
+    const { tanggal, keterangan, items } = body
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return NextResponse.json({ message: 'Item belanja tidak boleh kosong' }, { status: 400 })
+    }
+
+    const newItems = normalizeItems(items)
+    if (newItems.some(i => !i.itemName)) {
+      return NextResponse.json({ message: 'Nama item belanja wajib diisi' }, { status: 400 })
+    }
+
+    const belanja = await prisma.operationalBelanja.findUnique({ where: { id }, include: { items: true } })
+    if (!belanja) {
+      return NextResponse.json({ message: 'Pengajuan belanja tidak ditemukan' }, { status: 404 })
+    }
+
+    if (!canEditBelanja(user, belanja)) {
+      return NextResponse.json({ message: 'Anda tidak berhak mengubah pengajuan belanja ini' }, { status: 403 })
+    }
+
+    if (belanja.status !== 'PENDING') {
+      return NextResponse.json({ message: 'Hanya pengajuan ber-status PENDING yang bisa diedit' }, { status: 400 })
+    }
+
+    const total = newItems.reduce((acc, i) => acc + i.subtotal, 0)
+
+    const updated = await prisma.$transaction(async (tx) => {
+      await tx.operationalBelanjaItem.deleteMany({ where: { belanjaId: id } })
+      return tx.operationalBelanja.update({
+        where: { id },
+        data: {
+          tanggal: tanggal ? new Date(tanggal) : belanja.tanggal,
+          keterangan: typeof keterangan === 'string' ? keterangan : (belanja.keterangan || ''),
+          total,
+          items: { create: newItems },
+        },
+        include: detailInclude,
+      })
+    })
+
+    return NextResponse.json({ success: true, data: updated })
+  } catch (err) {
+    console.error('Error PATCH (EDIT) /api/operational/belanja/[id]:', err)
+    return NextResponse.json({ message: 'Gagal memperbarui data pengajuan belanja' }, { status: 500 })
+  }
+}
+
+export async function PATCH(req, { params }) {
   const { user, error } = verifyAuth(req)
   if (error) return error
 
-  const adminCheck = adminOnly(user)
-  if (adminCheck) return adminCheck
-
-  const { id } = context.params
+  const { id } = await params
 
   try {
     const body = await req.json()
-    const { status, adminNote } = body
+    const { action, status, adminNote } = body
+
+    // Aksi ubah rincian pengajuan (Admin & Operasional)
+    if (action === 'EDIT') return await handleEdit(user, id, body)
+
+    const adminCheck = adminOnly(user)
+    if (adminCheck) return adminCheck
 
     if (!['APPROVED', 'REJECTED'].includes(status)) {
       return NextResponse.json({ message: 'Status tidak valid' }, { status: 400 })

@@ -2,13 +2,13 @@ import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { verifyAuth, adminOnly } from '@/lib/auth'
 
-export async function PATCH(req, context) {
+export async function PATCH(req, { params }) {
   const { user, error } = verifyAuth(req)
   if (error) return error
   const adminCheck = adminOnly(user)
   if (adminCheck) return adminCheck
 
-  const { id } = context.params
+  const { id } = await params
   const body = await req.json()
   const { status, adminNote } = body
 
@@ -78,13 +78,13 @@ export async function PATCH(req, context) {
   return NextResponse.json({ message: 'Status tidak valid' }, { status: 400 })
 }
 
-export async function GET(req, context) {
+export async function GET(req, { params }) {
   const { user, error } = verifyAuth(req)
   if (error) return error
   const adminCheck = adminOnly(user)
   if (adminCheck) return adminCheck
 
-  const { id } = context.params
+  const { id } = await params
   const belanja = await prisma.operationalBelanja.findUnique({
     where: { id },
     include: { items: true, requester: { select: { id: true, name: true, email: true } } },

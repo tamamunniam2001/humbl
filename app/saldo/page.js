@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import Sidebar from '@/components/Sidebar'
 import api from '@/lib/api'
 import Cookies from 'js-cookie'
+import { useRouter } from 'next/navigation'
 
 const fmt = (n) => {
   const num = Number(n)
@@ -32,6 +33,7 @@ export default function SaldoPage() {
   // Current logged in user
   const user = (() => { try { return JSON.parse(Cookies.get('user') || '{}') } catch { return {} } })()
   const isAdmin = user.role === 'ADMIN'
+  const router = useRouter()
 
   useEffect(() => {
     fetchSaldoData()
@@ -232,7 +234,7 @@ export default function SaldoPage() {
                       <div style={{ fontSize: '13px', color: '#334155' }}>
                         {item.items?.map(i => `${i.itemName} (${i.qty} ${i.satuan || ''})`).join(', ')}
                       </div>
-                      {item.keterangan && <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px', fontStyle: 'italic' }}>"{item.keterangan}"</div>}
+                      {item.keterangan && <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px', fontStyle: 'italic' }}>&quot;{item.keterangan}&quot;</div>}
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -464,6 +466,18 @@ export default function SaldoPage() {
               <div style={{ fontSize: '12px', color: 'var(--muted)', padding: '8px 12px', background: '#EFF6FF', borderRadius: '8px', border: '1px solid #BFDBFE' }}>
                 💡 <strong>Info:</strong> Menyetujui (ACC) akan otomatis memotong Saldo Operasional sebesar <strong>{fmt(actionBelanja.total)}</strong> dan mencatatnya ke Pengeluaran Toko.
               </div>
+
+              {/* Pintasan admin: ubah rincian pengajuan sebelum di-ACC */}
+              <button
+                type="button"
+                className="btn btn-ghost"
+                onClick={() => { setActionBelanja(null); router.push(`/belanja?edit=${actionBelanja.id}`) }}
+                style={{ justifyContent: 'center', gap: '7px', background: 'var(--surface2)', border: '1px solid var(--border)' }}
+                title="Ubah tanggal, catatan, atau rincian item pengajuan di halaman Belanja Operasional"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                Ubah Rincian Belanja
+              </button>
 
               <div style={{ display: 'flex', gap: '10px', paddingTop: '6px' }}>
                 <button

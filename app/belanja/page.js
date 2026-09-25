@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef } from 'react'
 import Sidebar from '@/components/Sidebar'
 import api from '@/lib/api'
+import Cookies from 'js-cookie'
 
 const fmt = (n) => {
   const num = Number(n)
@@ -67,6 +68,17 @@ const pgStyles = (
     .pg-hist-item { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; }
     .pg-hist-item > span:first-child { min-width: 0; }
     .pg-hist-item > span:last-child { flex-shrink: 0; font-weight: 600; }
+    .pg-hist-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+    .pg-hist-actions .btn { gap: 6px; font-size: 12px; padding: 7px 13px; }
+
+    /* Modal edit pengajuan (Admin & Operasional) */
+    .pg-edit-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    .pg-edit-item { background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+    .pg-edit-item-head { display: flex; gap: 8px; align-items: center; }
+    .pg-edit-item-head > input:first-child { flex: 1; min-width: 0; }
+    .pg-edit-item-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .pg-edit-item-total { flex: 1 1 100%; text-align: right; font-size: 12.5px; font-weight: 800; color: var(--red); }
+    .pg-modal-body { overflow-y: auto; -webkit-overflow-scrolling: touch; }
 
     /* ── Belanja Operasional: mobile friendly ── */
     @media (max-width: 768px) {
@@ -108,6 +120,13 @@ const pgStyles = (
       .pg-history .card { padding: 14px !important; }
       .pg-hist-head { flex-direction: column; align-items: stretch !important; }
       .pg-hist-total { text-align: left !important; display: flex; align-items: baseline; gap: 8px; }
+      .pg-hist-actions { flex-direction: column; }
+      .pg-hist-actions .btn { width: 100%; justify-content: center; padding: 10px !important; font-size: 12.5px !important; }
+
+      /* Modal edit pengajuan jadi bottom sheet */
+      .pg-edit-grid { grid-template-columns: minmax(0, 1fr) !important; }
+      .pg-modal-body { max-height: 58vh; }
+      .pg-modal-footer { padding-bottom: calc(14px + env(safe-area-inset-bottom)) !important; }
 
       /* Keranjang = bottom sheet */
       .pg-cart-backdrop { display: block; position: fixed; inset: 0; background: rgba(15,23,42,0.5); z-index: 205; backdrop-filter: blur(2px); }
@@ -194,10 +213,46 @@ export default function BelanjaPage() {
   const [historyList, setHistoryList] = useState([])
   const [loadingHistory, setLoadingHistory] = useState(false)
 
+  // Edit pengajuan (Admin & Operasional) — hanya untuk pengajuan ber-status PENDING
+  const [editOpen, setEditOpen] = useState(false)
+  const [editId, setEditId] = useState(null)
+  const [editForm, setEditForm] = useState({ tanggal: '', keterangan: '', items: [] })
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [editParam, setEditParam] = useState(null) // deep link ?edit=<id> dari halaman Saldo
+  const [toastMsg, setToastMsg] = useState('')
+
+  // User login (pola sama dengan Sidebar & halaman lain)
+  const user = (() => { try { return JSON.parse(Cookies.get('user') || '{}') } catch { return {} } })()
+  const isAdmin = user.role === 'ADMIN'
+  const hasBelanjaAccess = (() => {
+    if (isAdmin) return true
+    const allowed = Array.isArray(user.allowedPaths) ? user.allowedPaths : []
+    return allowed.some(p => '/belanja' === p || '/belanja'.startsWith(p + '/'))
+  })()
+  // Admin boleh mengubah semua pengajuan; Operasional boleh mengubah pengajuan miliknya
+  // (atau seluruh pengajuan bila custom role-nya diberi akses halaman /belanja)
+  const canEditItem = (item) =>
+    item.status === 'PENDING' && (isAdmin || hasBelanjaAccess || (!!user.id && item.requesterId === user.id))
+
   useEffect(() => {
     fetchExpenseData()
     fetchSaldo()
   }, [])
+
+  // Dukungan tautan ?edit=<id> (tombol "Ubah Rincian" di halaman Saldo)
+  useEffect(() => {
+    const target = new URLSearchParams(window.location.search).get('edit')
+    if (target) {
+      setEditParam(target)
+      setActiveTab('HISTORY')
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!toastMsg) return
+    const t = setTimeout(() => setToastMsg(''), 2800)
+    return () => clearTimeout(t)
+  }, [toastMsg])
 
   function fetchSaldo() {
     api.get('/operational/saldo').then(r => setSaldo(r.data.saldo || 0)).catch(() => {})
@@ -211,7 +266,16 @@ export default function BelanjaPage() {
   function fetchHistory() {
     setLoadingHistory(true)
     api.get('/operational/belanja')
-      .then(r => setHistoryList(r.data || []))
+      .then(r => {
+        const list = r.data || []
+        setHistoryList(list)
+        // Buka otomatis modal edit bila datang dari tautan ?edit=<id>
+        if (editParam) {
+          const target = list.find(b => b.id === editParam)
+          if (target && canEditItem(target)) openEdit(target)
+          setEditParam(null)
+        }
+      })
       .catch(() => {})
       .finally(() => setLoadingHistory(false))
   }
@@ -222,12 +286,12 @@ export default function BelanjaPage() {
     }
   }, [activeTab])
 
-  // Kunci scroll body saat keranjang (sheet mobile) atau modal input manual terbuka
+  // Kunci scroll body saat keranjang (sheet mobile), modal input manual, atau modal edit terbuka
   useEffect(() => {
-    if (cartOpen || manualOpen) document.body.style.overflow = 'hidden'
+    if (cartOpen || manualOpen || editOpen) document.body.style.overflow = 'hidden'
     else document.body.style.overflow = ''
     return () => { document.body.style.overflow = '' }
-  }, [cartOpen, manualOpen])
+  }, [cartOpen, manualOpen, editOpen])
 
   const categories = ['Semua', ...Array.from(new Set(items.filter(i => !i.isManual && i.category).map(i => i.category)))]
 
@@ -344,6 +408,81 @@ export default function BelanjaPage() {
     } catch (e) {
       alert(e.response?.data?.message || 'Gagal mengajukan belanja')
     } finally { setSaving(false) }
+  }
+
+  // ── Edit pengajuan belanja (Admin & Operasional, status PENDING) ──
+  function openEdit(item) {
+    setEditId(item.id)
+    setEditForm({
+      tanggal: item.tanggal ? new Date(item.tanggal).toISOString().slice(0, 10) : today,
+      keterangan: item.keterangan || '',
+      items: (item.items || []).map((it, idx) => ({
+        key: it.id || `it_${idx}`,
+        itemId: it.itemId || null,
+        itemName: it.itemName || '',
+        harga: it.harga ?? '',
+        isi: it.isi ?? null,
+        qty: it.qty ?? 1,
+        satuan: it.satuan || '',
+        keterangan: it.keterangan || '',
+      })),
+    })
+    setEditOpen(true)
+  }
+
+  function closeEdit() {
+    setEditOpen(false)
+    setEditId(null)
+    setEditForm({ tanggal: '', keterangan: '', items: [] })
+  }
+
+  function setEditItemField(idx, field, value) {
+    setEditForm(prev => ({ ...prev, items: prev.items.map((it, i) => (i === idx ? { ...it, [field]: value } : it)) }))
+  }
+
+  function addEditItem() {
+    setEditForm(prev => ({
+      ...prev,
+      items: [...prev.items, { key: `new_${Date.now()}`, itemId: null, itemName: '', harga: '', isi: null, qty: 1, satuan: '', keterangan: '' }],
+    }))
+  }
+
+  function removeEditItem(idx) {
+    setEditForm(prev => ({ ...prev, items: prev.items.filter((_, i) => i !== idx) }))
+  }
+
+  const editTotal = editForm.items.reduce((s, it) => s + (Number(it.harga) || 0) * (Number(it.qty) || 1), 0)
+  const editTarget = historyList.find(b => b.id === editId) || null
+
+  async function handleSaveEdit(e) {
+    e?.preventDefault()
+    if (!editForm.items.length) return alert('Belum ada item belanja')
+    if (editForm.items.some(it => !String(it.itemName || '').trim())) return alert('Nama item belanja wajib diisi')
+    setSavingEdit(true)
+    try {
+      await api.patch(`/operational/belanja/${editId}`, {
+        action: 'EDIT',
+        tanggal: editForm.tanggal,
+        keterangan: editForm.keterangan,
+        items: editForm.items.map(it => ({
+          itemId: it.itemId || null,
+          name: it.itemName,
+          harga: Number(it.harga) || 0,
+          isi: it.isi,
+          qty: Number(it.qty) || 1,
+          satuan: it.satuan || '',
+          keterangan: it.keterangan || '',
+        })),
+      })
+      closeEdit()
+      fetchHistory()
+      fetchSaldo()
+      setToastMsg('Pengajuan belanja berhasil diperbarui')
+    } catch (err) {
+      alert(err.response?.data?.message || 'Gagal memperbarui pengajuan belanja')
+    } finally {
+      setSavingEdit(false)
+    }
   }
 
   // ── Success screen ──
@@ -484,6 +623,18 @@ export default function BelanjaPage() {
 
                         {item.keterangan && <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '8px', fontStyle: 'italic' }}>Catatan: &quot;{item.keterangan}&quot;</div>}
                         {item.adminNote && <div style={{ fontSize: '12px', color: '#EF4444', marginTop: '4px', fontWeight: '600' }}>Catatan Admin: &quot;{item.adminNote}&quot;</div>}
+
+                        {/* Aksi edit — Admin & Operasional, hanya saat status masih PENDING */}
+                        {canEditItem(item) && (
+                          <div className="pg-hist-actions">
+                            <button type="button" className="btn" onClick={() => openEdit(item)}
+                              title="Ubah tanggal, catatan, atau rincian item pengajuan"
+                              style={{ background: 'var(--orange-light)', color: 'var(--orange)', border: '1px solid var(--orange-light)', fontWeight: '700' }}>
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                              Edit Rincian
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )
                   })}
@@ -809,6 +960,122 @@ export default function BelanjaPage() {
               <div style={{ display: 'flex', gap: '8px', paddingTop: '4px' }}>
                 <button type="button" className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setManualOpen(false)}>Batal</button>
                 <button type="submit" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>Tambah</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Toast sukses edit pengajuan */}
+      {toastMsg && (
+        <div className="pg-toast" style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 700, maxWidth: '380px', width: '100%' }}>
+          <div className="slide-down" style={{ padding: '14px 18px', borderRadius: '12px', border: '1px solid #A7F3D0', background: '#F0FDF4', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '16px' }}>✅</span>
+            <span style={{ fontSize: '13px', fontWeight: '600', color: '#10B981' }}>{toastMsg}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Edit Pengajuan Belanja — Admin & Operasional (status PENDING) */}
+      {editOpen && (
+        <div className="pg-modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 420, backdropFilter: 'blur(6px)' }}
+          onClick={e => { if (e.target === e.currentTarget) closeEdit() }}>
+          <div className="card fade-in pg-modal" style={{ width: '620px', maxWidth: '96vw', overflow: 'hidden' }}>
+            <div className="pg-edit-head" style={{ padding: '18px 20px', borderBottom: '1px solid var(--border)', background: 'linear-gradient(135deg, #FEF3C7, #FFFBEB)' }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: '15px', fontWeight: '800', color: 'var(--text)' }}>Edit Pengajuan Belanja</div>
+                <div style={{ fontSize: '12px', color: '#B45309', marginTop: '2px' }}>
+                  {editTarget?.requesterName ? `Diajukan oleh: ${editTarget.requesterName}` : 'Perbarui tanggal, catatan, dan rincian item'}
+                </div>
+              </div>
+              <button type="button" onClick={closeEdit} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: '20px', lineHeight: 1, flexShrink: 0 }}>×</button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              <div className="pg-modal-body" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+
+                <div className="pg-edit-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 190px) minmax(0, 1fr)', gap: '12px' }}>
+                  <div>
+                    <label className="label">Tanggal Belanja</label>
+                    <input type="date" className="input" value={editForm.tanggal}
+                      onChange={e => setEditForm(prev => ({ ...prev, tanggal: e.target.value }))} />
+                  </div>
+                  <div>
+                    <label className="label">Catatan Pengajuan</label>
+                    <input type="text" className="input" placeholder="Catatan pengajuan belanja (opsional)"
+                      value={editForm.keterangan}
+                      onChange={e => setEditForm(prev => ({ ...prev, keterangan: e.target.value }))} />
+                  </div>
+                </div>
+
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                    <label className="label" style={{ marginBottom: 0 }}>Rincian Item ({editForm.items.length})</label>
+                    <button type="button" className="btn btn-ghost" onClick={addEditItem} style={{ gap: '5px', fontSize: '11.5px', padding: '6px 11px', flexShrink: 0 }}>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                      Tambah Item
+                    </button>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {editForm.items.length === 0 && (
+                      <div style={{ fontSize: '12px', color: 'var(--muted)', padding: '14px', textAlign: 'center', background: 'var(--surface2)', borderRadius: '10px', border: '1px dashed var(--border)' }}>
+                        Belum ada item. Tambahkan minimal 1 item belanja.
+                      </div>
+                    )}
+
+                    {editForm.items.map((it, idx) => (
+                      <div key={it.key} className="pg-edit-item">
+                        <div className="pg-edit-item-head">
+                          <input className="input" placeholder="Nama item belanja" value={it.itemName}
+                            onChange={e => setEditItemField(idx, 'itemName', e.target.value)}
+                            style={{ fontSize: '12.5px' }} />
+                          <button type="button" onClick={() => removeEditItem(idx)} title="Hapus item"
+                            style={{ width: '34px', height: '34px', borderRadius: '9px', border: '1px solid #FECACA', background: 'var(--red-light)', color: 'var(--red)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                          </button>
+                        </div>
+
+                        <div className="pg-edit-item-row">
+                          <div style={{ position: 'relative', flex: '1 1 130px', minWidth: 0 }}>
+                            <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', fontSize: '11px', color: 'var(--muted)', fontWeight: '600', pointerEvents: 'none' }}>Rp</span>
+                            <input className="input" type="number" step="any" min="0" placeholder="Harga" value={it.harga}
+                              onChange={e => setEditItemField(idx, 'harga', e.target.value)}
+                              style={{ width: '100%', fontSize: '12.5px', paddingLeft: '32px' }} />
+                          </div>
+                          <input className="input" type="number" step="any" min="0" title="Qty" value={it.qty}
+                            onChange={e => setEditItemField(idx, 'qty', e.target.value)}
+                            style={{ flex: '0 1 70px', fontSize: '12.5px', textAlign: 'center' }} />
+                          <input className="input" placeholder="Satuan" value={it.satuan}
+                            onChange={e => setEditItemField(idx, 'satuan', e.target.value)}
+                            style={{ flex: '1 1 90px', minWidth: 0, fontSize: '12.5px' }} />
+                          <div className="pg-edit-item-total">{fmt((Number(it.harga) || 0) * (Number(it.qty) || 1))}</div>
+                        </div>
+
+                        <input className="input" placeholder="Keterangan item (opsional)" value={it.keterangan}
+                          onChange={e => setEditItemField(idx, 'keterangan', e.target.value)}
+                          style={{ fontSize: '12px' }} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="pg-modal-footer" style={{ padding: '14px 20px', borderTop: '1px solid var(--border)', background: 'var(--surface2)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '12.5px', color: 'var(--muted)', fontWeight: '600' }}>Total Pengajuan</span>
+                  <span style={{ fontSize: '18px', fontWeight: '900', color: '#DC2626' }}>{fmt(editTotal)}</span>
+                </div>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button type="button" className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={closeEdit} disabled={savingEdit}>Batal</button>
+                  <button type="submit" className="btn" disabled={savingEdit}
+                    style={{ flex: 1, justifyContent: 'center', background: 'linear-gradient(135deg, #F59E0B, #D97706)', color: '#fff', border: 'none', fontWeight: '700' }}>
+                    {savingEdit ? 'Menyimpan...' : 'Simpan Perubahan'}
+                  </button>
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--muted)', textAlign: 'center' }}>
+                  Setelah diperbarui, pengajuan tetap ber-status Pending dan menunggu ACC Admin.
+                </div>
               </div>
             </form>
           </div>
