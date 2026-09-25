@@ -7,6 +7,8 @@ export async function POST(req) {
   if (error) return error
   const { items, catatan, date } = await req.json()
   if (!items?.length) return NextResponse.json({ message: 'Items tidak boleh kosong' }, { status: 400 })
+  const invalidQtyItem = items.find(i => !(Number(i.qty) > 0))
+  if (invalidQtyItem) return NextResponse.json({ message: `Qty untuk ${invalidQtyItem.name || 'item'} harus diisi dengan angka lebih dari 0` }, { status: 400 })
 
   const details = items.map(i => ({
     expenseItemId: i.expenseItemId || null,
@@ -16,8 +18,8 @@ export async function POST(req) {
     satuan: i.satuan || '',
     harga: Number(i.harga),
     isi: Number(i.isi) > 0 ? Number(i.isi) : null,
-    qty: Number(i.qty) || 1,
-    subtotal: Number(i.harga) * (Number(i.qty) || 1),
+    qty: Number(i.qty),
+    subtotal: Number(i.harga) * Number(i.qty),
   }))
   const total = details.reduce((s, d) => s + d.subtotal, 0)
 

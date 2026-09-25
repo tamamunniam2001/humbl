@@ -20,7 +20,7 @@ export default function PengeluaranPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(null)
   const [manualOpen, setManualOpen] = useState(false)
-  const [manual, setManual] = useState({ name: '', keterangan: '', satuan: '', kategori: '', harga: '', isi: '', qty: 1 })
+  const [manual, setManual] = useState({ name: '', keterangan: '', satuan: '', kategori: '', harga: '', isi: '', qty: '' })
   const [activeCategory, setActiveCategory] = useState('Semua')
   const [importing, setImporting] = useState(false)
   const [importProgress, setImportProgress] = useState(0)
@@ -53,7 +53,7 @@ export default function PengeluaranPage() {
   })
 
   function updateCart(itemId, field, value) {
-    setCart(prev => ({ ...prev, [itemId]: { harga: '', qty: 1, keterangan: '', isi: '', ...prev[itemId], [field]: value } }))
+    setCart(prev => ({ ...prev, [itemId]: { harga: '', qty: '', keterangan: '', isi: '', ...prev[itemId], [field]: value } }))
   }
 
   // Harga satuan = harga ÷ isi (ml/gr/ps). Jika isi kosong, harga dianggap sudah per satuan.
@@ -66,8 +66,10 @@ export default function PengeluaranPage() {
   function addToCart(item) {
     const entry = cart[item.id] || {}
     if (!Number(entry.harga)) return alert('Isi harga terlebih dahulu')
+    const qty = Number(entry.qty)
+    if (!(qty > 0)) return alert('Isi Qty dengan angka lebih dari 0')
     const isi = Number(entry.isi) || 0
-    setCart(prev => ({ ...prev, [item.id]: { ...prev[item.id], isi: isi > 0 ? String(isi) : '', qty: String(Number(entry.qty) || 1), added: true } }))
+    setCart(prev => ({ ...prev, [item.id]: { ...prev[item.id], isi: isi > 0 ? String(isi) : '', qty: String(qty), added: true } }))
   }
 
   function removeFromCart(itemId) {
@@ -125,19 +127,22 @@ export default function PengeluaranPage() {
   function addManual(e) {
     e.preventDefault()
     if (!manual.name || !manual.harga) return
+    if (!(Number(manual.qty) > 0)) return alert('Isi Qty dengan angka lebih dari 0')
     const id = `manual_${Date.now()}`
     const isi = Number(manual.isi) || 0
     setCart(prev => ({ ...prev, [id]: { harga: manual.harga, isi: isi > 0 ? String(isi) : '', qty: manual.qty, keterangan: manual.keterangan, satuan: manual.satuan, category: manual.kategori || '', added: true, isManual: true } }))
     setItems(prev => [...prev, { id, name: manual.name, code: null, category: manual.kategori || null, isManual: true }])
-    setManual({ name: '', keterangan: '', satuan: '', kategori: '', harga: '', isi: '', qty: 1 })
+    setManual({ name: '', keterangan: '', satuan: '', kategori: '', harga: '', isi: '', qty: '' })
     setManualOpen(false)
   }
 
   const cartItems = items.filter(i => cart[i.id]?.added)
-  const total = cartItems.reduce((s, i) => s + (Number(cart[i.id].harga) || 0) * (Number(cart[i.id].qty) || 1), 0)
+  const total = cartItems.reduce((s, i) => s + (Number(cart[i.id].harga) || 0) * (Number(cart[i.id].qty) || 0), 0)
 
   async function handleSave() {
     if (!cartItems.length) return alert('Belum ada item pengeluaran')
+    const invalidQtyItem = cartItems.find(i => !(Number(cart[i.id].qty) > 0))
+    if (invalidQtyItem) return alert(`Qty untuk ${invalidQtyItem.name} harus diisi dengan angka lebih dari 0`)
     setSaving(true)
     try {
       const res = await api.post('/expenses', {
@@ -150,7 +155,7 @@ export default function PengeluaranPage() {
           satuan: cart[i.id].satuan || '',
           harga: Number(cart[i.id].harga),
           isi: Number(cart[i.id].isi) > 0 ? Number(cart[i.id].isi) : null,
-          qty: Number(cart[i.id].qty) || 1,
+          qty: Number(cart[i.id].qty),
         })),
       })
       setSaved(res.data)
@@ -299,7 +304,7 @@ export default function PengeluaranPage() {
                   const entry = cart[item.id] || {}
                   const isAdded = !!entry.added
                   const harga = Number(entry.harga) || 0
-                  const qty = Number(entry.qty) || 1
+                  const qty = Number(entry.qty) || 0
 
                   return (
                     <div key={item.id} style={{
@@ -378,7 +383,7 @@ export default function PengeluaranPage() {
                                   style={{ width: '96px', fontSize: '12px', padding: '7px 8px', textAlign: 'center' }} />
                               </div>
 
-                              <input className="input pg-qty" type="number" step="any" min="0" value={entry.qty || 1}
+                              <input className="input pg-qty" type="number" step="any" min="0.01" placeholder="Qty" aria-label={`Qty ${item.name}`} value={entry.qty ?? ''}
                                 onChange={e => updateCart(item.id, 'qty', e.target.value)}
                                 style={{ width: '56px', textAlign: 'center', fontSize: '12px', padding: '7px 8px', flexShrink: 0 }} />
                               <button onClick={() => addToCart(item)}
@@ -441,7 +446,7 @@ export default function PengeluaranPage() {
                   {cartItems.map((item, i) => {
                     const e = cart[item.id]
                     const harga = Number(e.harga) || 0
-                    const qty = Number(e.qty) || 1
+                    const qty = Number(e.qty) || 0
                     return (
                       <div key={i} style={{ padding: '10px 12px', background: 'var(--surface2)', borderRadius: '10px', border: '1px solid var(--border)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -455,7 +460,7 @@ export default function PengeluaranPage() {
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
                             <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--red)' }}>{fmt(harga * qty)}</div>
-                            <button onClick={() => setEditCartItem({ itemId: item.id, harga: String(harga), isi: e.isi || '', qty: String(qty), keterangan: e.keterangan || '' })}
+                            <button onClick={() => setEditCartItem({ itemId: item.id, harga: String(harga), isi: e.isi || '', qty: String(e.qty ?? ''), keterangan: e.keterangan || '' })}
                               style={{ width: '24px', height: '24px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--accent-light)', color: 'var(--accent)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                             </button>
@@ -563,6 +568,8 @@ export default function PengeluaranPage() {
                 </div>
                 <div>
                   <label className="label">Qty</label>
+                  <input className="input" type="number" step="any" min="0.01" placeholder="Qty" value={manual.qty}
+                    onChange={e => setManual({ ...manual, qty: e.target.value })} required />
                   <input className="input" type="number" step="any" min="0" value={manual.qty}
                     onChange={e => setManual({ ...manual, qty: e.target.value })} />
                 </div>
@@ -619,9 +626,9 @@ export default function PengeluaranPage() {
                   </div>
                   <div>
                     <label className="label">Qty</label>
-                    <input className="input" type="number" step="any" min="0" value={editCartItem.qty}
+                    <input className="input" type="number" step="any" min="0.01" placeholder="Qty" value={editCartItem.qty}
                       onChange={e => setEditCartItem(p => ({ ...p, qty: e.target.value }))}
-                      style={{ textAlign: 'center' }} />
+                      style={{ textAlign: 'center' }} required />
                   </div>
                 </div>
                 {Number(editCartItem.harga) > 0 && (
@@ -631,13 +638,14 @@ export default function PengeluaranPage() {
                         Harga satuan: {fmt(Number(editCartItem.harga) / Number(editCartItem.isi))}{item?.satuan ? `/${item.satuan}` : ''}
                       </div>
                     )}
-                    Total: {fmt(Number(editCartItem.harga) * (Number(editCartItem.qty) || 1))}
+                    Total: {fmt(Number(editCartItem.harga) * (Number(editCartItem.qty) || 0))}
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setEditCartItem(null)}>Batal</button>
                   <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} onClick={() => {
                     if (!Number(editCartItem.harga)) return alert('Isi harga terlebih dahulu')
+                    if (!(Number(editCartItem.qty) > 0)) return alert('Isi Qty dengan angka lebih dari 0')
                     setCart(prev => ({ ...prev, [editCartItem.itemId]: { ...prev[editCartItem.itemId], harga: editCartItem.harga, isi: Number(editCartItem.isi) > 0 ? String(editCartItem.isi) : '', qty: editCartItem.qty, keterangan: editCartItem.keterangan } }))
                     setEditCartItem(null)
                   }}>Simpan</button>
