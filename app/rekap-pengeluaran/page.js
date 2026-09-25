@@ -137,6 +137,7 @@ export default function RekapPengeluaranPage() {
         keterangan: i.keterangan || '',
         satuan: i.satuan || i.expenseItem?.satuan || '',
         harga: String(i.harga),
+        isi: i.isi ? String(i.isi) : '',
         qty: String(i.qty),
       })),
     })
@@ -154,7 +155,9 @@ export default function RekapPengeluaranPage() {
           expenseItemId: i.expenseItemId || null,
           name: i.name, category: i.category || '',
           keterangan: i.keterangan || '', satuan: i.satuan || '',
-          harga: Number(i.harga), qty: Number(i.qty) || 1,
+          harga: Number(i.harga), 
+          isi: Number(i.isi) > 0 ? Number(i.isi) : null,
+          qty: Number(i.qty) || 1,
         })),
       })
       setEditModal(null); load(page); loadMonthly()
@@ -176,11 +179,15 @@ export default function RekapPengeluaranPage() {
         const r = await api.get(`/admin/expenses?${params}&page=${p}`)
         rows = rows.concat(r.data.rows || [])
       }
-      const header = 'Tanggal,Kategori,Item,Satuan,Kode,Keterangan,Harga,Qty,Total,Kasir'
-      const lines = rows.map(r => [
-        fmtDate(r.date), `"${r.category}"`, `"${r.name}"`, r.satuan, r.code,
-        `"${r.keterangan}"`, r.harga, r.qty, r.subtotal, `"${r.cashier}"`
-      ].join(','))
+      const header = 'Tanggal,Kategori,Item,Satuan,Kode,Keterangan,Harga,Isi,HargaSatuan,Qty,Total,Kasir'
+      const lines = rows.map(r => {
+        const isi = Number(r.isi) || 0
+        const hrgSatuan = isi > 0 ? Number(r.harga) / isi : ''
+        return [
+          fmtDate(r.date), `"${r.category}"`, `"${r.name}"`, r.satuan, r.code,
+          `"${r.keterangan}"`, r.harga, r.isi || '', hrgSatuan, r.qty, r.subtotal, `"${r.cashier}"`
+        ].join(',')
+      })
       const blob = new Blob(['\uFEFF' + header + '\n' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -380,7 +387,14 @@ export default function RekapPengeluaranPage() {
                       </td>
                       <td>{r.satuan ? <span className="badge badge-gray">{r.satuan}</span> : null}</td>
                       <td>{r.code ? <span className="badge badge-gray" style={{ fontFamily: 'monospace' }}>{r.code}</span> : null}</td>
-                      <td style={{ textAlign: 'right', color: 'var(--text2)' }}>{fmt(r.harga)}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ color: 'var(--text2)' }}>{fmt(r.harga)}</div>
+                        {Number(r.isi) > 0 && (
+                          <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '2px' }}>
+                            {fmt(Number(r.harga) / Number(r.isi))}/{r.satuan || 'isi'}
+                          </div>
+                        )}
+                      </td>
                       <td style={{ textAlign: 'center' }}><span className="badge badge-purple">{r.qty}</span></td>
                       <td style={{ textAlign: 'right', fontWeight: '700', color: 'var(--red)' }}>{fmt(r.subtotal)}</td>
                       <td>
@@ -480,31 +494,39 @@ export default function RekapPengeluaranPage() {
                     </div>
                   </div>
 
-                  {/* Baris 2: Keterangan + Satuan + Harga + Qty */}
+                  {/* Baris 2: Keterangan + Satuan + Harga + Isi + Qty */}
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <input className="input" placeholder="Keterangan" value={item.keterangan || ''}
                       onChange={e => setEditForm(f => ({ ...f, items: f.items.map((it, j) => j === i ? { ...it, keterangan: e.target.value } : it) }))}
                       style={{ flex: 1, fontSize: '12px' }} />
                     <input className="input" placeholder="Satuan" value={item.satuan || ''}
                       onChange={e => setEditForm(f => ({ ...f, items: f.items.map((it, j) => j === i ? { ...it, satuan: e.target.value } : it) }))}
-                      style={{ width: '70px', fontSize: '12px' }} />
+                      style={{ width: '60px', fontSize: '12px' }} />
                     <div style={{ position: 'relative' }}>
                       <span style={{ position: 'absolute', left: '9px', top: '50%', transform: 'translateY(-50%)', fontSize: '11px', color: 'var(--muted)', fontWeight: '600' }}>Rp</span>
-                      <input className="input" type="number" step="any" value={item.harga}
+                      <input className="input" type="number" step="any" placeholder="Harga" value={item.harga}
                         onChange={e => setEditForm(f => ({ ...f, items: f.items.map((it, j) => j === i ? { ...it, harga: e.target.value } : it) }))}
-                        style={{ width: '110px', paddingLeft: '28px', fontSize: '12px' }} />
+                        style={{ width: '90px', paddingLeft: '28px', fontSize: '12px' }} />
                     </div>
-                    <input className="input" type="number" step="any" min="0" value={item.qty}
+                    <input className="input" type="number" step="any" min="0" placeholder="Isi" value={item.isi || ''}
+                      onChange={e => setEditForm(f => ({ ...f, items: f.items.map((it, j) => j === i ? { ...it, isi: e.target.value } : it) }))}
+                      style={{ width: '60px', fontSize: '12px', textAlign: 'center' }} />
+                    <input className="input" type="number" step="any" min="0" placeholder="Qty" value={item.qty}
                       onChange={e => setEditForm(f => ({ ...f, items: f.items.map((it, j) => j === i ? { ...it, qty: e.target.value } : it) }))}
-                      style={{ width: '56px', textAlign: 'center', fontSize: '12px' }} />
+                      style={{ width: '48px', textAlign: 'center', fontSize: '12px' }} />
                   </div>
 
                   {/* Subtotal preview */}
-                  {Number(item.harga) > 0 && (
-                    <div style={{ marginTop: '8px', fontSize: '12px', fontWeight: '700', color: 'var(--red)', textAlign: 'right' }}>
-                      {fmt(Number(item.harga) * (Number(item.qty) || 1))}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
+                    <div style={{ fontSize: '10px', color: 'var(--muted)' }}>
+                      {Number(item.isi) > 0 && Number(item.harga) > 0 ? `Harga per satuan: ${fmt(Number(item.harga) / Number(item.isi))}/${item.satuan || 'isi'}` : ''}
                     </div>
-                  )}
+                    {Number(item.harga) > 0 && (
+                      <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--red)', textAlign: 'right' }}>
+                        {fmt(Number(item.harga) * (Number(item.qty) || 1))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))}
 

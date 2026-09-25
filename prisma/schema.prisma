@@ -244,6 +244,7 @@ model ExpenseDetail {
   keterangan   String?     @default("")
   satuan       String?     @default("")
   harga        Float
+  isi          Float?
   qty          Float       @default(1)
   subtotal     Float
 

@@ -15,6 +15,7 @@ export async function POST(req) {
     keterangan: i.keterangan || '',
     satuan: i.satuan || '',
     harga: Number(i.harga),
+    isi: Number(i.isi) > 0 ? Number(i.isi) : null,
     qty: Number(i.qty) || 1,
     subtotal: Number(i.harga) * (Number(i.qty) || 1),
   }))

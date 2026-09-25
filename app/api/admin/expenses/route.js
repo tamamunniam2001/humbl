@@ -92,6 +92,7 @@ export async function GET(req) {
         code: item.expenseItem?.code || '',
         keterangan: item.keterangan || '',
         harga: item.harga,
+        isi: item.isi,
         qty: item.qty,
         subtotal: item.subtotal,
         expenseItemId: item.expenseItemId,

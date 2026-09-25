@@ -102,6 +102,7 @@ export async function PATCH(req, context) {
               keterangan: item.keterangan || '',
               satuan: item.satuan || '',
               harga: item.harga,
+              isi: item.isi,
               qty: item.qty,
               subtotal: item.subtotal,
             })),
