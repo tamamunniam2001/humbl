@@ -352,9 +352,9 @@ export default function StockOpnamePage() {
                     const hargaDasar = item.hargaPerSatuanDasar ?? item.hargaTerakhir ?? 0
                     const nilaiStok = item.qtyActual * hargaDasar
                     // Label keterangan harga: "Rp X / satuanOpname" atau "Rp X / satuan"
-                    const labelSatuan = item.konversi ? satuanDasar : (item.konversi ? satuanDasar : (satuanTampil || satuanDasar))
-                    const hargaPerSatuanTampil = item.konversi && item.hargaTerakhir
-                      ? item.hargaTerakhir / item.konversi  // harga per satuanOpname
+                    const labelSatuan = satuanTampil || satuanDasar
+                    const hargaPerSatuanTampil = item.konversi
+                      ? (item.hargaPerSatuanDasar ?? item.hargaTerakhir ?? 0) * item.konversi
                       : (item.hargaPerSatuanDasar ?? item.hargaTerakhir ?? null)
                     const sudahIsi = item.qtyActual > 0
                     const cat = item.inventoryItem?.category || item.expenseItem?.category
@@ -724,7 +724,7 @@ export default function StockOpnamePage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {sortedOpnames.map(o => {
                 const isDraft = o.status === 'DRAFT'
-                const pct = o.totalItems ? Math.round((o.totalItems - o.itemsSelisih) / o.totalItems * 100) : 0
+                const pct = o.totalItems ? Math.round((o.itemsFilled || 0) / o.totalItems * 100) : 0
                 return (
                   <div key={o.id} className="card" style={{ padding: '14px 16px', cursor: 'pointer' }}
                     onClick={() => openDetail(o.id)}>
@@ -756,7 +756,7 @@ export default function StockOpnamePage() {
                               <div style={{ height: '100%', width: `${pct}%`, background: '#F59E0B', borderRadius: '99px' }} />
                             </div>
                             <div style={{ fontSize: '10px', color: 'var(--muted)', marginTop: '3px' }}>
-                              {o.totalItems - o.itemsSelisih} / {o.totalItems} item terisi
+                              {o.itemsFilled || 0} / {o.totalItems} item terisi
                             </div>
                           </div>
                         )}
