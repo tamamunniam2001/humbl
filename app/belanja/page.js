@@ -10,6 +10,160 @@ const fmt = (n) => {
   return 'Rp ' + num.toLocaleString('id-ID', hasDecimal ? { minimumFractionDigits: 1, maximumFractionDigits: 2 } : {})
 }
 
+// ── Styling halaman (desktop + mobile friendly) ──
+// Kelas pg-* dipakai bareng dengan halaman Pengeluaran agar konsisten.
+const pgStyles = (
+  <style>{`
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes pgFlash { 0%, 100% { box-shadow: inset 0 0 0 2px rgba(74,124,199,0); } 50% { box-shadow: inset 0 0 0 2px var(--accent); } }
+
+    /* ── Belanja Operasional: header, toolbar & keranjang ── */
+    .pg-topbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+    .pg-topbar-title { min-width: 0; }
+    .pg-topbar-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .pg-saldo {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--surface2); padding: 6px 14px;
+      border-radius: 12px; border: 1px solid var(--border);
+    }
+    .pg-tabs { display: flex; background: var(--surface2); padding: 3px; border-radius: 10px; border: 1px solid var(--border); }
+    .pg-tab {
+      display: flex; align-items: center; justify-content: center;
+      padding: 6px 14px; border-radius: 7px; border: none;
+      font-size: 12px; font-weight: 600; font-family: inherit;
+      background: transparent; color: var(--muted);
+      cursor: pointer; transition: background 0.15s, color 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .pg-tab.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .pg-added-row { flex-wrap: wrap; }
+    .pg-toolbar {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      padding: 10px 24px; background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+    .pg-cart-btn {
+      position: relative;
+      display: flex; align-items: center; gap: 7px;
+      padding: 8px 13px; border-radius: 10px;
+      border: 1.5px solid var(--border); background: var(--surface);
+      color: var(--text2); font-family: inherit; font-size: 12px; font-weight: 700;
+      cursor: pointer; transition: border-color 0.15s, background 0.15s, color 0.15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .pg-cart-btn:hover { border-color: var(--accent); background: var(--accent-light); color: var(--accent); }
+    .pg-cart-badge {
+      position: absolute; top: -7px; right: -7px;
+      min-width: 18px; height: 18px; padding: 0 4px;
+      border-radius: 99px; background: var(--red); color: #fff;
+      font-size: 10px; font-weight: 800; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+      border: 2px solid var(--surface);
+    }
+    .pg-cart-sheetbar, .pg-cart-backdrop, .pg-cart-fab { display: none; }
+    .pg-cart.flash { animation: pgFlash 0.6s ease-in-out 2; }
+
+    /* Riwayat pengajuan */
+    .pg-hist-item { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; }
+    .pg-hist-item > span:first-child { min-width: 0; }
+    .pg-hist-item > span:last-child { flex-shrink: 0; font-weight: 600; }
+
+    /* ── Belanja Operasional: mobile friendly ── */
+    @media (max-width: 768px) {
+      /* Header bertumpuk: judul, badge saldo, tab + keranjang */
+      .pg-topbar {
+        height: auto !important; min-height: 56px;
+        flex-direction: column; align-items: stretch;
+        padding: 9px 12px !important; gap: 8px;
+      }
+      .pg-topbar-actions { width: 100%; gap: 8px; flex-wrap: wrap; }
+      .pg-saldo { flex: 1 1 100%; justify-content: space-between; padding: 6px 12px !important; }
+      .pg-tabs { flex: 1 1 auto; }
+      .pg-tab { flex: 1; padding: 8px !important; font-size: 11.5px !important; white-space: nowrap; }
+      .pg-cart-btn { flex: 0 0 auto; padding: 8px 11px !important; }
+
+      /* Toolbar aksi */
+      .pg-toolbar { padding: 10px 12px !important; gap: 6px; }
+      .pg-toolbar .btn { flex: 1 1 0; min-width: 0; justify-content: center; padding: 9px 6px !important; font-size: 11px !important; white-space: nowrap; overflow: hidden; }
+
+      /* Layout menumpuk */
+      .pg-main { height: auto !important; min-height: 100vh; overflow: visible !important; padding-bottom: 132px !important; }
+      .pg-layout { flex-direction: column; overflow: visible !important; }
+      .pg-list { border-right: none !important; overflow: visible !important; }
+      .pg-items { overflow: visible !important; padding: 12px !important; }
+      .pg-search { padding: 12px 12px 10px !important; }
+      .pg-chips { overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding-bottom: 4px !important; }
+      .pg-chips::-webkit-scrollbar { display: none; }
+
+      /* Input baris item */
+      .pg-input-row { flex-wrap: wrap; }
+      .pg-ket { flex: 1 1 100% !important; min-width: 0; }
+      .pg-nw { flex: 1 1 0; min-width: 76px; }
+      .pg-nw > input { width: 100% !important; }
+      .pg-qty { flex: 0 1 64px; width: auto !important; }
+      .pg-added-row { margin-left: 0 !important; width: 100%; justify-content: space-between; }
+
+      /* Riwayat pengajuan */
+      .pg-history { padding: 12px !important; }
+      .pg-history .card { padding: 14px !important; }
+      .pg-hist-head { flex-direction: column; align-items: stretch !important; }
+      .pg-hist-total { text-align: left !important; display: flex; align-items: baseline; gap: 8px; }
+
+      /* Keranjang = bottom sheet */
+      .pg-cart-backdrop { display: block; position: fixed; inset: 0; background: rgba(15,23,42,0.5); z-index: 205; backdrop-filter: blur(2px); }
+      .pg-cart {
+        position: fixed; left: 0; right: 0; bottom: 0;
+        width: auto !important; max-width: none !important;
+        max-height: 86vh; z-index: 210;
+        border-radius: 20px 20px 0 0;
+        border-top: 1px solid var(--border) !important;
+        box-shadow: 0 -8px 40px rgba(15,23,42,0.28);
+        transform: translateY(100%); transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+      .pg-cart.open { transform: translateY(0); }
+      .pg-cart-sheetbar { display: block; position: relative; padding: 9px 46px 5px; }
+      .pg-cart-handle { display: block; width: 44px; height: 5px; margin: 0 auto; border-radius: 99px; background: var(--border2); }
+      .pg-cart-close { display: flex; align-items: center; justify-content: center; position: absolute; right: 10px; top: 4px; width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface2); color: var(--muted); cursor: pointer; }
+      .pg-cart-items { flex: 1 1 auto !important; overflow-y: auto !important; -webkit-overflow-scrolling: touch; padding: 12px !important; }
+      .pg-cart-footer { padding-bottom: calc(14px + env(safe-area-inset-bottom)) !important; }
+
+      /* FAB keranjang (ringkasan + pintasan sheet) */
+      .pg-cart-fab {
+        display: flex; align-items: center; gap: 10px;
+        position: fixed; left: 12px; right: 12px; bottom: 70px; z-index: 60;
+        padding: 10px 14px; border: none; border-radius: 15px;
+        background: linear-gradient(135deg, #F59E0B, #D97706); color: #fff;
+        box-shadow: 0 10px 28px rgba(217,119,6,0.42);
+        cursor: pointer; font-family: inherit; text-align: left;
+        -webkit-tap-highlight-color: transparent;
+      }
+      .pg-cart-fab-icon { position: relative; display: flex; align-items: center; justify-content: center; }
+      .pg-cart-fab .pg-cart-badge { border-color: #D97706; background: #fff; color: var(--red); }
+
+      /* Modal input manual jadi bottom sheet */
+      .pg-modal-overlay { align-items: flex-end !important; }
+      .pg-modal {
+        width: 100% !important; max-width: 100% !important;
+        max-height: 92vh; overflow-y: auto;
+        border-radius: 18px 18px 0 0 !important;
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+
+      /* Toast hasil import */
+      .pg-toast { left: 12px !important; right: 12px !important; bottom: 76px !important; max-width: none !important; width: auto !important; }
+
+      /* Kartu sukses */
+      .pg-success-card { padding: 28px 18px !important; }
+    }
+
+    @media (max-width: 400px) {
+      .pg-cart-btn-label { display: none; }
+      .pg-cart-btn { padding: 8px 10px !important; }
+    }
+  `}</style>
+)
+
 export default function BelanjaPage() {
   const [activeTab, setActiveTab] = useState('FORM') // FORM, HISTORY
   const [saldo, setSaldo] = useState(0)
@@ -68,11 +222,12 @@ export default function BelanjaPage() {
     }
   }, [activeTab])
 
+  // Kunci scroll body saat keranjang (sheet mobile) atau modal input manual terbuka
   useEffect(() => {
-    if (cartOpen) document.body.style.overflow = 'hidden'
+    if (cartOpen || manualOpen) document.body.style.overflow = 'hidden'
     else document.body.style.overflow = ''
     return () => { document.body.style.overflow = '' }
-  }, [cartOpen])
+  }, [cartOpen, manualOpen])
 
   const categories = ['Semua', ...Array.from(new Set(items.filter(i => !i.isManual && i.category).map(i => i.category)))]
 
@@ -198,7 +353,7 @@ export default function BelanjaPage() {
       <main className="main">
         <div className="topbar"><div className="topbar-title">Belanja Operasional</div></div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, padding: '24px' }}>
-          <div className="card fade-in" style={{ padding: '44px 36px', textAlign: 'center', maxWidth: '460px', width: '100%', borderRadius: '18px' }}>
+          <div className="card fade-in pg-success-card" style={{ padding: '44px 36px', textAlign: 'center', maxWidth: '460px', width: '100%', borderRadius: '18px' }}>
             <div style={{ width: '72px', height: '72px', background: 'linear-gradient(135deg, #F59E0B, #D97706)', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', boxShadow: '0 8px 24px rgba(245,158,11,0.35)', color: '#fff' }}>
               <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="9"/></svg>
             </div>
@@ -232,6 +387,7 @@ export default function BelanjaPage() {
           </div>
         </div>
       </main>
+      {pgStyles}
     </div>
   )
 
@@ -241,39 +397,25 @@ export default function BelanjaPage() {
       <main className="main pg-main" style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', height: '100vh' }}>
 
         {/* Topbar dengan Indikator Saldo Operasional */}
-        <div className="topbar pg-topbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-          <div>
+        <div className="topbar pg-topbar">
+          <div className="pg-topbar-title">
             <div className="topbar-title">Belanja Operasional</div>
             <div className="topbar-sub">Input belanja operasional yang perlu di-ACC Admin</div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <div className="pg-topbar-actions">
             {/* Saldo Operasional Badge */}
-            <div style={{ background: 'var(--surface2)', padding: '6px 14px', borderRadius: '12px', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div className="pg-saldo">
               <div style={{ fontSize: '11px', fontWeight: '600', color: 'var(--muted)' }}>Saldo Operasional:</div>
               <div style={{ fontSize: '14px', fontWeight: '800', color: saldo < 100000 ? '#EF4444' : '#10B981' }}>{fmt(saldo)}</div>
             </div>
 
             {/* Toggle Tab (Form vs History) */}
-            <div style={{ display: 'flex', background: 'var(--surface2)', padding: '3px', borderRadius: '10px', border: '1px solid var(--border)' }}>
-              <button
-                onClick={() => setActiveTab('FORM')}
-                style={{ padding: '6px 14px', borderRadius: '7px', fontSize: '12px', fontWeight: '600', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                  background: activeTab === 'FORM' ? 'var(--surface)' : 'transparent',
-                  color: activeTab === 'FORM' ? 'var(--text)' : 'var(--muted)',
-                  boxShadow: activeTab === 'FORM' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
-                }}
-              >
+            <div className="pg-tabs">
+              <button type="button" className={`pg-tab${activeTab === 'FORM' ? ' active' : ''}`} onClick={() => setActiveTab('FORM')}>
                 + Input Belanja
               </button>
-              <button
-                onClick={() => setActiveTab('HISTORY')}
-                style={{ padding: '6px 14px', borderRadius: '7px', fontSize: '12px', fontWeight: '600', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                  background: activeTab === 'HISTORY' ? 'var(--surface)' : 'transparent',
-                  color: activeTab === 'HISTORY' ? 'var(--text)' : 'var(--muted)',
-                  boxShadow: activeTab === 'HISTORY' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
-                }}
-              >
+              <button type="button" className={`pg-tab${activeTab === 'HISTORY' ? ' active' : ''}`} onClick={() => setActiveTab('HISTORY')}>
                 Riwayat Pengajuan
               </button>
             </div>
@@ -290,7 +432,7 @@ export default function BelanjaPage() {
 
         {/* Tab Content: HISTORY */}
         {activeTab === 'HISTORY' && (
-          <div style={{ padding: '20px', flex: 1, overflowY: 'auto' }}>
+          <div className="pg-history" style={{ padding: '20px', flex: 1, overflowY: 'auto' }}>
             <div className="card" style={{ padding: '20px', borderRadius: '16px' }}>
               <div style={{ fontSize: '16px', fontWeight: '800', color: 'var(--text)', marginBottom: '4px' }}>Daftar Pengajuan Belanja Operasional</div>
               <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '16px' }}>Pantau status pengajuan belanja (Pending, Approved, Rejected)</div>
@@ -311,7 +453,7 @@ export default function BelanjaPage() {
 
                     return (
                       <div key={item.id} style={{ background: 'var(--surface)', borderRadius: '14px', padding: '16px', border: '1px solid var(--border)' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px', marginBottom: '10px' }}>
+                        <div className="pg-hist-head" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px', marginBottom: '10px' }}>
                           <div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <span style={{ fontSize: '11px', fontWeight: '800', padding: '3px 10px', borderRadius: '20px', background: statusBg, color: statusColor }}>
@@ -324,7 +466,7 @@ export default function BelanjaPage() {
                             <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '4px' }}>Diajukan oleh: <strong>{item.requesterName}</strong></div>
                           </div>
 
-                          <div style={{ textAlign: 'right' }}>
+                          <div className="pg-hist-total" style={{ textAlign: 'right' }}>
                             <div style={{ fontSize: '18px', fontWeight: '900', color: 'var(--text)' }}>{fmt(item.total)}</div>
                             <div style={{ fontSize: '11px', color: 'var(--muted)' }}>{item.items?.length} item</div>
                           </div>
@@ -333,15 +475,15 @@ export default function BelanjaPage() {
                         {/* Rincian Item */}
                         <div style={{ background: 'var(--surface2)', borderRadius: '10px', padding: '10px 14px', fontSize: '12px' }}>
                           {item.items?.map((sub, idx) => (
-                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}>
+                            <div key={idx} className="pg-hist-item">
                               <span>{sub.itemName} ({sub.qty} {sub.satuan || ''})</span>
-                              <span style={{ fontWeight: '600' }}>{fmt(sub.subtotal)}</span>
+                              <span>{fmt(sub.subtotal)}</span>
                             </div>
                           ))}
                         </div>
 
-                        {item.keterangan && <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '8px', fontStyle: 'italic' }}>Catatan: "{item.keterangan}"</div>}
-                        {item.adminNote && <div style={{ fontSize: '12px', color: '#EF4444', marginTop: '4px', fontWeight: '600' }}>Catatan Admin: "{item.adminNote}"</div>}
+                        {item.keterangan && <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '8px', fontStyle: 'italic' }}>Catatan: &quot;{item.keterangan}&quot;</div>}
+                        {item.adminNote && <div style={{ fontSize: '12px', color: '#EF4444', marginTop: '4px', fontWeight: '600' }}>Catatan Admin: &quot;{item.adminNote}&quot;</div>}
                       </div>
                     )
                   })}
@@ -371,6 +513,30 @@ export default function BelanjaPage() {
                 Input Manual
               </button>
             </div>
+
+            {/* Progress Bar Import */}
+            {importing && (
+              <div style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 1000 }}>
+                <div style={{ height: '3px', background: '#E2E8F0' }}>
+                  <div style={{ height: '100%', width: `${importProgress}%`, background: 'linear-gradient(90deg, #10B981, #34D399)', transition: 'width 0.2s ease', borderRadius: '0 2px 2px 0' }} />
+                </div>
+              </div>
+            )}
+            {importing && (
+              <div style={{ position: 'fixed', inset: 0, background: 'rgba(30,42,59,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500, backdropFilter: 'blur(4px)' }}>
+                <div className="card fade-in" style={{ padding: '32px 24px', textAlign: 'center', width: '90vw', maxWidth: '380px' }}>
+                  <div style={{ width: '56px', height: '56px', background: '#F0FDF4', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', border: '2px solid #A7F3D0' }}>
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2.5" strokeLinecap="round" style={{ animation: 'spin 1s linear infinite' }}><path d="M21 12a9 9 0 1 1-6.22-8.56"/></svg>
+                  </div>
+                  <div style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text)', marginBottom: '6px' }}>Mengimpor Data...</div>
+                  <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '20px' }}>Mohon tunggu, sedang memproses file CSV</div>
+                  <div style={{ background: '#F1F5F9', borderRadius: '99px', height: '8px', overflow: 'hidden', marginBottom: '8px' }}>
+                    <div style={{ height: '100%', width: `${importProgress}%`, background: 'linear-gradient(90deg, #10B981, #34D399)', borderRadius: '99px', transition: 'width 0.2s ease' }} />
+                  </div>
+                  <div style={{ fontSize: '12px', fontWeight: '600', color: '#10B981' }}>{Math.round(importProgress)}%</div>
+                </div>
+              </div>
+            )}
 
             <div className="pg-layout" style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
@@ -491,7 +657,7 @@ export default function BelanjaPage() {
               <div id="pg-cart" className={`pg-cart${cartOpen ? ' open' : ''}${cartFlash ? ' flash' : ''}`} style={{ width: '320px', flexShrink: 0, display: 'flex', flexDirection: 'column', background: 'var(--surface)', overflow: 'hidden' }}>
                 <div className="pg-cart-sheetbar">
                   <span className="pg-cart-handle" />
-                  <button className="pg-cart-close" type="button" onClick={() => setCartOpen(false)}>
+                  <button className="pg-cart-close" type="button" onClick={() => setCartOpen(false)} aria-label="Tutup keranjang">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                   </button>
                 </div>
@@ -560,11 +726,61 @@ export default function BelanjaPage() {
 
       </main>
 
+      {/* FAB keranjang (mobile) — ringkasan item + pintasan buka sheet */}
+      {activeTab === 'FORM' && cartItems.length > 0 && !importResult && (
+        <button className="pg-cart-fab" type="button" onClick={openCart}>
+          <span className="pg-cart-fab-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+            <span className="pg-cart-badge">{cartItems.length}</span>
+          </span>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span style={{ display: 'block', fontSize: '11px', fontWeight: 600, opacity: 0.9 }}>{cartItems.length} item di keranjang</span>
+            <span style={{ display: 'block', fontSize: '15px', fontWeight: 800, letterSpacing: '-0.3px' }}>{fmt(total)}</span>
+          </span>
+          <span style={{ fontSize: '12px', fontWeight: 700, whiteSpace: 'nowrap' }}>Lihat</span>
+        </button>
+      )}
+
+      {/* Hasil Import */}
+      {importResult && (
+        <div className="pg-toast" style={{ position: 'fixed', bottom: '24px', right: '24px', zIndex: 600, maxWidth: '380px', width: '100%' }}>
+          <div className="slide-down" style={{ padding: '14px 18px', borderRadius: '12px', border: `1px solid ${importResult.error ? '#FECACA' : '#A7F3D0'}`, background: importResult.error ? '#FEF2F2' : '#F0FDF4', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+              <span style={{ fontSize: '16px', marginTop: '1px' }}>{importResult.error ? '❌' : '✅'}</span>
+              <div>
+                {importResult.error
+                  ? <div style={{ fontSize: '13px', fontWeight: '600', color: '#EF4444' }}>{importResult.error}</div>
+                  : <>
+                      <div style={{ fontSize: '13px', fontWeight: '700', color: '#10B981', marginBottom: '4px' }}>Import selesai</div>
+                      <div style={{ fontSize: '12px', color: '#4A5578', display: 'flex', gap: '16px', marginBottom: importResult.errors?.length > 0 ? '8px' : '0' }}>
+                        <span>✚ <b>{importResult.created}</b> berhasil</span>
+                        <span>⊘ <b>{importResult.skipped}</b> gagal</span>
+                      </div>
+                      {importResult.debug?.length > 0 && (
+                        <div style={{ fontSize: '11px', color: '#6B7280', marginBottom: '4px' }}>Tanggal diproses: {importResult.debug.join(', ')}</div>
+                      )}
+                      {importResult.errors?.length > 0 && (
+                        <div style={{ maxHeight: '100px', overflowY: 'auto', background: '#FEF2F2', borderRadius: '6px', padding: '8px 10px', border: '1px solid #FECACA' }}>
+                          {importResult.errors.map((e, i) => (
+                            <div key={i} style={{ fontSize: '11px', color: '#EF4444', marginBottom: i < importResult.errors.length - 1 ? '3px' : '0' }}>{e}</div>
+                          ))}
+                        </div>
+                      )}
+                    </>}
+              </div>
+            </div>
+            <button onClick={() => setImportResult(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', padding: '2px', flexShrink: 0 }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Modal Input Manual */}
       {manualOpen && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400, backdropFilter: 'blur(6px)' }}
+        <div className="pg-modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400, backdropFilter: 'blur(6px)' }}
           onClick={e => { if (e.target === e.currentTarget) setManualOpen(false) }}>
-          <div className="card fade-in" style={{ width: '420px', maxWidth: '96vw', overflow: 'hidden' }}>
+          <div className="card fade-in pg-modal" style={{ width: '420px', maxWidth: '96vw', overflow: 'hidden' }}>
             <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <div style={{ fontSize: '15px', fontWeight: '800', color: 'var(--text)' }}>Input Manual Belanja</div>
@@ -599,6 +815,7 @@ export default function BelanjaPage() {
         </div>
       )}
 
+      {pgStyles}
     </div>
   )
 }
