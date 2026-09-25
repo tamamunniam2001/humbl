@@ -149,6 +149,7 @@ export default function PengeluaranPage() {
           keterangan: cart[i.id].keterangan || '',
           satuan: cart[i.id].satuan || '',
           harga: Number(cart[i.id].harga),
+          isi: Number(cart[i.id].isi) > 0 ? Number(cart[i.id].isi) : null,
           qty: Number(cart[i.id].qty) || 1,
         })),
       })
