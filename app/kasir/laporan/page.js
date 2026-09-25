@@ -463,8 +463,8 @@ function EditModal({ report: r, onClose, onSaved, fmt, fmtDate, isAdmin }) {
   async function handleSync() {
     const SHIFT_RANGES = {
       SHIFT_1: { startHour: 7,  endHour: 13 },
-      SHIFT_2: { startHour: 13, endHour: 18 },
-      SHIFT_3: { startHour: 18, endHour: 23 },
+      SHIFT_2: { startHour: 12, endHour: 18 },
+      SHIFT_3: { startHour: 17, endHour: 23 },
     }
     const currentShift = isAdmin ? shift : r.shift
     const shiftDef = SHIFT_RANGES[currentShift]
@@ -656,8 +656,8 @@ function EditModal({ report: r, onClose, onSaved, fmt, fmtDate, isAdmin }) {
 // ── Modal: Closing Shift yang Terlewat ──
 const SHIFT_HOUR_MAP = {
   SHIFT_1: { startHour: 7,  endHour: 13, label: 'Shift 1', jam: '07.00 – 13.00' },
-  SHIFT_2: { startHour: 13, endHour: 18, label: 'Shift 2', jam: '13.00 – 18.00' },
-  SHIFT_3: { startHour: 18, endHour: 23, label: 'Shift 3', jam: '18.00 – 23.00' },
+  SHIFT_2: { startHour: 12, endHour: 18, label: 'Shift 2', jam: '12.00 – 18.00' },
+  SHIFT_3: { startHour: 17, endHour: 23, label: 'Shift 3', jam: '17.00 – 23.00' },
 }
 
 function AddClosingModal({ target, onClose, onSaved, fmt, fmtDate, isAdmin }) {

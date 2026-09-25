@@ -1080,8 +1080,8 @@ function ManualItemButton({ onAdd, categories }) {
 // ── Closing Modal ──
 const SHIFTS = [
   { key: 'SHIFT_1', label: 'Closing Shift 1', jam: '07.00 - 13.00', startHour: 7,  endHour: 13 },
-  { key: 'SHIFT_2', label: 'Closing Shift 2', jam: '13.00 - 18.00', startHour: 13, endHour: 18 },
-  { key: 'SHIFT_3', label: 'Closing Shift 3', jam: '18.00 - 23.00', startHour: 18, endHour: 23 },
+  { key: 'SHIFT_2', label: 'Closing Shift 2', jam: '12.00 - 18.00', startHour: 12, endHour: 18 },
+  { key: 'SHIFT_3', label: 'Closing Shift 3', jam: '17.00 - 23.00', startHour: 17, endHour: 23 },
 ]
 
 function ClosingModal({ orders, todayShifts = [], kasAwalOtomatis = 0, onClose, onSaved }) {

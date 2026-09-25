@@ -5,8 +5,8 @@ import api from '@/lib/api'
 
 const TABS = [
   { key: 'CLOSING_1', label: 'Shift 1', jam: '07.00 – 13.00' },
-  { key: 'CLOSING_2', label: 'Shift 2', jam: '13.00 – 18.00' },
-  { key: 'CLOSING_3', label: 'Shift 3', jam: '18.00 – 23.00' },
+  { key: 'CLOSING_2', label: 'Shift 2', jam: '12.00 – 18.00' },
+  { key: 'CLOSING_3', label: 'Shift 3', jam: '17.00 – 23.00' },
 ]
 
 const formatDateTime = (value) => new Date(value).toLocaleString('id-ID', {

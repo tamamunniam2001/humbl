@@ -18,7 +18,19 @@ export default function AbsensiSettingsPage() {
     setSopItems(s.data)
   }
 
-  useEffect(() => { loadAll() }, [])
+  useEffect(() => {
+    let active = true
+
+    Promise.all([api.get('/admin/employees'), api.get('/admin/sop')])
+      .then(([e, s]) => {
+        if (!active) return
+        setEmployees(e.data)
+        setSopItems(s.data)
+      })
+      .catch(() => {})
+
+    return () => { active = false }
+  }, [])
 
   async function saveEmployee(e) {
     e.preventDefault()
@@ -133,8 +145,8 @@ export default function AbsensiSettingsPage() {
                   <select className="input" value={sopForm.type} onChange={e => setSopForm({ ...sopForm, type: e.target.value })} style={{ marginBottom: '12px' }}>
                     <option value="OPENING">Opening</option>
                     <option value="CLOSING_1">Closing Shift 1 (07.00 – 13.00)</option>
-                    <option value="CLOSING_2">Closing Shift 2 (13.00 – 18.00)</option>
-                    <option value="CLOSING_3">Closing Shift 3 (18.00 – 23.00)</option>
+                    <option value="CLOSING_2">Closing Shift 2 (12.00 – 18.00)</option>
+                    <option value="CLOSING_3">Closing Shift 3 (17.00 – 23.00)</option>
                   </select>
                   <label className="label">Isi SOP</label>
                   <textarea className="input" rows={3} placeholder="Contoh: Membersihkan area kasir" value={sopForm.text}
@@ -150,7 +162,7 @@ export default function AbsensiSettingsPage() {
 
               {/* List SOP */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                {[['OPENING', openingSop, 'var(--accent)', ''], ['CLOSING_1', closing1Sop, 'var(--red)', '07.00 – 13.00'], ['CLOSING_2', closing2Sop, 'var(--red)', '13.00 – 18.00'], ['CLOSING_3', closing3Sop, 'var(--red)', '18.00 – 23.00']].map(([type, items, color, jam]) => (
+                {[['OPENING', openingSop, 'var(--accent)', ''], ['CLOSING_1', closing1Sop, 'var(--red)', '07.00 – 13.00'], ['CLOSING_2', closing2Sop, 'var(--red)', '12.00 – 18.00'], ['CLOSING_3', closing3Sop, 'var(--red)', '17.00 – 23.00']].map(([type, items, color, jam]) => (
                   <div key={type} className="card" style={{ overflow: 'hidden' }}>
                     <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '10px' }}>
                       <span style={{ fontWeight: '700', fontSize: '14px', color }}>{type === 'OPENING' ? 'Opening' : type.replace('_', ' ')}</span>

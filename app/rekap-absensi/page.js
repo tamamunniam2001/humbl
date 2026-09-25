@@ -259,8 +259,8 @@ function DetailModal({ record: r, employees, isAdmin, onClose, onDeleted, onUpda
 
   const SHIFT_OPTS = [
     { value: 'CLOSING_1', label: 'Shift 1 (07.00–13.00)' },
-    { value: 'CLOSING_2', label: 'Shift 2 (13.00–18.00)' },
-    { value: 'CLOSING_3', label: 'Shift 3 (18.00–23.00)' },
+    { value: 'CLOSING_2', label: 'Shift 2 (12.00–18.00)' },
+    { value: 'CLOSING_3', label: 'Shift 3 (17.00–23.00)' },
   ]
 
   return (
