@@ -352,7 +352,7 @@ export default function StockOpnamePage() {
                     const hargaDasar = item.hargaPerSatuanDasar ?? item.hargaTerakhir ?? 0
                     const nilaiStok = item.qtyActual * hargaDasar
                     // Label keterangan harga: "Rp X / satuanOpname" atau "Rp X / satuan"
-                    const labelSatuan = satuanTampil || satuanDasar
+                    const labelSatuan = item.konversi ? satuanDasar : (item.konversi ? satuanDasar : (satuanTampil || satuanDasar))
                     const hargaPerSatuanTampil = item.konversi && item.hargaTerakhir
                       ? item.hargaTerakhir / item.konversi  // harga per satuanOpname
                       : (item.hargaPerSatuanDasar ?? item.hargaTerakhir ?? null)
