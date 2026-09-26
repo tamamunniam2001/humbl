@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { verifyAuth } from '@/lib/auth'
+import { canUseKasir, verifyAuth } from '@/lib/auth'
 import { nextShiftForTime, shiftAnchorTime, wibDayRange } from '@/lib/wib'
 
 function isCsrfSafe(req) {
@@ -54,6 +54,12 @@ export async function PATCH(req, { params }) {
   // agar saat dibayar nanti masuk ke laporan shift tujuan, bukan shift lama
   // yang sudah tutup.
   if (body.moveToNextShift) {
+    // Kasir (role CASHIER biasa maupun custom role yang punya /kasir) boleh memakai
+    // fitur ini. Custom role tanpa akses /kasir tetap ditolak agar tidak bisa
+    // menyalahgunakan API langsung meskipun halamannya tidak bisa dibuka.
+    if (!canUseKasir(user))
+      return NextResponse.json({ message: 'Akses ditolak' }, { status: 403 })
+
     const target = await prisma.transaction.findUnique({
       where: { id },
       select: { createdAt: true, status: true, deletedAt: true, invoiceNo: true },
@@ -90,6 +96,9 @@ export async function PATCH(req, { params }) {
   if (isOrderEdit && user.role !== 'ADMIN') {
     // Kasir boleh mengedit pesanan, namun hanya pesanan hari ini (WIB).
     // Pembayaran yang sudah lunas tetap terlindungi agar angka laporan tidak berubah diam-diam.
+    if (!canUseKasir(user))
+      return NextResponse.json({ message: 'Akses ditolak' }, { status: 403 })
+
     const target = await prisma.transaction.findUnique({
       where: { id },
       select: { createdAt: true, status: true, deletedAt: true },
