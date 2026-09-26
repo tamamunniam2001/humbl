@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth'
-import { wibDayRange } from '@/lib/wib'
+import { nextShiftForTime, shiftAnchorTime, wibDayRange } from '@/lib/wib'
 
 function isCsrfSafe(req) {
   if (req.headers.get('x-requested-with') !== 'XMLHttpRequest') return false
@@ -47,6 +47,42 @@ export async function PATCH(req, { params }) {
       select: { id: true, invoiceNo: true, deletedAt: true },
     })
     return NextResponse.json(tx)
+  }
+
+  // Pindahkan open bill (belum bayar) ke shift berikutnya.
+  // Dipakai saat pelanggan masih menunda pembayaran sampai pergantian shift,
+  // agar saat dibayar nanti masuk ke laporan shift tujuan, bukan shift lama
+  // yang sudah tutup.
+  if (body.moveToNextShift) {
+    const target = await prisma.transaction.findUnique({
+      where: { id },
+      select: { createdAt: true, status: true, deletedAt: true, invoiceNo: true },
+    })
+    if (!target) return NextResponse.json({ message: 'Transaksi tidak ditemukan' }, { status: 404 })
+    if (target.deletedAt) return NextResponse.json({ message: 'Pesanan sudah dihapus' }, { status: 403 })
+    if (target.status !== 'PENDING')
+      return NextResponse.json({ message: 'Hanya pesanan yang belum dibayar (open bill) yang bisa dipindahkan' }, { status: 400 })
+
+    const nextShift = nextShiftForTime(target.createdAt)
+    if (!nextShift)
+      return NextResponse.json({ message: 'Pesanan sudah berada di shift terakhir hari ini' }, { status: 400 })
+
+    // Shift tujuan harus belum closing, kalau sudah tutup jangan dipindahkan
+    const anchor = shiftAnchorTime(target.createdAt, nextShift)
+    const dayRange = wibDayRange(anchor)
+    const dayReports = await prisma.dailyReport.findMany({
+      where: { date: { gte: dayRange.gte, lte: dayRange.lte } },
+      select: { shift: true, date: true, createdAt: true },
+    })
+    if (dayReports.some(r => r.shift === nextShift))
+      return NextResponse.json({ message: `${nextShift.replace('SHIFT_', 'Shift ')} sudah closing, tidak bisa dipindahkan ke sana` }, { status: 400 })
+
+    const updated = await prisma.transaction.update({
+      where: { id },
+      data: { createdAt: anchor, originalCreatedAt: target.createdAt },
+      select: { id: true, invoiceNo: true, createdAt: true, originalCreatedAt: true, status: true, total: true },
+    })
+    return NextResponse.json({ ...updated, movedToShift: nextShift })
   }
 
   const data = {}

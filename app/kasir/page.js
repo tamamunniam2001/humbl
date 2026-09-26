@@ -800,6 +800,7 @@ function OrderDetailModal({ order, products = [], user = {}, onClose, onToggleSe
   const [editItems, setEditItems] = useState(order.items.map(i => ({ productId: i.productId || null, name: i.product?.name || i.name || '', category: i.category || '', code: i.code || '', qty: i.qty, price: i.price })))
   const [productSearch, setProductSearch] = useState('')
   const [showPicker, setShowPicker] = useState(false)
+  const [moving, setMoving] = useState(false)
   const filteredProducts = products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()) || (p.code || '').toLowerCase().includes(productSearch.toLowerCase()))
   const served = !!order.servedAt
   const paid = order.status === 'COMPLETED'
@@ -849,6 +850,20 @@ function OrderDetailModal({ order, products = [], user = {}, onClose, onToggleSe
 
   function updateItem(i, field, val) {
     setEditItems(prev => prev.map((it, n) => n === i ? { ...it, [field]: field === 'qty' || field === 'price' ? Number(val) || 0 : val } : it))
+  }
+
+  // Open bill yang masih tertunda saat pergantian shift → pindahkan ke shift
+  // berikutnya supaya saat dibayar masuk laporan shift tujuan.
+  async function handleMoveNextShift() {
+    if (!confirm('Pindahkan open bill ini ke shift berikutnya?\n\nSaat pelanggan membayar nanti, pendapatan akan dihitung pada shift tujuan.')) return
+    setMoving(true)
+    try {
+      const res = await api.patch(`/transactions/${order.id}`, { moveToNextShift: true })
+      const label = (res.data.movedToShift || '').replace('SHIFT_', 'Shift ')
+      alert(`Open bill dipindahkan ke ${label}.`)
+      onRefresh()
+    } catch (e) { alert(e.response?.data?.message || 'Gagal memindahkan open bill') }
+    finally { setMoving(false) }
   }
 
   return (
@@ -1030,6 +1045,12 @@ function OrderDetailModal({ order, products = [], user = {}, onClose, onToggleSe
                 style={{ flex: 1, padding: '10px', borderRadius: '9px', border: '1px solid #C7D4F0', background: '#EFF4FF', color: '#1D4ED8', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
                 {printingBar ? '...' : 'Bar'}
               </button>
+              {!paid && (
+                <button onClick={handleMoveNextShift} disabled={moving} title="Pindahkan open bill ke shift berikutnya agar masuk laporan shift tujuan saat dibayar"
+                  style={{ flex: 1, padding: '10px', borderRadius: '9px', border: '1px solid #FDE68A', background: '#FFFBEB', color: '#B45309', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit', opacity: moving ? 0.6 : 1 }}>
+                  {moving ? '...' : '⏭ Shift Berikutnya'}
+                </button>
+              )}
             </>
           )}
         </div>

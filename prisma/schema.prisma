@@ -111,6 +111,8 @@ model Transaction {
   payMethod    PayMethod   @default(CASH)
   status       TxStatus    @default(COMPLETED)
   servedAt     DateTime?
+  // Waktu asli sebelum open bill dipindahkan ke shift berikutnya (null = belum pernah dipindahkan)
+  originalCreatedAt DateTime?
   cashierId    String
   cashier      User        @relation(fields: [cashierId], references: [id])
   items        OrderItem[]
