@@ -688,24 +688,18 @@ function AddClosingModal({ target, onClose, onSaved, fmt, fmtDate, isAdmin }) {
     const prevLast = prevDone.length > 0 ? prevDone[prevDone.length - 1] : lastExisting
     setKasAwal(String(kasAkhirOf(prevLast) || 0))
 
-    // Auto-fetch transaksi untuk shift ini dari range jam (berdasarkan tanggal laporan, bukan hari ini)
+    // Auto-fetch transaksi untuk shift ini memakai aturan atribusi shift di
+    // server (sama dengan detail laporan), bukan filter jam di browser —
+    // jam shift tumpang tindih sehingga bisa dobel hitung.
     async function fetchTx() {
       setLoadingTx(true)
       try {
-        const shiftDef = SHIFT_HOUR_MAP[shift]
         const dateWIB = new Date(reportDate).toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })
-        const from = new Date(`${dateWIB}T${String(shiftDef.startHour).padStart(2,'0')}:00:00+07:00`)
-        const to   = new Date(`${dateWIB}T${String(shiftDef.endHour).padStart(2,'0')}:59:59+07:00`)
-        const res = await api.get(`/transactions?slim=1&all=1&from=${from.toISOString()}&to=${to.toISOString()}`)
-        const txs = (res.data.transactions || []).filter(t => t.status === 'COMPLETED')
-        const totPenjualan = txs.reduce((s, t) => s + t.total, 0)
-        const totCash      = txs.filter(t => t.payMethod === 'CASH').reduce((s, t) => s + t.total, 0)
-        const totQris      = txs.filter(t => t.payMethod === 'QRIS').reduce((s, t) => s + t.total, 0)
-        const totTransfer  = txs.filter(t => t.payMethod === 'TRANSFER' || t.payMethod === 'NONTUNAI').reduce((s, t) => s + t.total, 0)
-        setPenjualan(String(totPenjualan))
-        setCash(String(totCash))
-        setQris(String(totQris))
-        setTransfer(String(totTransfer))
+        const res = await api.get(`/daily-reports/shift-summary?shift=${shift}&date=${dateWIB}`)
+        setPenjualan(String(res.data.penjualan))
+        setCash(String(res.data.cash))
+        setQris(String(res.data.qris))
+        setTransfer(String(res.data.transfer))
       } catch { /* biarkan user isi manual */ }
       finally { setLoadingTx(false) }
     }

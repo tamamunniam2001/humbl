@@ -1123,35 +1123,40 @@ function ClosingModal({ orders, todayShifts = [], kasAwalOtomatis = 0, onClose, 
   const activeShift = SHIFTS.find(s => s.key === shift)
   const [employees, setEmployees] = useState([])
   const [persediaanItems, setPersediaanItems] = useState([])
+  const [shiftData, setShiftData] = useState(null)
+  const [loadingShift, setLoadingShift] = useState(true)
   useEffect(() => {
     api.get('/admin/employees').then(r => setEmployees(r.data.filter(e => e.isActive))).catch(() => {})
     api.get('/admin/expense-items').then(r => setPersediaanItems((r.data || []).filter(i => (i.category || '').toLowerCase() === 'persediaan'))).catch(() => {})
   }, [])
 
-  const snapshot = useMemo(() => {
-    const shiftDef = SHIFTS.find(s => s.key === shift)
-    // Filter transaksi sesuai jam operasional shift (WIB = UTC+7)
+  // Angka penjualan dihitung di server dengan aturan atribusi shift yang sama
+  // dengan detail laporan. Kalau dihitung di browser dari filter jam, transaksi
+  // bisa masuk ke dua shift karena jam shift saling tumpang tindih.
+  useEffect(() => {
+    let cancelled = false
+    setLoadingShift(true)
     const todayWIB = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })
-    const shiftStart = shiftDef ? new Date(`${todayWIB}T${String(shiftDef.startHour).padStart(2,'0')}:00:00+07:00`) : null
-    const shiftEnd   = shiftDef ? new Date(`${todayWIB}T${String(shiftDef.endHour).padStart(2,'0')}:59:59+07:00`) : null
+    api.get(`/daily-reports/shift-summary?shift=${shift}&date=${todayWIB}`)
+      .then(res => { if (!cancelled) setShiftData(res.data) })
+      .catch(() => { if (!cancelled) setShiftData(null) })
+      .finally(() => { if (!cancelled) setLoadingShift(false) })
+    return () => { cancelled = true }
+  }, [shift])
 
-    const inShift = (o) => {
-      if (!shiftStart || !shiftEnd) return true
-      const t = new Date(o.createdAt)
-      return t >= shiftStart && t <= shiftEnd
-    }
-
-    const completed = orders.filter(o => o.status === 'COMPLETED' && inShift(o))
-    const pendingCount = orders.filter(o => o.status !== 'COMPLETED' && inShift(o)).length
+  const snapshot = useMemo(() => {
+    // Fallback ke hitungan lokal hanya bila server gagal merespons.
+    const completed = shiftData?.transactions || orders.filter(o => o.status === 'COMPLETED')
+    const pendingCount = orders.filter(o => o.status !== 'COMPLETED').length
     return {
       completed,
-      totalPenjualan: completed.reduce((s, o) => s + o.total, 0),
-      totalCash:      completed.filter(o => o.payMethod === 'CASH').reduce((s, o) => s + o.total, 0),
-      totalQris:      completed.filter(o => o.payMethod === 'QRIS').reduce((s, o) => s + o.total, 0),
-      totalTransfer:  completed.filter(o => o.payMethod === 'TRANSFER' || o.payMethod === 'NONTUNAI').reduce((s, o) => s + o.total, 0),
+      totalPenjualan: shiftData ? shiftData.penjualan : completed.reduce((s, o) => s + o.total, 0),
+      totalCash:      shiftData ? shiftData.cash : completed.filter(o => o.payMethod === 'CASH').reduce((s, o) => s + o.total, 0),
+      totalQris:      shiftData ? shiftData.qris : completed.filter(o => o.payMethod === 'QRIS').reduce((s, o) => s + o.total, 0),
+      totalTransfer:  shiftData ? shiftData.transfer : completed.filter(o => o.payMethod === 'TRANSFER' || o.payMethod === 'NONTUNAI').reduce((s, o) => s + o.total, 0),
       pendingCount,
     }
-  }, [shift, orders])
+  }, [shiftData, orders])
   const { completed, totalPenjualan, totalCash, totalQris, totalTransfer, pendingCount } = snapshot
 
   const [pengeluaran, setPengeluaran] = useState([])
@@ -1311,7 +1316,7 @@ function ClosingModal({ orders, todayShifts = [], kasAwalOtomatis = 0, onClose, 
                   ))}
                 </div>
                 <div style={{ padding: '6px 10px', background: '#F5F8FE', borderRadius: '8px', border: '1px solid var(--border)', fontSize: '11px', color: 'var(--muted)' }}>
-                  {completed.length} transaksi selesai &nbsp;&middot;&nbsp; {pendingCount} belum bayar
+                  {loadingShift ? 'Memuat data shift...' : `${completed.length} transaksi selesai &nbsp;&middot;&nbsp; ${pendingCount} belum bayar`}
                 </div>
                 <div style={{ background: 'linear-gradient(135deg, #D8E4F4, #E8EEF8)', borderRadius: '12px', padding: '12px 14px', marginTop: 'auto', border: '1px solid #C0D0E8' }}>
                   <div style={{ fontSize: '10px', fontWeight: '700', color: '#7A8FAF', letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: '8px' }}>Kalkulasi Kas</div>
