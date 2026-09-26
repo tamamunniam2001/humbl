@@ -803,6 +803,9 @@ function OrderDetailModal({ order, products = [], user = {}, onClose, onToggleSe
   const filteredProducts = products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()) || (p.code || '').toLowerCase().includes(productSearch.toLowerCase()))
   const served = !!order.servedAt
   const paid = order.status === 'COMPLETED'
+  // Kasir hanya boleh mengedit pesanan yang belum lunas (server memvalidasi ulang).
+  const isAdminUser = user.role === 'ADMIN'
+  const canEdit = isAdminUser || !paid
   const editTotal = editItems.reduce((s, i) => s + i.price * i.qty, 0)
 
   async function handlePrint() {
@@ -859,10 +862,17 @@ function OrderDetailModal({ order, products = [], user = {}, onClose, onToggleSe
             <div style={{ fontSize: '11px', color: '#94A3B8', fontFamily: 'monospace', marginTop: '2px' }}>{order.invoiceNo} · {fmtTime(order.createdAt)}</div>
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <button onClick={() => setEditing(!editing)}
-              style={{ fontSize: '12px', fontWeight: '700', padding: '5px 12px', borderRadius: '7px', border: `1px solid ${editing ? '#FECACA' : 'var(--border)'}`, background: editing ? '#FEF2F2' : 'var(--surface2)', color: editing ? 'var(--red)' : 'var(--text2)', cursor: 'pointer', fontFamily: 'inherit', display: (user.role === 'ADMIN' || user.allowedPaths) ? 'block' : 'none' }}>
-              {editing ? 'Batal' : '✏️ Edit'}
-            </button>
+            {canEdit && (
+              <button onClick={() => setEditing(!editing)}
+                style={{ fontSize: '12px', fontWeight: '700', padding: '5px 12px', borderRadius: '7px', border: `1px solid ${editing ? '#FECACA' : 'var(--border)'}`, background: editing ? '#FEF2F2' : 'var(--surface2)', color: editing ? 'var(--red)' : 'var(--text2)', cursor: 'pointer', fontFamily: 'inherit' }}>
+                {editing ? 'Batal' : '✏️ Edit'}
+              </button>
+            )}
+            {!canEdit && (
+              <span title="Pesanan sudah lunas. Hubungi admin untuk mengubah." style={{ fontSize: '11px', color: 'var(--muted)', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '7px', padding: '5px 10px', fontWeight: '600' }}>
+                🔒 Sudah lunas
+              </span>
+            )}
             <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '20px', lineHeight: 1 }}>×</button>
           </div>
         </div>

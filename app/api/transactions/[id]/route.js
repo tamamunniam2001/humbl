@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth'
+import { wibDayRange } from '@/lib/wib'
 
 function isCsrfSafe(req) {
   if (req.headers.get('x-requested-with') !== 'XMLHttpRequest') return false
@@ -49,9 +50,23 @@ export async function PATCH(req, { params }) {
   }
 
   const data = {}
-  const isAdminEdit = ('items' in body) || ('customerName' in body) || ('note' in body)
-  if (isAdminEdit && user.role !== 'ADMIN')
-    return NextResponse.json({ message: 'Akses ditolak' }, { status: 403 })
+  const isOrderEdit = ('items' in body) || ('customerName' in body) || ('note' in body)
+  if (isOrderEdit && user.role !== 'ADMIN') {
+    // Kasir boleh mengedit pesanan, namun hanya pesanan hari ini (WIB).
+    // Pembayaran yang sudah lunas tetap terlindungi agar angka laporan tidak berubah diam-diam.
+    const target = await prisma.transaction.findUnique({
+      where: { id },
+      select: { createdAt: true, status: true, deletedAt: true },
+    })
+    if (!target) return NextResponse.json({ message: 'Transaksi tidak ditemukan' }, { status: 404 })
+    if (target.deletedAt) return NextResponse.json({ message: 'Pesanan sudah dihapus' }, { status: 403 })
+    if (target.status === 'COMPLETED')
+      return NextResponse.json({ message: 'Pesanan sudah lunas dan tidak dapat diubah. Hubungi admin.' }, { status: 403 })
+
+    const today = wibDayRange(new Date())
+    if (target.createdAt < today.gte || target.createdAt > today.lte)
+      return NextResponse.json({ message: 'Kasir hanya dapat mengedit pesanan hari ini' }, { status: 403 })
+  }
   if ('servedAt' in body) data.servedAt = body.servedAt ? new Date(body.servedAt) : null
   if ('payment' in body) {
     data.payment = body.payment
