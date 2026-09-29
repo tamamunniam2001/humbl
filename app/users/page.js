@@ -16,6 +16,8 @@ const ALL_PAGES = [
   { path: '/ingredients', label: 'Bahan Baku' },
   { path: '/inventaris', label: 'Inventaris' },
   { path: '/stock-opname', label: 'Stock Opname' },
+  { path: '/waste', label: 'Catatan Waste' },
+  { path: '/waste/rekap', label: 'Rekap Waste' },
   { path: '/pantau-bahan', label: 'Pantau Bahan Baku' },
   { path: '/transaction-history', label: 'History Transaksi' },
   { path: '/rekap-produk', label: 'Rekap Produk Terjual' },

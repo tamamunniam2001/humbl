@@ -21,6 +21,7 @@ model User {
   dailyReports   DailyReport[]
   expenses       Expense[]
   stockOpnames   StockOpname[]
+  wasteNotes     WasteNote[]  @relation("WasteNoteCreator")
   // OperationalBelanja relations (added to satisfy Prisma validation)
   operationalBelanjaAsRequester OperationalBelanja[] @relation("OperationalBelanjaRequester")
   operationalBelanjaAsApprovedBy OperationalBelanja[] @relation("ApprovedOperationalBelanja")
@@ -75,6 +76,7 @@ model Ingredient {
   products     ProductIngredient[]
   components   IngredientComponent[] @relation("CompositeIngredient")
   usedIn       IngredientComponent[] @relation("ComponentIngredient")
+  wasteItems   WasteNoteItem[]
 }
 
 model IngredientComponent {
@@ -501,4 +503,56 @@ model OperationalSaldoLedger {
 
   @@index([roleKey])
   @@index([type])
+}
+
+// --- Catatan Waste (halaman Waste) ---
+// Kategori kejadian waste. Label yang tampil di UI:
+// RND = RnD, BUSUK = Busuk, TIDAK_TERPAKAI = Tidak Terpakai,
+// DIPAKAI_SENDIRI = Dipakai Sendiri, SALAH_BUAT = Salah Buat, LAINNYA = Lainnya
+enum WasteCategory {
+  RND
+  BUSUK
+  TIDAK_TERPAKAI
+  DIPAKAI_SENDIRI
+  SALAH_BUAT
+  LAINNYA
+}
+
+model WasteNote {
+  id            String        @id @default(cuid())
+  tanggal       DateTime
+  category      WasteCategory
+  note          String?       @db.Text
+  total         Float         @default(0)
+  createdById   String?
+  createdBy     User?         @relation("WasteNoteCreator", fields: [createdById], references: [id])
+  createdByName String        @default("")
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  items         WasteNoteItem[]
+
+  @@index([tanggal])
+  @@index([category])
+}
+
+model WasteNoteItem {
+  id             String     @id @default(cuid())
+  wasteNoteId    String
+  wasteNote      WasteNote  @relation(fields: [wasteNoteId], references: [id], onDelete: Cascade)
+  ingredientId   String?
+  ingredient     Ingredient? @relation(fields: [ingredientId], references: [id], onDelete: SetNull)
+  ingredientName String
+  code           String?
+  unit           String     @default("")
+  qty            Float
+  // hargaSatuan = harga per satuan (dari Bahan Baku: price / packSize, bisa dioverride)
+  hargaSatuan    Float      @default(0)
+  // snapshot harga & isi per kemasan saat catatan dibuat (agar nilai historis tidak berubah)
+  hargaPack      Float?
+  packSize       Float?
+  subtotal       Float      @default(0)
+  note           String?
+
+  @@index([wasteNoteId])
+  @@index([ingredientId])
 }

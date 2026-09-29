@@ -35,6 +35,7 @@ const allNavGroups = [
       { href: '/inventaris', label: 'Inventaris', icon: <IconInventory />, roles: ['ADMIN', 'CASHIER'] },
       { href: '/pantau-bahan', label: 'Pantau Bahan Baku', icon: <IconPantau />, roles: ['ADMIN', 'CASHIER'] },
       { href: '/stock-opname', label: 'Stock Opname', icon: <IconOpname />, roles: ['ADMIN', 'CASHIER'] },
+      { href: '/waste', label: 'Catatan Waste', icon: <IconWaste />, roles: ['ADMIN', 'CASHIER'] },
     ]
   },
   {
@@ -46,6 +47,7 @@ const allNavGroups = [
       { href: '/rekap-bahan', label: 'Rekap Bahan', icon: <IconChart />, roles: ['ADMIN'] },
       { href: '/rekap-absensi', label: 'Rekap Absensi', icon: <IconClipboard />, roles: ['ADMIN'] },
       { href: '/rekap-pengeluaran', label: 'Rekap Pengeluaran', icon: <IconMoney />, roles: ['ADMIN'] },
+      { href: '/waste/rekap', label: 'Rekap Waste', icon: <IconWaste />, roles: ['ADMIN', 'CASHIER'] },
     ]
   },
   {
@@ -341,6 +343,7 @@ function IconInventory() { return <svg width="16" height="16" viewBox="0 0 24 24
 function IconPrinter() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg> }
 function IconHistory() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v5h5"/><path d="M3.05 13A9 9 0 1 0 6 5.3L3 8"/><line x1="12" y1="7" x2="12" y2="12"/><line x1="12" y1="12" x2="15" y2="15"/></svg> }
 function IconOpname() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg> }
+function IconWaste() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg> }
 function IconPantau() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> }
 function IconWallet() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M7 15h0"/><path d="M2 10h20"/><circle cx="16" cy="14" r="1"/></svg> }
 function IconShoppingBag() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg> }
