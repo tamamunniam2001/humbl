@@ -11,6 +11,32 @@ const fmt = (n) => {
   return 'Rp ' + num.toLocaleString('id-ID', hasDecimal ? { minimumFractionDigits: 1, maximumFractionDigits: 2 } : {})
 }
 
+// ── HET: harga standar dari data Bahan Baku (model Ingredient) ──
+// price = harga beli per kemasan, packSize = isi per kemasan.
+// Untuk nilai di bawah 1 (mis. harga per gram) dipakai 4 desimal supaya tidak
+// membulatkan jadi 0 — konsisten dengan halaman Bahan Baku dan Produk.
+const fmtHet = (n) => {
+  const num = Number(n)
+  if (!isFinite(num)) return 'Rp 0'
+  return num > 0 && num < 1 ? 'Rp ' + num.toFixed(4) : fmt(num)
+}
+
+// Cocokkan item belanja dengan Bahan Baku berdasarkan nama (trim + lowercase),
+// mengikuti aturan sinkronisasi /api/admin/expense-items/sync-ingredients.
+const hetDariBahan = (item, bahanMap) => {
+  if (!bahanMap || !item || item.isManual) return null
+  const ing = bahanMap.get((item.name || '').trim().toLowerCase())
+  if (!ing) return null
+  const perPack = Number(ing.price)
+  if (!isFinite(perPack) || perPack <= 0) return null
+  const isi = Number(ing.packSize) || 0
+  return {
+    perPack,
+    perSatuan: isi > 0 ? perPack / isi : null,
+    unit: ing.unit || item.satuan || '',
+  }
+}
+
 // ── Styling halaman (desktop + mobile friendly) ──
 // Kelas pg-* dipakai bareng dengan halaman Pengeluaran agar konsisten.
 const pgStyles = (
@@ -79,6 +105,9 @@ const pgStyles = (
     .pg-edit-item-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .pg-edit-item-total { flex: 1 1 100%; text-align: right; font-size: 12.5px; font-weight: 800; color: var(--red); }
     .pg-unit-hint { font-size: 11px; color: var(--muted); padding-left: 2px; }
+    .pg-het { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11px; color: var(--muted); margin-top: 5px; }
+    .pg-het-badge { font-size: 9px; font-weight: 800; letter-spacing: 0.4px; color: var(--accent); background: var(--accent-light); border: 1px solid rgba(74,124,199,0.2); border-radius: 5px; padding: 1px 5px; }
+    .pg-het strong { color: var(--accent); font-weight: 800; }
     .pg-isi { width: 88px; }
     .pg-modal-body { overflow-y: auto; -webkit-overflow-scrolling: touch; }
 
@@ -211,6 +240,8 @@ export default function BelanjaPage() {
   const [cartFlash, setCartFlash] = useState(false)
 
   const [expenseCategories, setExpenseCategories] = useState([])
+  // Peta Bahan Baku (kunci: nama lowercase) -> data harga untuk HET
+  const [bahanMap, setBahanMap] = useState(new Map())
 
   // History States
   const [historyList, setHistoryList] = useState([])
@@ -265,6 +296,10 @@ export default function BelanjaPage() {
   function fetchExpenseData() {
     api.get('/admin/expense-items').then(r => setItems(r.data)).catch(() => {})
     api.get('/admin/expense-categories').then(r => setExpenseCategories(r.data.map(c => c.name))).catch(() => {})
+    // HET: ambil harga standar (price & packSize) dari data Bahan Baku
+    api.get('/admin/ingredients')
+      .then(r => setBahanMap(new Map((r.data || []).map(i => [i.name.trim().toLowerCase(), i]))))
+      .catch(() => {})
   }
 
   function fetchHistory() {
@@ -786,6 +821,7 @@ export default function BelanjaPage() {
                       const isAdded = !!entry.added
                       const harga = Number(entry.harga) || 0
                       const qty = Number(entry.qty) || 1
+                      const het = hetDariBahan(item, bahanMap)
 
                       return (
                         <div key={item.id} style={{
@@ -806,6 +842,15 @@ export default function BelanjaPage() {
                               </div>
                               <div style={{ fontSize: '14px', fontWeight: '700', color: 'var(--text)', marginTop: '4px' }}>{item.name}</div>
                               {item.code && <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>#{item.code}</div>}
+                              {het && (
+                                <div className="pg-het" title={`HET — harga standar dari data Bahan Baku: ${fmtHet(het.perPack)} per kemasan${het.perSatuan != null ? ` · ${fmtHet(het.perSatuan)} per ${het.unit}` : ''}`}>
+                                  <span className="pg-het-badge">HET</span>
+                                  <span>{fmtHet(het.perPack)}/pack</span>
+                                  {het.perSatuan != null && (
+                                    <span>(<strong>{fmtHet(het.perSatuan)}</strong>/{het.unit || 'satuan'})</span>
+                                  )}
+                                </div>
+                              )}
                             </div>
 
                             {isAdded && (
