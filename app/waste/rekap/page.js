@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import Sidebar from '@/components/Sidebar'
@@ -7,13 +7,14 @@ import api from '@/lib/api'
 
 // ── Kategori waste ──
 // URUTAN & warna dipakai untuk grafik bertumpuk, legenda, dan tabel.
+// Tanpa ikon/emoji: hanya label teks + warna sebagai penanda data.
 const CATEGORIES = [
-  { value: 'BUSUK',           label: 'Busuk',           color: '#EF4444', emoji: '🥀' },
-  { value: 'TIDAK_TERPAKAI',  label: 'Tidak Terpakai',  color: '#F59E0B', emoji: '📦' },
-  { value: 'DIPAKAI_SENDIRI', label: 'Dipakai Sendiri', color: '#10B981', emoji: '🍽️' },
-  { value: 'SALAH_BUAT',      label: 'Salah Buat',      color: '#8B5CF6', emoji: '⚠️' },
-  { value: 'RND',             label: 'RnD',             color: '#6366F1', emoji: '🧪' },
-  { value: 'LAINNYA',         label: 'Lainnya',         color: '#94A3B8', emoji: '🔖' },
+  { value: 'BUSUK',           label: 'Busuk',           color: '#EF4444' },
+  { value: 'TIDAK_TERPAKAI',  label: 'Tidak Terpakai',  color: '#F59E0B' },
+  { value: 'DIPAKAI_SENDIRI', label: 'Dipakai Sendiri', color: '#10B981' },
+  { value: 'SALAH_BUAT',      label: 'Salah Buat',      color: '#8B5CF6' },
+  { value: 'RND',             label: 'RnD',             color: '#6366F1' },
+  { value: 'LAINNYA',         label: 'Lainnya',         color: '#94A3B8' },
 ]
 const CAT = Object.fromEntries(CATEGORIES.map(c => [c.value, c]))
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des']
@@ -41,6 +42,16 @@ function downloadCSV(rows, filename) {
   a.download = filename
   a.click()
   URL.revokeObjectURL(a.href)
+}
+
+// ── Deteksi layar kecil untuk grafik (tanpa ikon, hanya teks & angka) ──
+function subscribeMatchMobile(cb) {
+  const mq = window.matchMedia('(max-width: 640px)')
+  mq.addEventListener('change', cb)
+  return () => mq.removeEventListener('change', cb)
+}
+function getSnapshotMobile() {
+  return window.matchMedia('(max-width: 640px)').matches
 }
 
 // ── Styling halaman (kelas berprefix wrk- agar tidak bentrok) ──
@@ -95,9 +106,45 @@ const styles = `
   .wrk-tip-row { display: flex; align-items: center; gap: 10px; justify-content: space-between; color: var(--text2); }
   .wrk-tip-lbl { display: flex; align-items: center; gap: 7px; }
   .wrk-tip-lbl i { width: 8px; height: 8px; border-radius: 2px; display: block; }
+  .wrk-page { padding: 16px 20px calc(16px + env(safe-area-inset-bottom)); }
+  .wrk-quick { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
   @media (max-width: 900px) {
     .wrk-grid-2 { grid-template-columns: 1fr; }
     .wrk-bar-row { grid-template-columns: 106px 1fr 84px; }
+  }
+  @media (max-width: 640px) {
+    .wrk-page { padding: 12px 12px calc(84px + env(safe-area-inset-bottom)); }
+    .wrk-top { flex-direction: column; align-items: stretch; gap: 10px; }
+    .wrk-top-actions { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+    .wrk-top-actions .btn { justify-content: center; min-height: 44px; width: 100%; }
+    .wrk-top-actions > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+    .wrk-card { padding: 12px 14px; }
+    .wrk-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .wrk-sum { padding: 10px 12px; }
+    .wrk-sum-value { font-size: 17px; overflow-wrap: anywhere; }
+    .wrk-sum-sub { font-size: 11px; }
+    .wrk-filter { flex-direction: column; align-items: stretch; }
+    .wrk-seg { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+    .wrk-seg button { padding: 10px 8px; min-height: 44px; }
+    .wrk-stepper { justify-content: space-between; width: 100%; }
+    .wrk-stepper button { width: 44px; height: 44px; font-size: 18px; }
+    .wrk-filter select { width: 100% !important; min-height: 44px; }
+    .wrk-quick { margin-left: 0; width: 100%; display: grid; grid-template-columns: 1fr 1fr; }
+    .wrk-quick .btn { justify-content: center; min-height: 44px; }
+    .wrk-legend { gap: 8px; }
+    .wrk-legend button { min-height: 44px; }
+    .wrk-bar-row { grid-template-columns: 1fr auto; row-gap: 6px; }
+    .wrk-bar-row > div:nth-child(2) { grid-column: 1 / -1; order: 3; }
+    .wrk-bar-val, .wrk-bar-pct { text-align: right; }
+    .wrk-table thead { display: none; }
+    .wrk-table, .wrk-table tbody, .wrk-table tfoot { display: block; width: 100%; }
+    .wrk-table tr { display: block; width: 100%; border: 1px solid var(--border); border-radius: 12px; margin-bottom: 8px; padding: 4px 12px; background: var(--surface); }
+    .wrk-table tbody tr.on { background: var(--bg2); }
+    .wrk-table td, .wrk-table tfoot td { display: flex; justify-content: space-between; align-items: center; gap: 10px; border: 0; padding: 7px 0; text-align: right; }
+    .wrk-table td::before { content: attr(data-label); font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); text-align: left; flex-shrink: 0; max-width: 40%; }
+    .wrk-table tfoot tr { background: var(--bg2); }
+    .wrk-scroll { overflow-x: visible; }
+    .wrk-tip { max-width: calc(100vw - 48px); }
   }
 `
 
@@ -142,6 +189,7 @@ export default function RekapWastePage() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState('')
+  const isMobile = useSyncExternalStore(subscribeMatchMobile, getSnapshotMobile, () => false)
 
   useEffect(() => {
     let batal = false
@@ -218,7 +266,7 @@ export default function RekapWastePage() {
       <main className="main" style={{ paddingBottom: '90px' }}>
         <style>{styles}</style>
 
-        <div className="topbar" style={{ flexWrap: 'wrap', gap: '8px', height: 'auto', minHeight: '60px' }}>
+        <div className="topbar wrk-top" style={{ flexWrap: 'wrap', gap: '8px', height: 'auto', minHeight: '60px' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="topbar-title">Rekap Waste</div>
             <div className="topbar-sub">Tren & ringkasan bahan terbuang per bulan dan kategori</div>
@@ -226,14 +274,13 @@ export default function RekapWastePage() {
           <div className="wrk-top-actions">
             <button className="btn btn-ghost" onClick={resetFilter}>Reset</button>
             <button className="btn btn-ghost" onClick={exportCSV} disabled={!adaData}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               Export CSV
             </button>
-            <Link href="/waste" className="btn btn-primary">+ Catat Waste</Link>
+            <Link href="/waste" className="btn btn-primary">Catat Waste</Link>
           </div>
         </div>
 
-        <div style={{ padding: '16px 20px' }}>
+        <div className="wrk-page">
           {/* ── Filter periode ── */}
           <div className="wrk-filter">
             <div className="wrk-seg">
@@ -242,9 +289,9 @@ export default function RekapWastePage() {
             </div>
 
             <div className="wrk-stepper">
-              <button onClick={() => geserTahun(-1)} disabled={year <= 2000} title="Tahun sebelumnya">‹</button>
+              <button onClick={() => geserTahun(-1)} disabled={year <= 2000} title="Tahun sebelumnya" aria-label="Tahun sebelumnya">−</button>
               <span>{year}</span>
-              <button onClick={() => geserTahun(1)} disabled={year >= 2100} title="Tahun berikutnya">›</button>
+              <button onClick={() => geserTahun(1)} disabled={year >= 2100} title="Tahun berikutnya" aria-label="Tahun berikutnya">+</button>
             </div>
 
             {mode === 'hari' && (
@@ -253,7 +300,7 @@ export default function RekapWastePage() {
               </select>
             )}
 
-            <div style={{ display: 'flex', gap: '6px', marginLeft: 'auto', flexWrap: 'wrap' }}>
+            <div className="wrk-quick">
               <button className="btn btn-ghost" onClick={() => { setMode('hari'); setYear(TAHUN_INI); setMonth(BULAN_INI) }}>Bulan Ini</button>
               <button className="btn btn-ghost" onClick={() => { setMode('bulan'); setYear(TAHUN_INI) }}>Tahun Ini</button>
             </div>
@@ -263,9 +310,9 @@ export default function RekapWastePage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
               <span style={{ fontSize: '12px', color: 'var(--text3)' }}>Filter aktif:</span>
               <span className="wrk-chip" style={{ background: `${CAT[category].color}22`, color: CAT[category].color, border: `1px solid ${CAT[category].color}55` }}>
-                {CAT[category].emoji} {CAT[category].label}
+                {CAT[category].label}
               </span>
-              <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: '11.5px' }} onClick={() => setCategory(null)}>Hapus filter</button>
+              <button className="btn btn-ghost" style={{ padding: '4px 10px', fontSize: '11.5px', minHeight: '40px' }} onClick={() => setCategory(null)}>Hapus filter</button>
             </div>
           )}
 
@@ -282,7 +329,6 @@ export default function RekapWastePage() {
             </div>
           ) : !adaData ? (
             <div className="wrk-card wrk-empty">
-              <div style={{ fontSize: '30px', marginBottom: '8px' }}>🗑️</div>
               <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text)', marginBottom: '4px' }}>
                 Belum ada catatan waste {data?.periodLabel?.toLowerCase()}{category ? ` untuk kategori ${CAT[category].label}` : ''}
               </div>
@@ -290,7 +336,7 @@ export default function RekapWastePage() {
                 Catat dulu bahan yang terbuang supaya trennya bisa dipantau di halaman ini.
               </div>
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                <Link href="/waste" className="btn btn-primary">+ Catat Waste</Link>
+                <Link href="/waste" className="btn btn-primary">Catat Waste</Link>
                 {category && <button className="btn btn-ghost" onClick={() => setCategory(null)}>Lihat semua kategori</button>}
               </div>
             </div>
@@ -323,7 +369,7 @@ export default function RekapWastePage() {
         sub: (
           <span style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
             <span className="wrk-chip" style={{ background: bgDiff, color: warnaDiff }}>
-              {naik ? '▲' : turun ? '▼' : '='} {fmtPct(Math.abs(summary.diffPct ?? 0))}
+              {naik ? 'Naik' : turun ? 'Turun' : 'Tetap'} {fmtPct(Math.abs(summary.diffPct ?? 0))}
             </span>
             <span>vs {data.prevLabel} ({fmtRp(summary.prevTotal)})</span>
           </span>
@@ -341,7 +387,7 @@ export default function RekapWastePage() {
       },
       {
         label: 'Kategori terbesar',
-        value: kategoriTeratas ? `${CAT[kategoriTeratas.category].emoji} ${CAT[kategoriTeratas.category].label}` : '-',
+        value: kategoriTeratas ? CAT[kategoriTeratas.category].label : '-',
         sub: kategoriTeratas
           ? `${fmtRp(kategoriTeratas.total)} · ${fmtPct(kategoriTeratas.pct)} dari total (${kategoriTeratas.count}×)`
           : 'Belum ada data pada periode ini',
@@ -370,7 +416,7 @@ export default function RekapWastePage() {
           <div>
             <div className="wrk-card-title">Tren Waste per Kategori</div>
             <div className="wrk-card-sub">
-              {labelBucket} → nilai waste (Rp){category ? ` · kategori ${CAT[category].label}` : ''}
+              {labelBucket} vs nilai waste (Rp){category ? ` · kategori ${CAT[category].label}` : ''}
             </div>
           </div>
           <div className="wrk-legend">
@@ -387,11 +433,11 @@ export default function RekapWastePage() {
           </div>
         </div>
 
-        <ResponsiveContainer width="100%" height={300}>
-          <BarChart data={chartData} margin={{ top: 5, right: 5, bottom: 0, left: 10 }} barCategoryGap={mode === 'hari' ? '18%' : '24%'}>
+        <ResponsiveContainer width="100%" height={isMobile ? 240 : 300}>
+          <BarChart data={chartData} margin={{ top: 5, right: 5, bottom: 0, left: isMobile ? 0 : 10 }} barCategoryGap={mode === 'hari' ? '18%' : '24%'}>
             <CartesianGrid strokeDasharray="3 3" stroke="#F0F4FF" vertical={false} />
-            <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#8896B3' }} axisLine={false} tickLine={false} />
-            <YAxis tickFormatter={fmtRingkas} tick={{ fontSize: 10, fill: '#8896B3' }} axisLine={false} tickLine={false} width={62} />
+            <XAxis dataKey="label" interval={isMobile && mode === 'hari' ? 2 : 0} tick={{ fontSize: isMobile ? 10 : 11, fill: '#8896B3' }} axisLine={false} tickLine={false} />
+            <YAxis tickFormatter={fmtRingkas} tick={{ fontSize: 10, fill: '#8896B3' }} axisLine={false} tickLine={false} width={isMobile ? 46 : 62} />
             <Tooltip content={<BucketTooltip />} cursor={{ fill: 'rgba(99,102,241,0.04)' }} />
             {aktif.map((c, i) => (
               <Bar key={c.value} dataKey={c.value} name={c.label} stackId="waste" fill={c.color} maxBarSize={maxBar}
@@ -425,7 +471,7 @@ export default function RekapWastePage() {
               onClick={() => setCategory(aktif ? null : c.category)}
               title={aktif ? 'Klik untuk hapus filter' : `Filter kategori ${info.label}`}>
               <div>
-                <div className="wrk-bar-name"><span>{info.emoji}</span>{info.label}</div>
+                <div className="wrk-bar-name">{info.label}</div>
                 <div style={{ fontSize: '10.5px', color: 'var(--text3)' }}>{c.count}× kejadian</div>
               </div>
               <div className="wrk-bar-track">
@@ -470,11 +516,11 @@ export default function RekapWastePage() {
               <tbody>
                 {topIngredients.map((i, idx) => (
                   <tr key={`${i.name}-${i.unit}-${idx}`}>
-                    <td className="bold">{i.name}</td>
-                    <td className="num">{fmtQty(i.qty)} {i.unit}</td>
-                    <td className="num">{i.count}×</td>
-                    <td className="num bold">{fmtRp(i.total)}</td>
-                    <td>
+                    <td className="bold" data-label="Bahan">{i.name}</td>
+                    <td className="num" data-label="Jumlah">{fmtQty(i.qty)} {i.unit}</td>
+                    <td className="num" data-label="Kali">{i.count}×</td>
+                    <td className="num bold" data-label="Nilai">{fmtRp(i.total)}</td>
+                    <td data-label="Porsi">
                       <div className="wrk-bar-track">
                         <div className="wrk-bar-fill" style={{ width: `${Math.max(4, Math.round((i.total / maxBahan) * 100))}%`, background: 'var(--accent)' }} />
                       </div>
@@ -534,20 +580,20 @@ export default function RekapWastePage() {
                   return (
                     <tr key={s.key} className={bisaKlik ? 'clickable' : ''}
                       onClick={bisaKlik ? () => keHari(i + 1) : undefined}>
-                      <td className="bold">
+                      <td className="bold" data-label={labelBucket}>
                         {s.label}
                         {mode === 'bulan' && <span style={{ fontWeight: 500, color: 'var(--text3)', fontSize: '11px' }}> {year}</span>}
                       </td>
-                      <td className="num">{s.count}×</td>
-                      <td>
+                      <td className="num" data-label="Kejadian">{s.count}×</td>
+                      <td data-label="Kategori Utama">
                         {utama ? (
                           <span className="wrk-chip" style={{ background: `${utama.color}1A`, color: utama.color, border: `1px solid ${utama.color}44` }}>
-                            {utama.emoji} {utama.label} · {fmtRp(utama.nilai)}
+                            {utama.label} · {fmtRp(utama.nilai)}
                           </span>
                         ) : <span style={{ color: 'var(--muted)' }}>—</span>}
                       </td>
-                      <td className="num bold">{fmtRp(s.total)}</td>
-                      <td>
+                      <td className="num bold" data-label="Nilai">{fmtRp(s.total)}</td>
+                      <td data-label="Porsi">
                         <div className="wrk-bar-track">
                           <div className="wrk-bar-fill" style={{
                             width: `${s.total > 0 ? Math.max(3, Math.round((s.total / maxTotal) * 100)) : 0}%`,
@@ -556,8 +602,8 @@ export default function RekapWastePage() {
                         </div>
                         <div className="wrk-bar-pct">{fmtPct(totalSeries > 0 ? (s.total / totalSeries) * 100 : 0)}</div>
                       </td>
-                      <td className="num" style={{ color: selisih > 0 ? 'var(--red)' : selisih < 0 ? '#10B981' : 'var(--text3)', fontWeight: 700 }}>
-                        {i === 0 || s.total === 0 && sebelum === 0 ? '—' : `${selisih > 0 ? '▲' : selisih < 0 ? '▼' : '='} ${fmtRp(Math.abs(selisih))}`}
+                      <td className="num" data-label="Vs Sebelumnya" style={{ color: selisih > 0 ? 'var(--red)' : selisih < 0 ? '#10B981' : 'var(--text3)', fontWeight: 700 }}>
+                        {i === 0 || (s.total === 0 && sebelum === 0) ? '—' : selisih > 0 ? `+ ${fmtRp(selisih)}` : selisih < 0 ? `- ${fmtRp(Math.abs(selisih))}` : fmtRp(0)}
                       </td>
                     </tr>
                   )
@@ -565,12 +611,12 @@ export default function RekapWastePage() {
               </tbody>
               <tfoot>
                 <tr>
-                  <td className="bold">TOTAL</td>
-                  <td className="num bold">{summary.count}×</td>
-                  <td style={{ fontSize: '11.5px', color: 'var(--text3)' }}>{summary.itemCount} baris bahan</td>
-                  <td className="num bold">{fmtRp(summary.total)}</td>
-                  <td className="num bold">100%</td>
-                  <td className="num" style={{ color: 'var(--text3)' }}>vs {fmtRp(summary.prevTotal)}</td>
+                  <td className="bold" data-label={labelBucket}>TOTAL</td>
+                  <td className="num bold" data-label="Kejadian">{summary.count}×</td>
+                  <td data-label="Kategori" style={{ fontSize: '11.5px', color: 'var(--text3)' }}>{summary.itemCount} baris bahan</td>
+                  <td className="num bold" data-label="Nilai">{fmtRp(summary.total)}</td>
+                  <td className="num bold" data-label="Porsi">100%</td>
+                  <td className="num" data-label="Vs Sebelumnya" style={{ color: 'var(--text3)' }}>vs {fmtRp(summary.prevTotal)}</td>
                 </tr>
               </tfoot>
             </table>
