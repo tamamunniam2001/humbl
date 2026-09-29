@@ -801,6 +801,10 @@ function OrderDetailModal({ order, products = [], user = {}, onClose, onToggleSe
   const [productSearch, setProductSearch] = useState('')
   const [showPicker, setShowPicker] = useState(false)
   const [moving, setMoving] = useState(false)
+  const [changingPay, setChangingPay] = useState(false)
+  const [newPayMethod, setNewPayMethod] = useState(order.payMethod || 'CASH')
+  const [newPayAmount, setNewPayAmount] = useState(String(order.payment || order.total || ''))
+  const [savingPay, setSavingPay] = useState(false)
   const filteredProducts = products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()) || (p.code || '').toLowerCase().includes(productSearch.toLowerCase()))
   const served = !!order.servedAt
   const paid = order.status === 'COMPLETED'
@@ -850,6 +854,31 @@ function OrderDetailModal({ order, products = [], user = {}, onClose, onToggleSe
 
   function updateItem(i, field, val) {
     setEditItems(prev => prev.map((it, n) => n === i ? { ...it, [field]: field === 'qty' || field === 'price' ? Number(val) || 0 : val } : it))
+  }
+
+  // Admin boleh mengoreksi metode pembayaran transaksi yang sudah lunas
+  // (mis. kasir salah pilih QRIS padahal dibayar tunai).
+  function openChangePay() {
+    setNewPayMethod(order.payMethod || 'CASH')
+    setNewPayAmount(String(order.payment || order.total || ''))
+    setChangingPay(true)
+  }
+
+  async function handleSavePayMethod() {
+    const target = newPayMethod === 'CASH' ? Number(newPayAmount) : order.total
+    if (newPayMethod === 'CASH' && (!Number.isFinite(target) || target < order.total))
+      return alert('Uang diterima tidak boleh kurang dari total transaksi')
+    setSavingPay(true)
+    try {
+      await api.patch(`/transactions/${order.id}`, {
+        changePayMethod: true,
+        payMethod: newPayMethod,
+        payment: target,
+      })
+      setChangingPay(false)
+      onRefresh()
+    } catch (e) { alert(e.response?.data?.message || 'Gagal mengubah metode pembayaran') }
+    finally { setSavingPay(false) }
   }
 
   // Open bill yang masih tertunda saat pergantian shift → pindahkan ke shift
@@ -1015,6 +1044,49 @@ function OrderDetailModal({ order, products = [], user = {}, onClose, onToggleSe
                   style={{ width: '100%', padding: '12px', borderRadius: '10px', border: 'none', background: 'var(--accent)', color: '#fff', fontSize: '14px', fontWeight: '800', cursor: 'pointer', fontFamily: 'inherit', marginTop: '16px' }}>
                   💳 Proses Pembayaran
                 </button>
+              )}
+              {/* Admin: koreksi metode pembayaran transaksi yang sudah lunas */}
+              {paid && isAdminUser && (
+                changingPay ? (
+                  <div style={{ marginTop: '16px', padding: '12px 14px', background: '#F5F8FE', border: '1px solid #C7D4F0', borderRadius: '10px' }}>
+                    <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--accent)', marginBottom: '10px' }}>Ubah Metode Pembayaran</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
+                      {['CASH', 'QRIS', 'TRANSFER', 'NONTUNAI'].map(m => (
+                        <button key={m} onClick={() => setNewPayMethod(m)} disabled={savingPay}
+                          style={{ padding: '8px', borderRadius: '8px', border: '1px solid', borderColor: newPayMethod === m ? 'var(--accent)' : 'var(--border)', background: newPayMethod === m ? 'var(--accent)' : '#fff', color: newPayMethod === m ? '#fff' : 'var(--text2)', fontWeight: '700', fontSize: '11px', cursor: 'pointer', fontFamily: 'inherit' }}>
+                          {m === 'CASH' ? 'Cash' : m === 'QRIS' ? 'QRIS' : m === 'TRANSFER' ? 'Transfer' : 'Non-Tunai'}
+                        </button>
+                      ))}
+                    </div>
+                    {newPayMethod === 'CASH' && (
+                      <div style={{ marginBottom: '10px' }}>
+                        <label className="label" style={{ fontSize: '11px' }}>Uang Diterima</label>
+                        <input className="input" type="number" value={newPayAmount} disabled={savingPay}
+                          onChange={e => setNewPayAmount(e.target.value)} placeholder="0" />
+                        {Number(newPayAmount) >= order.total && (
+                          <div style={{ fontSize: '11px', color: 'var(--green)', marginTop: '4px' }}>
+                            Kembalian: Rp {fmt(Number(newPayAmount) - order.total)}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button onClick={() => setChangingPay(false)} disabled={savingPay}
+                        style={{ flex: 1, padding: '9px', borderRadius: '9px', border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text2)', fontSize: '12px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+                        Batal
+                      </button>
+                      <button onClick={handleSavePayMethod} disabled={savingPay}
+                        style={{ flex: 2, padding: '9px', borderRadius: '9px', border: 'none', background: 'var(--accent)', color: '#fff', fontSize: '12px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+                        {savingPay ? 'Menyimpan...' : 'Simpan Perubahan'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button onClick={openChangePay}
+                    style={{ width: '100%', marginTop: '16px', padding: '10px', borderRadius: '10px', border: '1px solid #C7D4F0', background: '#EFF4FF', color: 'var(--accent)', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+                    Ubah Metode Pembayaran
+                  </button>
+                )
               )}
             </>
           )}

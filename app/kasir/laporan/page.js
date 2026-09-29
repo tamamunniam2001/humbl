@@ -51,7 +51,7 @@ export default function LaporanHarianPage() {
   }, [load, pathname])
 
   async function handleReopen(r) {
-    if (!confirm('Batalkan closing dan buka kembali order list? Laporan ini akan dihapus.')) return
+    if (!confirm('Batalkan closing dan buka kembali order list?\n\nHanya laporan closing ini yang dihapus. Transaksi penjualan TIDAK akan terhapus dan tetap muncul di History Transaksi.')) return
     setReopening(r.id)
     try {
       await api.delete(`/daily-reports/${r.id}`)
@@ -63,7 +63,7 @@ export default function LaporanHarianPage() {
   }
 
   async function handleDeleteDay(dayKey, dayReports) {
-    if (!confirm(`Hapus semua laporan tanggal ${fmtDate(dayReports[0].date)}? (${dayReports.length} shift) Tindakan ini tidak bisa dibatalkan.`)) return
+    if (!confirm(`Hapus semua laporan tanggal ${fmtDate(dayReports[0].date)}? (${dayReports.length} shift)\n\nHanya laporan closing yang dihapus. Transaksi penjualan TIDAK akan terhapus.`)) return
     setDeletingDay(dayKey)
     try {
       await Promise.all(dayReports.map(r => api.delete(`/daily-reports/${r.id}`)))
@@ -454,23 +454,31 @@ function EditModal({ report: r, onClose, onSaved, fmt, fmtDate, isAdmin }) {
   function addPengeluaran() { setPengeluaran(prev => [...prev, { barang: '', qty: 1, harga: 0 }]) }
   function updateP(i, field, val) { setPengeluaran(prev => prev.map((p, n) => n === i ? { ...p, [field]: val } : p)) }
 
-  // Sinkronkan nilai penjualan dari transaksi aktif sesuai rentang shift WIB
+  // Sinkronkan angka penjualan dari transaksi yang benar-benar tercatat, memakai
+  // aturan atribusi shift yang sama seperti saat closing.
+  //
+  // Sebelumnya fungsi ini memanggil /daily-reports/{id}/transactions, yang HANYA
+  // bisa mengembalikan transaksi milik shift yang tersimpan di database. Akibatnya
+  // `currentShift` dihitung tapi tidak pernah dipakai: kalau admin memilih shift
+  // lain di dropdown lalu menekan Sinkron, angka yang masuk tetap milik shift
+  // lama dan tidak mengikuti jam shift yang dipilih.
+  //
+  // Sekarang memakai /daily-reports/shift-summary yang menerima shift & tanggal
+  // secara eksplisit, sehingga angka selalu mengikuti jam shift yang dipilih.
   async function handleSync() {
     const currentShift = isAdmin ? shift : r.shift
     if (!currentShift) return alert('Shift tidak dikenal')
     setSyncing(true)
     try {
-      const res = await api.get(`/daily-reports/${r.id}/transactions`)
-      const txs = (res.data || []).filter(t => t.status === 'COMPLETED' && !t.deletedAt)
-      const totP   = txs.reduce((s, t) => s + t.total, 0)
-      const totC   = txs.filter(t => t.payMethod === 'CASH').reduce((s, t) => s + t.total, 0)
-      const totQ   = txs.filter(t => t.payMethod === 'QRIS').reduce((s, t) => s + t.total, 0)
-      const totT   = txs.filter(t => t.payMethod === 'TRANSFER' || t.payMethod === 'NONTUNAI').reduce((s, t) => s + t.total, 0)
-      setPenjualan(String(totP))
-      setCash(String(totC))
-      setQris(String(totQ))
-      setTransfer(String(totT))
-    } catch { alert('Gagal mengambil data transaksi') }
+      // Tanggal laporan dalam format WIB (YYYY-MM-DD) agar hari yang dicari sama
+      // dengan hari kalender yang dipakai server.
+      const dateWIB = wibDateKey(r.date)
+      const res = await api.get(`/daily-reports/shift-summary?shift=${currentShift}&date=${dateWIB}`)
+      setPenjualan(String(res.data.penjualan || 0))
+      setCash(String(res.data.cash || 0))
+      setQris(String(res.data.qris || 0))
+      setTransfer(String(res.data.transfer || 0))
+    } catch (e) { alert(e.response?.data?.message || 'Gagal menyinkronkan transaksi') }
     finally { setSyncing(false) }
   }
 

@@ -91,6 +91,51 @@ export async function PATCH(req, { params }) {
     return NextResponse.json({ ...updated, movedToShift: nextShift })
   }
 
+  // Admin boleh memperbaiki metode pembayaran pada transaksi yang sudah lunas.
+  // Kasus nyata: kasir salah memilih metode (mis. QRIS padahal dibayar tunai),
+  // atau pembayaran QRIS dicatat sebagai CASH. Nilai total dan item tidak
+  // berubah — hanya klasifikasi metode pembayarannya yang diperbarui.
+  if (body.changePayMethod) {
+    if (user.role !== 'ADMIN')
+      return NextResponse.json({ message: 'Hanya admin yang dapat mengubah metode pembayaran transaksi lunas' }, { status: 403 })
+
+    const VALID_METHODS = ['CASH', 'QRIS', 'TRANSFER', 'NONTUNAI']
+    const method = body.payMethod
+    if (!VALID_METHODS.includes(method))
+      return NextResponse.json({ message: 'Metode pembayaran tidak valid' }, { status: 400 })
+
+    const target = await prisma.transaction.findUnique({
+      where: { id },
+      select: { total: true, status: true, deletedAt: true, payMethod: true },
+    })
+    if (!target) return NextResponse.json({ message: 'Transaksi tidak ditemukan' }, { status: 404 })
+    if (target.deletedAt) return NextResponse.json({ message: 'Pesanan sudah dihapus' }, { status: 403 })
+    if (target.status !== 'COMPLETED')
+      return NextResponse.json({ message: 'Metode pembayaran hanya bisa diubah pada transaksi yang sudah lunas' }, { status: 400 })
+    if (target.payMethod === method)
+      return NextResponse.json({ message: `Metode pembayaran sudah ${method}` }, { status: 400 })
+
+    // Non-tunai selalu sama dengan total. Cash butuh uang yang benar-benar
+    // diterima supaya kembalian di struk tetap konsisten.
+    const paid = method === 'CASH' ? Number(body.payment) : target.total
+    if (!Number.isFinite(paid))
+      return NextResponse.json({ message: 'Jumlah uang diterima tidak valid' }, { status: 400 })
+    if (paid < target.total)
+      return NextResponse.json({ message: 'Uang diterima kurang dari total transaksi' }, { status: 400 })
+
+    const updated = await prisma.transaction.update({
+      where: { id },
+      data: { payMethod: method, payment: paid, change: paid - target.total },
+      select: {
+        id: true, servedAt: true, status: true, payment: true, change: true, payMethod: true,
+        invoiceNo: true, total: true, createdAt: true, customerName: true, note: true,
+        cashier: { select: { name: true } },
+        items: { include: { product: { select: { name: true, imageUrl: true } } } },
+      },
+    })
+    return NextResponse.json({ ...updated, payMethodChanged: true })
+  }
+
   const data = {}
   const isOrderEdit = ('items' in body) || ('customerName' in body) || ('note' in body)
   if (isOrderEdit && user.role !== 'ADMIN') {

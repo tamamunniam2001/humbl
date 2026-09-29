@@ -14,7 +14,12 @@ export async function GET(req, { params }) {
   const dayRange = wibDayRange(report.date)
   const reports = await prisma.dailyReport.findMany({
     where: { date: { gte: dayRange.gte, lte: dayRange.lte } },
-    select: { shift: true, date: true },
+    // createdAt wajib ikut diambil: wibShiftForTransaction memakai
+    // closedAt || createdAt || date sebagai waktu closing sebuah shift. Kalau
+    // createdAt tidak di-select, aturan ini diam-diam jatuh ke `date`, sehingga
+    // transaksi bisa masuk ke shift yang berbeda dari angka penjualan yang
+    // tersimpan saat closing (shift-summary memakai createdAt).
+    select: { shift: true, date: true, createdAt: true },
   })
 
   const transactions = await prisma.transaction.findMany({
