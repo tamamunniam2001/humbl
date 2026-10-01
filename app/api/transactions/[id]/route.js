@@ -62,14 +62,16 @@ export async function PATCH(req, { params }) {
 
     const target = await prisma.transaction.findUnique({
       where: { id },
-      select: { createdAt: true, status: true, deletedAt: true, invoiceNo: true },
+      select: { createdAt: true, originalCreatedAt: true, status: true, deletedAt: true, invoiceNo: true },
     })
     if (!target) return NextResponse.json({ message: 'Transaksi tidak ditemukan' }, { status: 404 })
     if (target.deletedAt) return NextResponse.json({ message: 'Pesanan sudah dihapus' }, { status: 403 })
     if (target.status !== 'PENDING')
       return NextResponse.json({ message: 'Hanya pesanan yang belum dibayar (open bill) yang bisa dipindahkan' }, { status: 400 })
 
-    const nextShift = nextShiftForTime(target.createdAt)
+    // originalCreatedAt ikut diteruskan supaya open bill yang sudah pernah
+    // dipindahkan tetap terdeteksi shift asalnya dengan benar saat dipindah lagi.
+    const nextShift = nextShiftForTime(target.createdAt, target.originalCreatedAt)
     if (!nextShift)
       return NextResponse.json({ message: 'Pesanan sudah berada di shift terakhir hari ini' }, { status: 400 })
 
@@ -85,7 +87,9 @@ export async function PATCH(req, { params }) {
 
     const updated = await prisma.transaction.update({
       where: { id },
-      data: { createdAt: anchor, originalCreatedAt: target.createdAt },
+      // originalCreatedAt dipertahankan bila sudah terisi, supaya waktu asli
+      // tidak hilang saat open bill dipindahkan lebih dari sekali.
+      data: { createdAt: anchor, originalCreatedAt: target.originalCreatedAt || target.createdAt },
       select: { id: true, invoiceNo: true, createdAt: true, originalCreatedAt: true, status: true, total: true },
     })
     return NextResponse.json({ ...updated, movedToShift: nextShift })

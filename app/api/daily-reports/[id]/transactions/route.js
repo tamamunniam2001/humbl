@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth'
-import { wibDayRange, wibShiftForTransaction } from '@/lib/wib'
+import { wibDayRange, shiftForTransaction } from '@/lib/wib'
 
 export async function GET(req, { params }) {
   const { error } = verifyAuth(req)
@@ -14,11 +14,13 @@ export async function GET(req, { params }) {
   const dayRange = wibDayRange(report.date)
   const reports = await prisma.dailyReport.findMany({
     where: { date: { gte: dayRange.gte, lte: dayRange.lte } },
-    // createdAt wajib ikut diambil: wibShiftForTransaction memakai
-    // closedAt || createdAt || date sebagai waktu closing sebuah shift. Kalau
-    // createdAt tidak di-select, aturan ini diam-diam jatuh ke `date`, sehingga
-    // transaksi bisa masuk ke shift yang berbeda dari angka penjualan yang
-    // tersimpan saat closing (shift-summary memakai createdAt).
+    // createdAt & originalCreatedAt wajib ikut diambil: shiftForTransaction
+    // memakai originalCreatedAt untuk mengenali transaksi terpindah, dan
+    // wibShiftForTransaction (fallback) memakai closedAt || createdAt || date
+    // sebagai waktu closing sebuah shift. Kalau createdAt tidak di-select,
+    // aturan ini diam-diam jatuh ke `date`, sehingga transaksi bisa masuk ke
+    // shift yang berbeda dari angka penjualan yang tersimpan saat closing
+    // (shift-summary memakai createdAt).
     select: { shift: true, date: true, createdAt: true },
   })
 
@@ -26,11 +28,14 @@ export async function GET(req, { params }) {
     where: { status: 'COMPLETED', deletedAt: null, createdAt: { gte: dayRange.gte, lte: dayRange.lte } },
     select: {
       id: true, invoiceNo: true, total: true, payMethod: true, createdAt: true,
+      // originalCreatedAt dipakai shiftForTransaction untuk mengenali transaksi
+      // yang pernah dipindahkan ke shift lain.
+      originalCreatedAt: true,
       customerName: true,
       items: { select: { name: true, qty: true, price: true, subtotal: true } },
     },
     orderBy: { createdAt: 'asc' },
   })
 
-  return NextResponse.json(transactions.filter(tx => wibShiftForTransaction(tx.createdAt, reports) === report.shift))
+  return NextResponse.json(transactions.filter(tx => shiftForTransaction(tx, reports) === report.shift))
 }
