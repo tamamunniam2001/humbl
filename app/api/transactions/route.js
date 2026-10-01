@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth'
+import { wibDayRange } from '@/lib/wib'
 
 function isSameOrigin(req) {
   const host = req.headers.get('host')
@@ -29,7 +30,19 @@ export async function GET(req) {
   const where = trash
     ? { deletedAt: { not: null } }
     : { deletedAt: null }
-  if (!trash && from && to) where.createdAt = { gte: new Date(from), lte: new Date(to) }
+  if (!trash && from && to) {
+    // from/to format tanggal saja (YYYY-MM-DD, dipakai halaman History) ditafsirkan
+    // sebagai hari penuh WIB. new Date('YYYY-MM-DD') = tengah malam UTC = 07.00 WIB,
+    // sehingga transaksi sebelum 07.00 WIB (mis. Shift 1) ikut terpotong.
+    const parseBound = (value, isEnd) => {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        const range = wibDayRange(value)
+        return isEnd ? range.lte : range.gte
+      }
+      return new Date(value)
+    }
+    where.createdAt = { gte: parseBound(from, false), lte: parseBound(to, true) }
+  }
   const [transactions, total] = await Promise.all([
     prisma.transaction.findMany({
       where,

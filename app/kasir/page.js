@@ -199,7 +199,10 @@ export default function KasirPage() {
     try {
       const todayWIB = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })
       const todayStart = new Date(`${todayWIB}T00:00:00+07:00`)
-      const endOfDay = new Date(`${todayWIB}T23:59:59+07:00`)
+      // .999 wajib: transaksi yang dipindah ke shift berikutnya memakai anchor
+      // 23:59:59.999 (ujung akhir Shift 3). Tanpa milidetik, transaksi tsb keluar
+      // dari rentang `lte 23:59:59.000` dan hilang dari Order Hari Ini.
+      const endOfDay = new Date(`${todayWIB}T23:59:59.999+07:00`)
       const res = await api.get(`/transactions?slim=1&all=1&from=${todayStart.toISOString()}&to=${endOfDay.toISOString()}`)
       const incoming = res.data.transactions || []
       const incomingIds = new Set(incoming.map((o) => o.id))
