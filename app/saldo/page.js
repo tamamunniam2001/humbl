@@ -251,7 +251,7 @@ export default function SaldoPage() {
                         <span style={{ fontSize: '11px', color: '#64748B' }}>· {new Date(item.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                       </div>
                       <div style={{ fontSize: '13px', color: '#334155' }}>
-                        {item.items?.map(i => `${i.itemName} (${i.qty} ${i.satuan || ''})`).join(', ')}
+                        {item.items?.map(i => `${i.itemName}${i.qty > 1 || i.satuan ? ' · ' + i.qty + (i.satuan ? ' ' + i.satuan : '') : ''}`).join(', ')}
                       </div>
                       {item.keterangan && <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px', fontStyle: 'italic' }}>&quot;{item.keterangan}&quot;</div>}
                     </div>
@@ -490,8 +490,9 @@ export default function SaldoPage() {
           style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500, backdropFilter: 'blur(4px)' }}
           onClick={e => { if (e.target === e.currentTarget) setActionBelanja(null) }}
         >
-          <div className="card fade-in" style={{ width: '480px', maxWidth: '94vw', borderRadius: '16px', overflow: 'hidden' }}>
-            <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border)', background: 'var(--surface2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div className="card fade-in" style={{ width: '480px', maxWidth: '94vw', maxHeight: '90dvh', borderRadius: '16px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            {/* Header — fixed */}
+            <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--border)', background: 'var(--surface2)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
               <div>
                 <div style={{ fontSize: '16px', fontWeight: '800', color: 'var(--text)' }}>Tinjau Pengajuan Belanja</div>
                 <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '2px' }}>Diajukan oleh: <strong>{actionBelanja.requesterName}</strong></div>
@@ -499,18 +500,28 @@ export default function SaldoPage() {
               <button onClick={() => setActionBelanja(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: '20px' }}>×</button>
             </div>
 
-            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {/* Scrollable body */}
+            <div style={{ overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px', flex: 1 }}>
               <div style={{ background: 'var(--bg)', borderRadius: '10px', padding: '12px 14px', border: '1px solid var(--border)' }}>
                 <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--muted)', marginBottom: '8px' }}>Rincian Item Belanja:</div>
                 {actionBelanja.items?.map((item, idx) => (
-                  <div key={idx} style={{ marginBottom: '6px', fontSize: '13px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>{item.itemName} ({item.qty} {item.satuan || ''})</span>
-                      <span style={{ fontWeight: '700' }}>{fmt(item.subtotal)}</span>
+                  <div key={idx} style={{ marginBottom: '8px', fontSize: '13px', paddingBottom: '8px', borderBottom: idx < actionBelanja.items.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
+                      <span style={{ fontWeight: '600' }}>
+                        {item.itemName}
+                        {(item.qty > 1 || item.satuan) ? (
+                          <span style={{ fontWeight: '400', color: 'var(--muted)' }}> · {item.qty}{item.satuan ? ' ' + item.satuan : ''}</span>
+                        ) : null}
+                      </span>
+                      <span style={{ fontWeight: '700', flexShrink: 0 }}>{fmt(item.subtotal)}</span>
                     </div>
-                    {Number(item.isi) > 0 && (
-                      <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '1px' }}>
+                    {Number(item.isi) > 0 ? (
+                      <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>
                         {fmt(item.harga)} × {item.qty} · isi {item.isi} {item.satuan || ''} → <strong style={{ color: 'var(--accent)' }}>{fmt(Number(item.harga) / Number(item.isi))}/{item.satuan || 'isi'}</strong>
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>
+                        {fmt(item.harga)}{item.qty > 1 ? ` × ${item.qty}` : ''}
                       </div>
                     )}
                   </div>
@@ -547,27 +558,28 @@ export default function SaldoPage() {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
                 Ubah Rincian Belanja
               </button>
+            </div>
 
-              <div style={{ display: 'flex', gap: '10px', paddingTop: '6px' }}>
-                <button
-                  type="button"
-                  className="btn"
-                  disabled={processingAction}
-                  onClick={() => handleApproveReject(actionBelanja.id, 'REJECTED')}
-                  style={{ flex: 1, justifyContent: 'center', background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA' }}
-                >
-                  Tolak
-                </button>
-                <button
-                  type="button"
-                  className="btn"
-                  disabled={processingAction}
-                  onClick={() => handleApproveReject(actionBelanja.id, 'APPROVED')}
-                  style={{ flex: 1, justifyContent: 'center', background: '#10B981', color: '#fff', border: 'none', fontWeight: '700' }}
-                >
-                  {processingAction ? 'Memproses...' : 'ACC / Setujui'}
-                </button>
-              </div>
+            {/* Footer — fixed */}
+            <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border)', background: 'var(--surface2)', display: 'flex', gap: '10px', flexShrink: 0 }}>
+              <button
+                type="button"
+                className="btn"
+                disabled={processingAction}
+                onClick={() => handleApproveReject(actionBelanja.id, 'REJECTED')}
+                style={{ flex: 1, justifyContent: 'center', background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA' }}
+              >
+                Tolak
+              </button>
+              <button
+                type="button"
+                className="btn"
+                disabled={processingAction}
+                onClick={() => handleApproveReject(actionBelanja.id, 'APPROVED')}
+                style={{ flex: 1, justifyContent: 'center', background: '#10B981', color: '#fff', border: 'none', fontWeight: '700' }}
+              >
+                {processingAction ? 'Memproses...' : 'ACC / Setujui'}
+              </button>
             </div>
           </div>
         </div>
