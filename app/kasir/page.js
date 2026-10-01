@@ -804,6 +804,8 @@ function OrderDetailModal({ order, products = [], user = {}, onClose, onToggleSe
   const [productSearch, setProductSearch] = useState('')
   const [showPicker, setShowPicker] = useState(false)
   const [moving, setMoving] = useState(false)
+  const [showShiftModal, setShowShiftModal] = useState(false)
+  const [shiftCustomTime, setShiftCustomTime] = useState('')
   const [changingPay, setChangingPay] = useState(false)
   const [newPayMethod, setNewPayMethod] = useState(order.payMethod || 'CASH')
   const [newPayAmount, setNewPayAmount] = useState(String(order.payment || order.total || ''))
@@ -886,19 +888,31 @@ function OrderDetailModal({ order, products = [], user = {}, onClose, onToggleSe
 
   // Open bill yang masih tertunda saat pergantian shift → pindahkan ke shift
   // berikutnya supaya saat dibayar masuk laporan shift tujuan.
+  function openMoveShiftModal() {
+    // Default: jam awal shift tujuan (akan di-resolve di server jika dikosongkan)
+    setShiftCustomTime('')
+    setShowShiftModal(true)
+  }
+
   async function handleMoveNextShift() {
-    if (!confirm('Pindahkan open bill ini ke shift berikutnya?\n\nSaat pelanggan membayar nanti, pendapatan akan dihitung pada shift tujuan.')) return
     setMoving(true)
+    setShowShiftModal(false)
     try {
-      const res = await api.patch(`/transactions/${order.id}`, { moveToNextShift: true })
+      const payload = { moveToNextShift: true }
+      if (shiftCustomTime) payload.customTime = shiftCustomTime
+      const res = await api.patch(`/transactions/${order.id}`, payload)
       const label = (res.data.movedToShift || '').replace('SHIFT_', 'Shift ')
-      alert(`Open bill dipindahkan ke ${label}.`)
+      const timeStr = res.data.createdAt
+        ? new Date(res.data.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jakarta' })
+        : ''
+      alert(`Open bill dipindahkan ke ${label}${timeStr ? ` (${timeStr} WIB)` : ''}.`)
       onRefresh()
     } catch (e) { alert(e.response?.data?.message || 'Gagal memindahkan open bill') }
     finally { setMoving(false) }
   }
 
   return (
+    <>
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(13,21,38,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, backdropFilter: 'blur(4px)' }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div className="card fade-in" style={{ width: '440px', maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -1121,7 +1135,7 @@ function OrderDetailModal({ order, products = [], user = {}, onClose, onToggleSe
                 {printingBar ? '...' : 'Bar'}
               </button>
               {!paid && (
-                <button onClick={handleMoveNextShift} disabled={moving} title="Pindahkan open bill ke shift berikutnya agar masuk laporan shift tujuan saat dibayar"
+                <button onClick={openMoveShiftModal} disabled={moving} title="Pindahkan open bill ke shift berikutnya agar masuk laporan shift tujuan saat dibayar"
                   style={{ flex: 1, padding: '10px', borderRadius: '9px', border: '1px solid #FDE68A', background: '#FFFBEB', color: '#B45309', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit', opacity: moving ? 0.6 : 1 }}>
                   {moving ? '...' : '⏭ Shift Berikutnya'}
                 </button>
@@ -1131,6 +1145,66 @@ function OrderDetailModal({ order, products = [], user = {}, onClose, onToggleSe
         </div>
       </div>
     </div>
+
+      {/* ── Mini-modal: Pindah ke Shift Berikutnya ── */}
+      {showShiftModal && (
+        <div
+          onClick={e => { if (e.target === e.currentTarget) setShowShiftModal(false) }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(13,21,38,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400, backdropFilter: 'blur(4px)' }}
+        >
+          <div className="card fade-in" style={{ width: '340px', maxWidth: '92vw', borderRadius: '16px', overflow: 'hidden' }}>
+            {/* Header */}
+            <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--border)', background: 'linear-gradient(135deg, #FEF3C7, #FFFBEB)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '18px' }}>⏭</span>
+                <div>
+                  <div style={{ fontSize: '14px', fontWeight: '800', color: '#92400E' }}>Pindah ke Shift Berikutnya</div>
+                  <div style={{ fontSize: '11px', color: '#B45309', marginTop: '1px' }}>{order.invoiceNo}</div>
+                </div>
+              </div>
+              <button onClick={() => setShowShiftModal(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: '18px', lineHeight: 1, padding: '2px 6px' }}>×</button>
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: '18px' }}>
+              <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '16px', lineHeight: 1.6 }}>
+                Saat pelanggan membayar nanti, pendapatan akan dihitung pada shift tujuan.
+              </div>
+
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: '700', color: 'var(--text2)', marginBottom: '6px' }}>
+                Jam Transaksi pada Shift Tujuan
+                <span style={{ fontWeight: '400', color: 'var(--muted)', marginLeft: '4px' }}>(opsional)</span>
+              </label>
+              <input
+                type="time"
+                className="input"
+                value={shiftCustomTime}
+                onChange={e => setShiftCustomTime(e.target.value)}
+                style={{ marginBottom: '8px', fontSize: '15px', fontWeight: '700', textAlign: 'center', letterSpacing: '0.05em' }}
+              />
+              <div style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '18px', lineHeight: 1.5 }}>
+                Kosongkan untuk memakai jam awal shift tujuan secara otomatis. Jam harus berada dalam rentang shift tujuan.
+              </div>
+
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  onClick={() => setShowShiftModal(false)}
+                  style={{ flex: 1, padding: '10px', borderRadius: '9px', border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--text2)', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>
+                  Batal
+                </button>
+                <button
+                  onClick={handleMoveNextShift}
+                  disabled={moving}
+                  style={{ flex: 1, padding: '10px', borderRadius: '9px', border: 'none', background: 'linear-gradient(135deg, #F59E0B, #D97706)', color: '#fff', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit', opacity: moving ? 0.6 : 1 }}>
+                  {moving ? 'Memindahkan...' : 'Pindahkan'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 

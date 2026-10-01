@@ -157,7 +157,6 @@ const pgStyles = (
 
       /* Modal edit pengajuan jadi bottom sheet */
       .pg-edit-grid { grid-template-columns: minmax(0, 1fr) !important; }
-      .pg-modal-body { max-height: 58vh; }
       .pg-modal-footer { padding-bottom: calc(14px + env(safe-area-inset-bottom)) !important; }
 
       /* Keranjang = bottom sheet */
@@ -196,7 +195,7 @@ const pgStyles = (
       .pg-modal-overlay { align-items: flex-end !important; }
       .pg-modal {
         width: 100% !important; max-width: 100% !important;
-        max-height: 92vh; overflow-y: auto;
+        max-height: 92dvh !important;
         border-radius: 18px 18px 0 0 !important;
         padding-bottom: env(safe-area-inset-bottom);
       }
@@ -685,7 +684,7 @@ export default function BelanjaPage() {
                           {item.items?.map((sub, idx) => (
                             <div key={idx} className="pg-hist-item">
                               <span>
-                                {sub.itemName} ({sub.qty} {sub.satuan || ''})
+                                {sub.itemName}{sub.qty > 1 || sub.satuan ? ` · ${sub.qty}${sub.satuan ? ' ' + sub.satuan : ''}` : ''}
                                 {Number(sub.isi) > 0 && (
                                   <span style={{ color: 'var(--muted)' }}> · {fmt(Number(sub.harga) / Number(sub.isi))}/{sub.satuan || 'isi'}</span>
                                 )}
@@ -1122,8 +1121,8 @@ export default function BelanjaPage() {
       {editOpen && (
         <div className="pg-modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 420, backdropFilter: 'blur(6px)' }}
           onClick={e => { if (e.target === e.currentTarget) closeEdit() }}>
-          <div className="card fade-in pg-modal" style={{ width: '620px', maxWidth: '96vw', overflow: 'hidden' }}>
-            <div className="pg-edit-head" style={{ padding: '18px 20px', borderBottom: '1px solid var(--border)', background: 'linear-gradient(135deg, #FEF3C7, #FFFBEB)' }}>
+          <div className="card fade-in pg-modal" style={{ width: '620px', maxWidth: '96vw', display: 'flex', flexDirection: 'column', maxHeight: '90dvh', overflow: 'hidden' }}>
+            <div className="pg-edit-head" style={{ padding: '18px 20px', borderBottom: '1px solid var(--border)', background: 'linear-gradient(135deg, #FEF3C7, #FFFBEB)', flexShrink: 0 }}>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: '15px', fontWeight: '800', color: 'var(--text)' }}>Edit Pengajuan Belanja</div>
                 <div style={{ fontSize: '12px', color: '#B45309', marginTop: '2px' }}>
@@ -1133,8 +1132,8 @@ export default function BelanjaPage() {
               <button type="button" onClick={closeEdit} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: '20px', lineHeight: 1, flexShrink: 0 }}>×</button>
             </div>
 
-            <form onSubmit={handleSaveEdit} style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-              <div className="pg-modal-body" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <form onSubmit={handleSaveEdit} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+              <div className="pg-modal-body" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '14px', overflowY: 'auto', WebkitOverflowScrolling: 'touch', flex: 1 }}>
 
                 <div className="pg-edit-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 190px) minmax(0, 1fr)', gap: '12px' }}>
                   <div>

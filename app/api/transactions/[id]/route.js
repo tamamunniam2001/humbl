@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { canUseKasir, verifyAuth } from '@/lib/auth'
-import { nextShiftForTime, shiftAnchorTime, wibDayRange } from '@/lib/wib'
+import { nextShiftForTime, shiftAnchorTime, wibDayRange, wibShiftRange, wibDateKey, SHIFT_HOURS } from '@/lib/wib'
 
 function isCsrfSafe(req) {
   if (req.headers.get('x-requested-with') !== 'XMLHttpRequest') return false
@@ -85,11 +85,28 @@ export async function PATCH(req, { params }) {
     if (dayReports.some(r => r.shift === nextShift))
       return NextResponse.json({ message: `${nextShift.replace('SHIFT_', 'Shift ')} sudah closing, tidak bisa dipindahkan ke sana` }, { status: 400 })
 
+    // Jam kustom (opsional): user bisa memilih jam spesifik dalam rentang shift tujuan.
+    // Format: "HH:MM" (WIB). Waktu harus jatuh dalam rentang shift tujuan.
+    let finalTime = anchor
+    if (body.customTime) {
+      const shiftRange = wibShiftRange(anchor, nextShift)
+      // Bangun timestamp dari tanggal anchor + jam kustom WIB
+      const dateKey = wibDateKey(anchor)
+      const candidate = new Date(`${dateKey}T${body.customTime}:00.000+07:00`)
+      if (isNaN(candidate.getTime()))
+        return NextResponse.json({ message: 'Format jam tidak valid (HH:MM)' }, { status: 400 })
+      if (candidate < shiftRange.gte || candidate > shiftRange.lte)
+        return NextResponse.json({
+          message: `Jam harus berada dalam rentang ${nextShift.replace('SHIFT_', 'Shift ')} (${String(SHIFT_HOURS[nextShift].startHour).padStart(2,'0')}:00 – ${String(SHIFT_HOURS[nextShift].endHour).padStart(2,'0')}:59)`,
+        }, { status: 400 })
+      finalTime = candidate
+    }
+
     const updated = await prisma.transaction.update({
       where: { id },
       // originalCreatedAt dipertahankan bila sudah terisi, supaya waktu asli
       // tidak hilang saat open bill dipindahkan lebih dari sekali.
-      data: { createdAt: anchor, originalCreatedAt: target.originalCreatedAt || target.createdAt },
+      data: { createdAt: finalTime, originalCreatedAt: target.originalCreatedAt || target.createdAt },
       select: { id: true, invoiceNo: true, createdAt: true, originalCreatedAt: true, status: true, total: true },
     })
     return NextResponse.json({ ...updated, movedToShift: nextShift })
