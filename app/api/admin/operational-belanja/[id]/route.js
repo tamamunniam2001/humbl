@@ -31,6 +31,15 @@ export async function PATCH(req, { params }) {
         data: { status: 'APPROVED', adminNote: adminNote || null, approvedById: user.id || null, approvedAt: new Date() },
       })
 
+      // Ambil kategori dari ExpenseItem untuk setiap item yang punya itemId
+      const itemIds = belanja.items
+        .filter(i => !i.isManual && i.itemId)
+        .map(i => i.itemId)
+      const expenseItems = itemIds.length > 0
+        ? await tx.expenseItem.findMany({ where: { id: { in: itemIds } }, select: { id: true, category: true } })
+        : []
+      const categoryByItemId = Object.fromEntries(expenseItems.map(e => [e.id, e.category]))
+
       await tx.expense.create({
         data: {
           date: belanja.tanggal || new Date(),
@@ -41,7 +50,9 @@ export async function PATCH(req, { params }) {
             create: belanja.items.map(item => ({
               expenseItemId: item.isManual ? null : item.itemId,
               name: item.itemName,
-              category: 'Operasional',
+              // Pakai kategori dari ExpenseItem jika ada, fallback ke kategori item belanja,
+              // lalu 'Operasional' hanya jika benar-benar tidak ada kategori sama sekali.
+              category: (item.isManual ? null : categoryByItemId[item.itemId]) || item.category || 'Operasional',
               keterangan: item.keterangan || '',
               satuan: item.satuan || '',
               harga: item.harga,
