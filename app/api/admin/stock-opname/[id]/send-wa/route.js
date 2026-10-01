@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth'
+import { hitungHargaDasar } from '@/lib/harga'
 import { jsPDF } from 'jspdf'
 import { put, del } from '@vercel/blob'
 
@@ -29,7 +30,7 @@ function generatePDFBuffer(opname, items) {
   const totalItem = items.length
   const sudahDiisi = items.filter(i => i.qtyActual > 0).length
   const belumDiisi = items.filter(i => i.qtyActual === 0).length
-  const totalNilai = items.reduce((s, i) => s + (i.qtyActual * (i.hargaTerakhir || 0)), 0)
+  const totalNilai = items.reduce((s, i) => s + (i.qtyActual * (i.hargaPerSatuanDasar ?? i.hargaTerakhir ?? 0)), 0)
 
   const summaries = [
     { label: 'Total Item', val: String(totalItem), r: 74, g: 124, b: 199 },
@@ -90,8 +91,11 @@ function generatePDFBuffer(opname, items) {
     const kategori = item.inventoryItem?.category || item.expenseItem?.category || ''
     const satuanTampil = (item.satuanOpname && item.konversi) ? item.satuanOpname : (item.inventoryItem?.satuan || item.satuan || '')
     const qtyTampil = (item.satuanOpname && item.konversi) ? item.qtyActual / item.konversi : item.qtyActual
-    const harga = item.hargaTerakhir || 0
-    const nilai = item.qtyActual * harga
+    // Nilai memakai harga per satuan dasar (harga kemasan ÷ isi kemasan)
+    const hargaDasar = item.hargaPerSatuanDasar ?? item.hargaTerakhir ?? 0
+    // Harga yang ditampilkan mengikuti satuan qty di kolom sebelah
+    const harga = item.konversi && item.konversi > 0 ? hargaDasar * item.konversi : hargaDasar
+    const nilai = item.qtyActual * hargaDasar
 
     doc.setFontSize(7.5)
     doc.setFont('helvetica', 'normal')
@@ -158,16 +162,30 @@ export async function POST(req, { params }) {
       where: { expenseItemId: { in: expenseItemIds } },
       orderBy: { expense: { date: 'desc' } },
       distinct: ['expenseItemId'],
-      select: { expenseItemId: true, harga: true },
+      select: { expenseItemId: true, harga: true, isi: true },
     })
-    const priceMap = Object.fromEntries(lastPrices.map(p => [p.expenseItemId, Number(p.harga)]))
+    const priceMap = Object.fromEntries(
+      lastPrices.map(p => [p.expenseItemId, { harga: Number(p.harga), isi: p.isi }])
+    )
 
-    const items = opname.items.map(i => ({
-      ...i,
-      hargaTerakhir: i.isManual ? (i.hargaManual ?? null) : (i.expenseItemId ? (priceMap[i.expenseItemId] ?? null) : null),
-      satuanOpname: i.expenseItem?.satuanOpname || null,
-      konversi: i.expenseItem?.konversi || null,
-    })).sort((a, b) => (a.inventoryItem?.name || a.itemName || '').localeCompare(b.inventoryItem?.name || b.itemName || ''))
+    const items = opname.items.map(i => {
+      const entry = i.expenseItemId ? priceMap[i.expenseItemId] : null
+      const hargaKemasan = i.isManual ? (i.hargaManual ?? null) : (entry?.harga ?? null)
+      const konversi = i.expenseItem?.konversi || null
+      // hargaPerSatuanDasar dipakai untuk nilai stok PDF — bagi dengan ISI kemasan
+      const hargaPerSatuanDasar = hitungHargaDasar({
+        harga: hargaKemasan,
+        isi: entry?.isi,
+        konversi,
+      })
+      return {
+        ...i,
+        hargaTerakhir: hargaKemasan,
+        hargaPerSatuanDasar,
+        satuanOpname: i.expenseItem?.satuanOpname || null,
+        konversi,
+      }
+    }).sort((a, b) => (a.inventoryItem?.name || a.itemName || '').localeCompare(b.inventoryItem?.name || b.itemName || ''))
 
     let pdfBuffer
     try {

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth'
+import { hitungHargaDasar } from '@/lib/harga'
 
 export async function GET(req) {
   const { error } = verifyAuth(req)
@@ -40,9 +41,11 @@ export async function GET(req) {
     where: { expenseItemId: { in: allExpenseItemIds } },
     orderBy: { expense: { date: 'desc' } },
     distinct: ['expenseItemId'],
-    select: { expenseItemId: true, harga: true },
+    select: { expenseItemId: true, harga: true, isi: true },
   })
-  const priceMap = Object.fromEntries(lastPrices.map(p => [p.expenseItemId, Number(p.harga)]))
+  const priceMap = Object.fromEntries(
+    lastPrices.map(p => [p.expenseItemId, { harga: Number(p.harga), isi: p.isi }])
+  )
 
   return NextResponse.json({
     opnames: opnames.map(o => ({
@@ -51,10 +54,14 @@ export async function GET(req) {
       itemsOk: o.items.filter(i => i.selisih === 0).length,
       itemsSelisih: o.items.filter(i => i.selisih !== 0).length,
       totalNilai: o.items.reduce((s, i) => {
-        const hargaBeli = i.hargaManual ?? (i.expenseItemId ? (priceMap[i.expenseItemId] ?? 0) : 0)
-        const konversi = i.expenseItem?.konversi
-        // hargaPerSatuanDasar = hargaBeli / konversi (jika ada konversi)
-        const hargaDasar = konversi && konversi > 0 ? hargaBeli / konversi : hargaBeli
+        const entry = i.expenseItemId ? priceMap[i.expenseItemId] : null
+        const hargaKemasan = i.hargaManual ?? entry?.harga ?? 0
+        // hargaDasar = harga kemasan ÷ isi kemasan (fallback ÷ konversi bila isi kosong)
+        const hargaDasar = hitungHargaDasar({
+          harga: hargaKemasan,
+          isi: entry?.isi,
+          konversi: i.expenseItem?.konversi,
+        }) ?? 0
         return s + (i.qtyActual * hargaDasar)
       }, 0),
     })),

@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Sidebar from '@/components/Sidebar'
 import api from '@/lib/api'
+import { hitungHargaTampil } from '@/lib/harga'
 
 const fmt = n => Number(n) % 1 !== 0 ? Number(n).toLocaleString('id-ID', { maximumFractionDigits: 4 }) : Number(n).toLocaleString('id-ID')
 const fmtRp = n => 'Rp ' + Number(n).toLocaleString('id-ID', { maximumFractionDigits: 0 })
@@ -572,10 +573,8 @@ export default function StockOpnamePage() {
                           : (Number(editVal) || 0)
                         const nilai = qtyDasar * hargaDasar
                         const satuanTampil = (editSheet.satuanOpname && editSheet.konversi) ? editSheet.satuanOpname : (editSheet.inventoryItem?.satuan || editSheet.satuan || '')
-                        // harga per satuanOpname
-                        const hargaPerSatuanTampil = editSheet.konversi && editSheet.hargaTerakhir
-                          ? editSheet.hargaTerakhir / editSheet.konversi
-                          : hargaDasar
+                        // Harga per satuanOpname = hargaDasar × konversi (arah hanya satu kali)
+                        const hargaPerSatuanTampil = hitungHargaTampil(hargaDasar, editSheet.konversi)
                         return (
                           <div style={{ marginTop: '10px', padding: '10px 14px', background: 'linear-gradient(135deg, #EDE9FE, #F5F3FF)', border: '1px solid #C4B5FD', borderRadius: '10px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -583,9 +582,9 @@ export default function StockOpnamePage() {
                                 <div style={{ fontSize: '10px', color: '#7C3AED', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Valuasi Stok</div>
                                 <div style={{ fontSize: '11px', color: '#6D28D9', marginTop: '2px' }}>
                                   {fmtRp(Math.round(hargaPerSatuanTampil))}{satuanTampil ? `/${satuanTampil}` : ''}
-                                  {editSheet.konversi && editSheet.hargaTerakhir && (
+                                  {editSheet.konversi && (
                                     <span style={{ marginLeft: '6px', opacity: 0.7 }}>
-                                      · {fmtRp(Math.round(editSheet.hargaTerakhir))}/{editSheet.satuanBeli || 'satuan beli'}
+                                      · {fmtRp(Math.round(hargaDasar))}/{editSheet.satuanBeli || 'satuan dasar'}
                                     </span>
                                   )}
                                 </div>

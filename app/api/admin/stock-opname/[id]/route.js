@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth'
+import { hitungHargaDasar } from '@/lib/harga'
 
 export async function GET(req, { params }) {
   const { error } = verifyAuth(req)
@@ -26,12 +27,12 @@ export async function GET(req, { params }) {
   const allItemNames = opname.items.map(i => i.itemName.trim())
 
   const [lastPrices, prevOpname, allIngredients] = await Promise.all([
-    // Harga terakhir dari ExpenseDetail per item (harga per satuan beli)
+    // Harga terakhir dari ExpenseDetail per item (harga per kemasan + isi kemasan)
     prisma.expenseDetail.findMany({
       where: { expenseItemId: { in: expenseItemIds } },
       orderBy: { expense: { date: 'desc' } },
       distinct: ['expenseItemId'],
-      select: { expenseItemId: true, harga: true, satuan: true },
+      select: { expenseItemId: true, harga: true, isi: true, satuan: true },
     }),
     // Opname SELESAI terakhir sebelum opname ini
     prisma.stockOpname.findFirst({
@@ -45,8 +46,10 @@ export async function GET(req, { params }) {
     }),
   ])
 
-  // priceMap: expenseItemId → harga per satuan beli (dari ExpenseDetail)
-  const priceMap = Object.fromEntries(lastPrices.map(p => [p.expenseItemId, p.harga]))
+  // priceMap: expenseItemId → { harga, isi } pembelian terakhir
+  const priceMap = Object.fromEntries(
+    lastPrices.map(p => [p.expenseItemId, { harga: p.harga, isi: p.isi }])
+  )
 
   // ingredientMap: nama (lowercase) → harga per unit dasar (price / packSize)
   const ingredientMap = Object.fromEntries(
@@ -67,26 +70,25 @@ export async function GET(req, { params }) {
     const satuanOpname = i.expenseItem?.satuanOpname || null
     const satuanBeli = i.expenseItem?.satuan || i.satuan || null
 
-    // hargaTerakhir: harga per satuan beli (dari ExpenseDetail atau hargaManual)
+    // hargaTerakhir: harga satu kemasan pembelian (dari ExpenseDetail atau hargaManual)
+    // isiKemasan: isi satu kemasan dalam satuan dasar (mis. 200 gram)
     let hargaTerakhir = null
+    let isiKemasan = null
     if (i.isManual) {
       hargaTerakhir = i.hargaManual ?? null
-    } else {
-      hargaTerakhir = i.expenseItemId ? (priceMap[i.expenseItemId] ?? null) : null
+    } else if (i.expenseItemId) {
+      const harga = priceMap[i.expenseItemId]
+      hargaTerakhir = harga?.harga ?? null
+      isiKemasan = harga?.isi ?? null
     }
 
     // hargaPerSatuanDasar: harga per unit dasar (gram/ml/pcs)
     // Prioritas:
-    //   1. Harga dari ExpenseDetail / hargaManual → bagi konversi
-    //   2. Fallback: harga dari Ingredient (price/packSize) — sudah per unit dasar
-    let hargaPerSatuanDasar = null
-    if (hargaTerakhir != null) {
-      if (konversi && konversi > 0) {
-        hargaPerSatuanDasar = hargaTerakhir / konversi
-      } else {
-        hargaPerSatuanDasar = hargaTerakhir
-      }
-    }
+    //   1. Harga dari ExpenseDetail / hargaManual ÷ ISI KEMASAN
+    //      (mis. Rp20.000 ÷ 200 gram = Rp100/gram)
+    //   2. Fallback bila 'isi' kosong: ÷ konversi (rumus lama)
+    //   3. Fallback: harga dari Ingredient (price/packSize) — sudah per unit dasar
+    let hargaPerSatuanDasar = hitungHargaDasar({ harga: hargaTerakhir, isi: isiKemasan, konversi })
     // Fallback ke Ingredient untuk semua item yang belum dapat harga
     if (hargaPerSatuanDasar == null) {
       const ig = ingredientMap[i.itemName.trim().toLowerCase()]
@@ -99,7 +101,8 @@ export async function GET(req, { params }) {
 
     return {
       ...i,
-      hargaTerakhir,          // harga per satuan beli (untuk ditampilkan sebagai referensi)
+      hargaTerakhir,          // harga per kemasan beli (untuk ditampilkan sebagai referensi)
+      isiKemasan,             // isi kemasan dalam satuan dasar
       hargaPerSatuanDasar,    // harga per satuan dasar → dipakai untuk kalkulasi nilaiStok
       satuanBeli,             // satuan pembelian (untuk label keterangan)
       qtySebelumnya: i.expenseItemId
