@@ -12,6 +12,27 @@ const fmt = (n) => {
   return 'Rp ' + num.toLocaleString('id-ID', hasDecimal ? { minimumFractionDigits: 1, maximumFractionDigits: 2 } : {})
 }
 
+const fmtHet = (n) => {
+  const num = Number(n)
+  if (!isFinite(num)) return 'Rp 0'
+  return num > 0 && num < 1 ? 'Rp ' + num.toFixed(4) : fmt(num)
+}
+
+// Cocokkan item belanja dengan Bahan Baku berdasarkan nama (trim + lowercase)
+function hetDariBahan(itemName, satuan, bahanMap) {
+  if (!bahanMap || !itemName) return null
+  const ing = bahanMap.get((itemName || '').trim().toLowerCase())
+  if (!ing) return null
+  const perPack = Number(ing.price)
+  if (!isFinite(perPack) || perPack <= 0) return null
+  const isi = Number(ing.packSize) || 0
+  return {
+    perPack,
+    perSatuan: isi > 0 ? perPack / isi : null,
+    unit: ing.unit || satuan || '',
+  }
+}
+
 export default function SaldoPage() {
   const [saldo, setSaldo] = useState(0)
   const [ledger, setLedger] = useState([])
@@ -31,6 +52,9 @@ export default function SaldoPage() {
   const [adminNote, setAdminNote] = useState('')
   const [processingAction, setProcessingAction] = useState(false)
 
+  // Peta Bahan Baku (kunci: nama lowercase) untuk HET
+  const [bahanMap, setBahanMap] = useState(new Map())
+
   // Current logged in user
   const user = (() => { try { return JSON.parse(Cookies.get('user') || '{}') } catch { return {} } })()
   const isAdmin = user.role === 'ADMIN'
@@ -41,6 +65,10 @@ export default function SaldoPage() {
     if (isAdmin) {
       fetchPendingBelanja()
     }
+    // Ambil data Bahan Baku untuk HET
+    api.get('/admin/ingredients')
+      .then(r => setBahanMap(new Map((r.data || []).map(i => [i.name.trim().toLowerCase(), i]))))
+      .catch(() => {})
   }, [isAdmin])
 
   async function fetchSaldoData() {
@@ -504,28 +532,56 @@ export default function SaldoPage() {
             <div style={{ overflowY: 'auto', WebkitOverflowScrolling: 'touch', padding: '20px', display: 'flex', flexDirection: 'column', gap: '14px', flex: 1 }}>
               <div style={{ background: 'var(--bg)', borderRadius: '10px', padding: '12px 14px', border: '1px solid var(--border)' }}>
                 <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--muted)', marginBottom: '8px' }}>Rincian Item Belanja:</div>
-                {actionBelanja.items?.map((item, idx) => (
+                {actionBelanja.items?.map((item, idx) => {
+                  const het = hetDariBahan(item.itemName, item.satuan, bahanMap)
+                  const hargaPerSatuan = Number(item.isi) > 0 ? Number(item.harga) / Number(item.isi) : null
+                  return (
                   <div key={idx} style={{ marginBottom: '8px', fontSize: '13px', paddingBottom: '8px', borderBottom: idx < actionBelanja.items.length - 1 ? '1px solid var(--border)' : 'none' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px' }}>
-                      <span style={{ fontWeight: '600' }}>
-                        {item.itemName}
-                        {(item.qty > 1 || item.satuan) ? (
-                          <span style={{ fontWeight: '400', color: 'var(--muted)' }}> · {item.qty}{item.satuan ? ' ' + item.satuan : ''}</span>
-                        ) : null}
-                      </span>
+                    {/* Baris atas: nama + subtotal */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '4px' }}>
+                      <span style={{ fontWeight: '600' }}>{item.itemName}</span>
                       <span style={{ fontWeight: '700', flexShrink: 0 }}>{fmt(item.subtotal)}</span>
                     </div>
-                    {Number(item.isi) > 0 ? (
-                      <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>
-                        {fmt(item.harga)} × {item.qty} · isi {item.isi} {item.satuan || ''} → <strong style={{ color: 'var(--accent)' }}>{fmt(Number(item.harga) / Number(item.isi))}/{item.satuan || 'isi'}</strong>
-                      </div>
-                    ) : (
-                      <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>
-                        {fmt(item.harga)}{item.qty > 1 ? ` × ${item.qty}` : ''}
+
+                    {/* Baris detail: qty × satuan + harga */}
+                    <div style={{ fontSize: '11px', color: 'var(--muted)', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+                      <span>
+                        {fmt(item.harga)}
+                        {item.qty > 1 ? ` × ${item.qty}${item.satuan ? ' ' + item.satuan : ''}` : (item.satuan ? ` / ${item.satuan}` : '')}
+                      </span>
+                      {Number(item.isi) > 0 && (
+                        <span>· isi {item.isi} {item.satuan || ''} → <strong style={{ color: 'var(--accent)' }}>{fmt(hargaPerSatuan)}/{item.satuan || 'isi'}</strong></span>
+                      )}
+                    </div>
+
+                    {/* HET dari Bahan Baku */}
+                    {het && (
+                      <div style={{ marginTop: '5px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '9px', fontWeight: '800', letterSpacing: '0.4px', color: 'var(--accent)', background: 'var(--accent-light)', border: '1px solid rgba(79,110,247,0.2)', borderRadius: '5px', padding: '1px 5px' }}>HET</span>
+                        <span style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                          {fmtHet(het.perPack)}/pack
+                          {het.perSatuan != null && (
+                            <> · <strong style={{ color: 'var(--accent)' }}>{fmtHet(het.perSatuan)}</strong>/{het.unit || 'satuan'}</>
+                          )}
+                        </span>
+                        {/* Perbandingan harga diajukan vs HET */}
+                        {hargaPerSatuan != null && het.perSatuan != null && (
+                          <span style={{
+                            fontSize: '10px', fontWeight: '700', padding: '1px 6px', borderRadius: '4px',
+                            background: hargaPerSatuan > het.perSatuan * 1.1 ? '#FEF2F2' : '#ECFDF5',
+                            color: hargaPerSatuan > het.perSatuan * 1.1 ? '#DC2626' : '#10B981',
+                            border: `1px solid ${hargaPerSatuan > het.perSatuan * 1.1 ? '#FECACA' : '#A7F3D0'}`,
+                          }}>
+                            {hargaPerSatuan > het.perSatuan * 1.1
+                              ? `↑ ${Math.round((hargaPerSatuan / het.perSatuan - 1) * 100)}% di atas HET`
+                              : '✓ Sesuai HET'}
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
-                ))}
+                  )
+                })}
                 <div style={{ borderTop: '1px solid var(--border)', marginTop: '8px', paddingTop: '8px', display: 'flex', justifyContent: 'space-between', fontWeight: '800', fontSize: '15px' }}>
                   <span>Total Belanja:</span>
                   <span style={{ color: '#DC2626' }}>{fmt(actionBelanja.total)}</span>
