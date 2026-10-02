@@ -574,7 +574,7 @@ export default function BelanjaPage() {
                   <div>
                     <div style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text)' }}>{item.itemName}</div>
                     <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>
-                      {fmt(item.harga)} × {item.qty} {item.satuan}
+                      {fmt(item.harga)} × {item.qty}
                       {Number(item.isi) > 0 ? ` · ${fmt(Number(item.harga) / Number(item.isi))}/${item.satuan || 'isi'}` : ''}
                     </div>
                   </div>
@@ -684,7 +684,7 @@ export default function BelanjaPage() {
                           {item.items?.map((sub, idx) => (
                             <div key={idx} className="pg-hist-item">
                               <span>
-                                {sub.itemName}{sub.qty > 1 || sub.satuan ? ` · ${sub.qty}${sub.satuan ? ' ' + sub.satuan : ''}` : ''}
+                                {sub.itemName}{sub.qty > 1 ? ` · ${sub.qty}` : ''}
                                 {Number(sub.isi) > 0 && (
                                   <span style={{ color: 'var(--muted)' }}> · {fmt(Number(sub.harga) / Number(sub.isi))}/{sub.satuan || 'isi'}</span>
                                 )}

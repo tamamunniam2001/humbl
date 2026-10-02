@@ -279,7 +279,7 @@ export default function SaldoPage() {
                         <span style={{ fontSize: '11px', color: '#64748B' }}>· {new Date(item.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                       </div>
                       <div style={{ fontSize: '13px', color: '#334155' }}>
-                        {item.items?.map(i => `${i.itemName}${i.qty > 1 || i.satuan ? ' · ' + i.qty + (i.satuan ? ' ' + i.satuan : '') : ''}`).join(', ')}
+                        {item.items?.map(i => `${i.itemName}${i.qty > 1 ? ' · ' + i.qty : ''}`).join(', ')}
                       </div>
                       {item.keterangan && <div style={{ fontSize: '11px', color: '#64748B', marginTop: '2px', fontStyle: 'italic' }}>&quot;{item.keterangan}&quot;</div>}
                     </div>
