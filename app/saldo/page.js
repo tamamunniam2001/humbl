@@ -543,12 +543,9 @@ export default function SaldoPage() {
                       <span style={{ fontWeight: '700', flexShrink: 0 }}>{fmt(item.subtotal)}</span>
                     </div>
 
-                    {/* Baris detail: qty × satuan + harga */}
+                    {/* Baris detail: qty + harga */}
                     <div style={{ fontSize: '11px', color: 'var(--muted)', display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
-                      <span>
-                        {fmt(item.harga)}
-                        {item.qty > 1 ? ` × ${item.qty}${item.satuan ? ' ' + item.satuan : ''}` : (item.satuan ? ` / ${item.satuan}` : '')}
-                      </span>
+                      <span>{fmt(item.harga)}{item.qty > 1 ? ` × ${item.qty}` : ''}</span>
                       {Number(item.isi) > 0 && (
                         <span>· isi {item.isi} {item.satuan || ''} → <strong style={{ color: 'var(--accent)' }}>{fmt(hargaPerSatuan)}/{item.satuan || 'isi'}</strong></span>
                       )}
