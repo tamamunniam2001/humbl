@@ -574,7 +574,12 @@ export default function RekapProdukPage() {
                         : r.name}
                     </td>
                     <td style={{ textAlign: 'center' }}><span className="badge badge-purple">{r.qty}</span></td>
-                    <td style={{ textAlign: 'right', fontWeight: '700', color: 'var(--accent)' }}>{fmt(r.total)}</td>
+                    <td style={{ textAlign: 'right', fontWeight: '700', color: 'var(--accent)' }}>
+                      {fmt(r.total)}
+                      {r.hasDiscount && r.total !== r.subtotal && (
+                        <div style={{ fontSize: '10px', color: 'var(--muted)', fontWeight: '400', textDecoration: 'line-through', marginTop: '1px' }}>{fmt(r.subtotal)}</div>
+                      )}
+                    </td>
                     <td>
                       <div style={{ display: 'flex', gap: '4px' }}>
                         <button className="btn" style={{ background: 'var(--accent-light)', color: 'var(--accent)', border: '1px solid #C7D4F0', padding: '5px 10px', fontSize: '12px' }} onClick={() => openEdit(r)}>Edit</button>
