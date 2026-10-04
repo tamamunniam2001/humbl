@@ -22,6 +22,11 @@ const translations = {
 }
 const t = (key) => translations[key]
 
+// Kill switch real-time self-order. Set NEXT_PUBLIC_SELF_ORDER_SSE=1 lalu redeploy
+// untuk mengaktifkan kembali SSE. Saat nonaktif, koneksi SSE yang menahan instance
+// function tetap hidup lama (biaya Provisioned Memory terbesar di Fluid) tidak dibuka.
+const ENABLE_SELF_ORDER_SSE = process.env.NEXT_PUBLIC_SELF_ORDER_SSE === '1'
+
 export default function KasirPage() {
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
@@ -230,6 +235,7 @@ export default function KasirPage() {
 
   // SSE real-time self-order
   useEffect(() => {
+    if (!ENABLE_SELF_ORDER_SSE) return
     let es
     let reconnectTimer
     function connect() {
