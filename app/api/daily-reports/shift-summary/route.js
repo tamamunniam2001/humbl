@@ -31,7 +31,7 @@ export async function GET(req) {
       where: { status: 'COMPLETED', deletedAt: null, createdAt: { gte: dayRange.gte, lte: dayRange.lte } },
       // originalCreatedAt wajib ikut diambil: shiftForTransaction memakainya
       // untuk mengenali transaksi yang dipindahkan ke shift lain.
-      select: { id: true, invoiceNo: true, total: true, payMethod: true, createdAt: true, originalCreatedAt: true, customerName: true },
+      select: { id: true, invoiceNo: true, total: true, payMethod: true, createdAt: true, originalCreatedAt: true, customerName: true, discount: true, discountAmount: true, tax: true, taxAmount: true },
       orderBy: { createdAt: 'asc' },
     }),
   ])
@@ -43,6 +43,7 @@ export async function GET(req) {
     shift,
     count: owned.length,
     penjualan: owned.reduce((s, tx) => s + tx.total, 0),
+    totalDiscount: owned.reduce((s, tx) => s + (tx.discountAmount || 0), 0),
     cash: sum('CASH'),
     qris: sum('QRIS'),
     transfer: sum('TRANSFER') + sum('NONTUNAI'),

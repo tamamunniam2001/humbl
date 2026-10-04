@@ -4,10 +4,13 @@ import { verifyAuth, adminOnly } from '@/lib/auth'
 
 // Distribusikan Transaction.total (sudah termasuk diskon & pajak) ke masing-masing
 // item secara proporsional berdasarkan subtotal item vs total subtotal transaksi.
+// Kini Transaction.discountAmount tersimpan di DB sehingga hasDiscount lebih akurat.
 // Jika transaksi tidak punya diskon/pajak, hasilnya sama persis dengan subtotal asli.
 function effectiveTotal(itemSubtotal, txTotal, txSubtotalSum) {
   if (!txSubtotalSum || txSubtotalSum === 0) return itemSubtotal
-  return Math.round(itemSubtotal * txTotal / txSubtotalSum)
+  if (txSubtotalSum === txTotal) return itemSubtotal   // tidak ada diskon/pajak
+  // Pakai angka desimal agar sum semua item = txTotal
+  return itemSubtotal * txTotal / txSubtotalSum
 }
 
 export async function GET(req) {
@@ -53,8 +56,8 @@ export async function GET(req) {
 
   // ── Mode monthly summary ──
   if (searchParams.get('monthly') === '1') {
-    const start = new Date(year, 0, 1)
-    const end = new Date(year, 11, 31, 23, 59, 59, 999)
+    const start = new Date(`${year}-01-01T00:00:00.000+07:00`)
+    const end = new Date(`${year}-12-31T23:59:59.999+07:00`)
     const items = await prisma.orderItem.findMany({
       where: { transaction: { status: 'COMPLETED', deletedAt: null, createdAt: { gte: start, lte: end } } },
       select: {

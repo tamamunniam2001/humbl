@@ -113,6 +113,11 @@ model Transaction {
   payMethod    PayMethod   @default(CASH)
   status       TxStatus    @default(COMPLETED)
   servedAt     DateTime?
+  // Diskon dan pajak — disimpan agar bisa ditampilkan kembali di history dan laporan
+  discount     Int         @default(0)  // persen, misal 10 = 10%
+  discountAmount Int       @default(0)  // nominal rupiah
+  tax          Int         @default(0)  // persen
+  taxAmount    Int         @default(0)  // nominal rupiah
   // Waktu asli sebelum open bill dipindahkan ke shift berikutnya (null = belum pernah dipindahkan)
   originalCreatedAt DateTime?
   cashierId    String

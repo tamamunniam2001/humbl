@@ -45,6 +45,10 @@ export async function GET(req) {
       payMethod: true,
       status: true,
       createdAt: true,
+      discount: true,
+      discountAmount: true,
+      tax: true,
+      taxAmount: true,
       cashier: { select: { name: true } },
       items: {
         select: {
@@ -73,10 +77,11 @@ export async function GET(req) {
   const days = pagedDates.map(date => {
     const txs = grouped[date]
     const totalRevenue = txs.reduce((s, t) => s + t.total, 0)
+    const totalDiscount = txs.reduce((s, t) => s + (t.discountAmount || 0), 0)
     const cash = txs.filter(t => t.payMethod === 'CASH').reduce((s, t) => s + t.total, 0)
     const qris = txs.filter(t => t.payMethod === 'QRIS').reduce((s, t) => s + t.total, 0)
     const transfer = txs.filter(t => t.payMethod === 'TRANSFER' || t.payMethod === 'NONTUNAI').reduce((s, t) => s + t.total, 0)
-    return { date, totalRevenue, cash, qris, transfer, count: txs.length, transactions: txs }
+    return { date, totalRevenue, totalDiscount, cash, qris, transfer, count: txs.length, transactions: txs }
   })
 
   return NextResponse.json({ days, totalDays, page, totalPages: Math.ceil(totalDays / limit) })

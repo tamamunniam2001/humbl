@@ -50,6 +50,7 @@ export async function GET(req) {
         select: {
           id: true, invoiceNo: true, customerName: true, note: true, total: true,
           payment: true, change: true, payMethod: true, status: true, servedAt: true, createdAt: true,
+          discount: true, discountAmount: true, tax: true, taxAmount: true,
           cashier: { select: { name: true } },
           items: { select: { id: true, qty: true, price: true, subtotal: true, productId: true, name: true, category: true, product: { select: { name: true, imageUrl: true, category: { select: { name: true } } } } } },
         }
@@ -100,9 +101,13 @@ export async function POST(req) {
         status: payLater ? 'PENDING' : 'COMPLETED',
         customerName: customerName || '',
         note: note || '',
+        discount: Math.round(discount) || 0,
+        discountAmount: Math.round(discountAmount) || 0,
+        tax: Math.round(tax) || 0,
+        taxAmount: Math.round(taxAmount) || 0,
         items: { create: orderItems },
       },
-      select: { id: true, invoiceNo: true, total: true, change: true, payment: true, payMethod: true, status: true, servedAt: true, createdAt: true, customerName: true, note: true },
+      select: { id: true, invoiceNo: true, total: true, change: true, payment: true, payMethod: true, status: true, servedAt: true, createdAt: true, customerName: true, note: true, discount: true, discountAmount: true, tax: true, taxAmount: true },
     })
 
     // Decrement stock + fetch cashier name secara paralel, tidak blocking response
