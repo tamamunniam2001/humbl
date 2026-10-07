@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { verifyAuth, adminOnly } from '@/lib/auth'
-import { wibDayRange } from '@/lib/wib'
+import { wibDayRange, wibDateKey } from '@/lib/wib'
 
 // Hanya ADMIN boleh memakai endpoint ini (rekonstruksi transaksi, mis. setelah restore DB).
 // Endpoint POST transaksi biasa (/api/transactions) tetap terbuka untuk kasir dan tidak
@@ -152,6 +152,65 @@ export async function POST(req) {
       }
       return trx
     })
+
+    // Otomatis masukkan / perbarui laporan harian (DailyReport) pada tanggal transaksi ini
+    // dengan status draft / belum di-closing kasir manual
+    try {
+      const dateKey = wibDateKey(when)
+      const dayRange = wibDayRange(dateKey)
+      const dayReports = await prisma.dailyReport.findMany({
+        where: { date: { gte: dayRange.gte, lte: dayRange.lte } },
+      })
+
+      // Jika belum ada laporan harian pada tanggal ini, buatkan draft SHIFT_1
+      if (dayReports.length === 0) {
+        const prevReport = await prisma.dailyReport.findFirst({
+          where: { date: { lt: dayRange.gte } },
+          orderBy: { date: 'desc' },
+        })
+        const totPengeluaranOf = (r) => (r.pengeluaran || []).reduce((s, p) => s + (Number(p.harga) || 0) * (Number(p.qty) || 1), 0)
+        const kasAwal = prevReport ? ((prevReport.kasAwal || 0) + (prevReport.uangDisetor || 0) - totPengeluaranOf(prevReport)) : 0
+
+        const isCash = payMethod === 'CASH'
+        const isQris = payMethod === 'QRIS'
+        const isTf = payMethod === 'TRANSFER' || payMethod === 'NONTUNAI'
+
+        await prisma.dailyReport.create({
+          data: {
+            date: when,
+            shift: 'SHIFT_1',
+            kasAwal,
+            penjualan: total,
+            uangDisetor: isCash ? total : 0,
+            qris: isQris ? total : 0,
+            transfer: isTf ? total : 0,
+            pengeluaran: [],
+            piutang: [],
+            catatan: 'Otomatis dari input transaksi manual',
+            closerName: 'Admin (Transaksi Manual)',
+            cashierId: user.id,
+          },
+        })
+      } else {
+        // Jika sudah ada laporan harian, tambahkan penjualan ke shift pertama atau shift terkait
+        const targetReport = dayReports[0]
+        const isCash = payMethod === 'CASH'
+        const isQris = payMethod === 'QRIS'
+        const isTf = payMethod === 'TRANSFER' || payMethod === 'NONTUNAI'
+
+        await prisma.dailyReport.update({
+          where: { id: targetReport.id },
+          data: {
+            penjualan: { increment: total },
+            uangDisetor: isCash ? { increment: total } : undefined,
+            qris: isQris ? { increment: total } : undefined,
+            transfer: isTf ? { increment: total } : undefined,
+          },
+        })
+      }
+    } catch (e) {
+      console.error('[manual-transaction] Auto-sync daily report failed:', e)
+    }
 
     return NextResponse.json(
       { ...created, subtotal, items: orderItems, stockDecremented: !!decrementStock },
