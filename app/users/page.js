@@ -24,7 +24,6 @@ const ALL_PAGES = [
   { path: '/rekap-bahan', label: 'Rekap Bahan' },
   { path: '/rekap-absensi', label: 'Rekap Absensi' },
   { path: '/rekap-pengeluaran', label: 'Rekap Pengeluaran' },
-  { path: '/self-order-settings', label: 'Pengaturan Self Order' },
   { path: '/absensi-settings', label: 'Pengaturan Absensi' },
   { path: '/expense-settings', label: 'Item Pengeluaran' },
   { path: '/receipt-settings', label: 'Pengaturan Struk' },

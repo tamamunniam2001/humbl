@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "check:db": "node --env-file=.env scripts/check-db.cjs",
+    "sync:db": "powershell -ExecutionPolicy Bypass -File scripts/sync-db.ps1",
     "wa": "node server-wa.js",
     "postinstall": "prisma generate"
   },

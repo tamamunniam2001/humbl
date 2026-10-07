@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import Sidebar from '@/components/Sidebar'
 import api from '@/lib/api'
@@ -22,11 +22,6 @@ const translations = {
 }
 const t = (key) => translations[key]
 
-// Kill switch real-time self-order. Set NEXT_PUBLIC_SELF_ORDER_SSE=1 lalu redeploy
-// untuk mengaktifkan kembali SSE. Saat nonaktif, koneksi SSE yang menahan instance
-// function tetap hidup lama (biaya Provisioned Memory terbesar di Fluid) tidak dibuka.
-const ENABLE_SELF_ORDER_SSE = process.env.NEXT_PUBLIC_SELF_ORDER_SSE === '1'
-
 export default function KasirPage() {
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
@@ -46,64 +41,9 @@ export default function KasirPage() {
   const [orders, setOrders] = useState([])
   const [ordersExpanded, setOrdersExpanded] = useState(true)
   const [selectedOrder, setSelectedOrder] = useState(null)
-  const [paidOrders, setPaidOrders] = useState([])
-  const [paidOrderAlert, setPaidOrderAlert] = useState(null)
-  const notifIntervalRef = useRef(null)
   const [trashOpen, setTrashOpen] = useState(false)
   const [trashOrders, setTrashOrders] = useState([])
   const [trashLoading, setTrashLoading] = useState(false)
-
-  const playNotif = useCallback(() => {
-    try {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)()
-      const gain = ctx.createGain()
-      gain.connect(ctx.destination)
-
-      // Ringtone melodi — pola 8 nada (mirip classic phone ringtone)
-      const notes = [
-        [1318, 0.00], // E6
-        [1174, 0.12], // D6
-        [740,  0.24], // F#5
-        [830,  0.36], // Ab5
-        [1108, 0.48], // C#6
-        [987,  0.60], // B5
-        [622,  0.72], // Eb5
-        [698,  0.84], // F5
-      ]
-      notes.forEach(([freq, delay]) => {
-        const osc = ctx.createOscillator()
-        osc.connect(gain)
-        osc.type = 'sine'
-        osc.frequency.setValueAtTime(freq, ctx.currentTime + delay)
-        gain.gain.setValueAtTime(0.9, ctx.currentTime + delay)
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.11)
-        osc.start(ctx.currentTime + delay)
-        osc.stop(ctx.currentTime + delay + 0.11)
-      })
-    } catch {}
-  }, [])
-
-  const startNotifLoop = useCallback(() => {
-    if (notifIntervalRef.current) clearInterval(notifIntervalRef.current)
-    playNotif()
-    notifIntervalRef.current = setInterval(playNotif, 3000)
-  }, [playNotif])
-
-  const stopNotifLoop = useCallback(() => {
-    if (notifIntervalRef.current) {
-      clearInterval(notifIntervalRef.current)
-      notifIntervalRef.current = null
-    }
-  }, [])
-
-  // Restart loop jika masih ada paid alert yang belum dikonfirmasi
-  const restartIfNeeded = useCallback((remainingPaidOrders) => {
-    if (remainingPaidOrders.length > 0) startNotifLoop()
-    else stopNotifLoop()
-  }, [startNotifLoop, stopNotifLoop])
-
-  // Bersihkan saat unmount
-  useEffect(() => () => stopNotifLoop(), [stopNotifLoop])
 
   // Sync status printer
   useEffect(() => {
@@ -117,9 +57,13 @@ export default function KasirPage() {
       setPrinter({ connected: false, name: null })
       return
     }
+    // Panggil connectPrinter() LANGSUNG di dalam handler klik (tanpa await
+    // di antaranya) supaya navigator.bluetooth.requestDevice() masih
+    // melihat "user gesture" yang aktif.
+    const pending = connectPrinter()
     setConnecting(true)
     try {
-      const name = await connectPrinter()
+      const name = await pending
       setPrinter({ connected: true, name })
     } catch (e) {
       alert('Gagal connect printer: ' + e.message)
@@ -210,13 +154,9 @@ export default function KasirPage() {
       const endOfDay = new Date(`${todayWIB}T23:59:59.999+07:00`)
       const res = await api.get(`/transactions?slim=1&all=1&from=${todayStart.toISOString()}&to=${endOfDay.toISOString()}`)
       const incoming = res.data.transactions || []
-      const incomingIds = new Set(incoming.map((o) => o.id))
       setOrders((prev) => {
         const prevMap = Object.fromEntries(prev.map((o) => [o.id, o]))
-        // Pertahankan self-order (yang tidak ada di transactions)
-        const selfOrders = prev.filter((o) => !incomingIds.has(o.id) && o.orderNo)
-        const merged = incoming.map((o) => pendingServed.has(o.id) ? { ...o, servedAt: prevMap[o.id]?.servedAt } : o)
-        return [...selfOrders, ...merged]
+        return incoming.map((o) => pendingServed.has(o.id) ? { ...o, servedAt: prevMap[o.id]?.servedAt } : o)
       })
     } catch { }
   }, [pendingServed])
@@ -228,62 +168,10 @@ export default function KasirPage() {
   }, [load, loadOrders, pathname])
 
   useEffect(() => {
-    const tOrders = setInterval(() => loadOrders(), 5000)
-    const tProducts = setInterval(() => load(true), 300000)
+    const tOrders = setInterval(() => { if (!document.hidden) loadOrders() }, 15000)
+    const tProducts = setInterval(() => { if (!document.hidden) load(true) }, 300000)
     return () => { clearInterval(tOrders); clearInterval(tProducts) }
   }, [load, loadOrders])
-
-  // SSE real-time self-order
-  useEffect(() => {
-    if (!ENABLE_SELF_ORDER_SSE) return
-    let es
-    let reconnectTimer
-    function connect() {
-      es = new EventSource('/api/self-orders/stream')
-      es.onmessage = (e) => {
-        try {
-          const data = JSON.parse(e.data)
-          if (data.type === 'PAID_ORDERS' && data.orders?.length) {
-            setPaidOrders(prev => {
-              const ids = new Set(prev.map(o => o.id))
-              const newOnes = data.orders.filter(o => !ids.has(o.id))
-              if (!newOnes.length) return prev
-              startNotifLoop()
-              setPaidOrderAlert(newOnes[0])
-              // Masukkan ke list card order hari ini
-              setOrders(prevOrders => {
-                const existingIds = new Set(prevOrders.map(o => o.id))
-                const toAdd = newOnes
-                  .filter(o => !existingIds.has(o.id))
-                  .map(o => ({
-                    ...o,
-                    invoiceNo: o.orderNo,
-                    // Jika ada dokuInvoiceNo berarti bayar via QRIS, selain itu CASH
-                    payMethod: o.dokuInvoiceNo ? 'QRIS' : 'CASH',
-                    servedAt: o.servedAt || null,
-                  }))
-                if (!toAdd.length) return prevOrders
-                return [...toAdd, ...prevOrders]
-              })
-              return [...newOnes, ...prev]
-            })
-          }
-        } catch {}
-      }
-      es.onerror = () => { es.close(); reconnectTimer = setTimeout(connect, 5000) }
-    }
-    connect()
-    return () => { es?.close(); clearTimeout(reconnectTimer) }
-  }, [])
-
-  function dismissPaidOrder(id) {
-    setPaidOrders(prev => {
-      const remaining = prev.filter(o => o.id !== id)
-      restartIfNeeded(remaining)
-      return remaining
-    })
-    if (paidOrderAlert?.id === id) setPaidOrderAlert(null)
-  }
 
   function toggleServed(orderId, currentServedAt) {
     const newServedAt = currentServedAt ? null : new Date().toISOString()
@@ -377,29 +265,6 @@ export default function KasirPage() {
 
   return (
     <div className="page">
-      {/* Alert popup order sudah dibayar */}
-      {paidOrderAlert && (
-        <div style={{ position: 'fixed', top: '16px', right: '16px', zIndex: 9999, width: '320px', background: '#fff', borderRadius: '16px', boxShadow: '0 8px 40px rgba(0,0,0,0.18)', border: '2px solid #059669', overflow: 'hidden' }}>
-          <div style={{ background: 'linear-gradient(135deg,#059669,#047857)', padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ color: '#fff' }}>
-              <div style={{ fontSize: '13px', fontWeight: '800' }}>Pembayaran Diterima!</div>
-              <div style={{ fontSize: '11px', opacity: 0.85 }}>#{paidOrderAlert.orderNo}</div>
-            </div>
-            <button onClick={() => dismissPaidOrder(paidOrderAlert.id)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '8px', color: '#fff', cursor: 'pointer', padding: '4px 8px', fontSize: '16px' }}>×</button>
-          </div>
-          <div style={{ padding: '12px 16px' }}>
-            <div style={{ fontSize: '13px', fontWeight: '700', color: '#1A0F00', marginBottom: '4px' }}>
-              {paidOrderAlert.customerName || 'Pelanggan'}{paidOrderAlert.tableNo ? ` · Meja ${paidOrderAlert.tableNo}` : ''}
-            </div>
-            <div style={{ fontSize: '12px', color: '#6B7280', marginBottom: '10px' }}>
-              {paidOrderAlert.items?.length} item · Rp {fmt(paidOrderAlert.total)}
-            </div>
-            <button onClick={() => dismissPaidOrder(paidOrderAlert.id)}
-              style={{ width: '100%', padding: '8px', borderRadius: '9px', border: 'none', background: 'linear-gradient(135deg,#059669,#047857)', color: '#fff', fontSize: '12px', fontWeight: '800', cursor: 'pointer', fontFamily: 'inherit' }}>✓ Siap Diproses</button>
-          </div>
-        </div>
-      )}
-
       <Sidebar />
       <main className="main" style={{ overflow: 'hidden', position: 'relative' }}>
         {/* Topbar */}
@@ -599,13 +464,6 @@ export default function KasirPage() {
               </div>
             )}
           </div>
-        </div>
-
-        {/* Tombol link self order */}
-        <div style={{ position: 'fixed', bottom: '80px', right: '20px', zIndex: 100 }}>
-          <a href="/self-order" target="_blank" rel="noreferrer" title="Buka halaman Self Order" style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 14px', borderRadius: '20px', background: 'linear-gradient(135deg,#C8935A,#A0682F)', color: '#fff', textDecoration: 'none', fontSize: '12px', fontWeight: '700', boxShadow: '0 4px 16px rgba(200,147,90,0.4)' }}>
-            🛎️ Self Order
-          </a>
         </div>
 
         {/* Cart Overlay */}
