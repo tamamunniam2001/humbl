@@ -73,6 +73,23 @@ export default function LaporanHarianPage() {
     finally { setDeletingDay(null) }
   }
 
+  const [syncingDay, setSyncingDay] = useState(null)
+
+  async function handleSyncDay(dayKey, dayReports) {
+    const tgl = fmtDate(dayReports[0].date)
+    if (!confirm(`Sinkronkan ulang laporan tanggal ${tgl} dengan transaksi database (termasuk transaksi manual)?\n\nPenjualan, Cash, QRIS, Transfer, Kas Awal, dan Kas Akhir akan disesuaikan otomatis.`)) return
+    setSyncingDay(dayKey)
+    try {
+      const res = await api.post('/daily-reports/sync-transactions', { date: dayKey, syncForwardKas: true })
+      alert(res.data.message || 'Berhasil disinkronkan!')
+      await load()
+    } catch (e) {
+      alert(e.response?.data?.message || 'Gagal menyinkronkan laporan')
+    } finally {
+      setSyncingDay(null)
+    }
+  }
+
   const totalPengeluaran = (r) => (r.pengeluaran || []).reduce((s, p) => s + (p.harga * p.qty), 0)
   const kasAkhir = (r) => (r.kasAwal || 0) + (r.uangDisetor || 0) - totalPengeluaran(r)
 
@@ -94,6 +111,24 @@ export default function LaporanHarianPage() {
             <div className="topbar-title">Laporan Harian</div>
             <div className="topbar-sub">Ringkasan closing kasir harian</div>
           </div>
+          {isAdmin && (
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <button className="btn" style={{ background: '#E8F7F1', color: '#2A9D6E', border: '1px solid #A7DFC8', fontSize: '12px', fontWeight: '700', padding: '6px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+                onClick={() => {
+                  const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jakarta' })
+                  const targetDate = prompt('Masukkan tanggal yang ingin disinkronkan (YYYY-MM-DD):', todayStr)
+                  if (!targetDate) return
+                  if (!/^\d{4}-\d{2}-\d{2}$/.test(targetDate)) return alert('Format tanggal tidak valid. Gunakan format YYYY-MM-DD')
+                  handleSyncDay(targetDate, [{ date: new Date(`${targetDate}T12:00:00+07:00`) }])
+                }}
+                disabled={!!syncingDay}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ animation: syncingDay ? 'spin 1s linear infinite' : 'none' }}>
+                  <path d="M21 12a9 9 0 0 1-9 9m0-18a9 9 0 0 1 9 9M3 12a9 9 0 0 1 9-9"/><polyline points="16 12 21 12 21 7"/>
+                </svg>
+                {syncingDay ? 'Menyinkronkan...' : 'Sinkronkan Transaksi Manual'}
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="content">
@@ -160,6 +195,14 @@ export default function LaporanHarianPage() {
                           <td style={{ ...tdS, color: 'var(--red)' }}>{fmt(sumPengeluaran)}</td>
                           <td style={{ ...tdS, fontWeight: '700', color: sumKasAkhir >= 0 ? 'var(--green)' : 'var(--red)' }}>{fmt(sumKasAkhir)}</td>
                           <td style={tdS}>
+                            {isAdmin && (
+                              <button className="btn" style={{ padding: '3px 8px', fontSize: '10px', background: '#E8F7F1', color: '#2A9D6E', border: '1px solid #A7DFC8', marginRight: '4px' }}
+                                disabled={syncingDay === dayKey}
+                                title="Sinkronkan ulang penjualan, cash, kas awal & kas akhir dengan transaksi database"
+                                onClick={e => { e.stopPropagation(); handleSyncDay(dayKey, dayReports) }}>
+                                {syncingDay === dayKey ? 'Menyinkronkan...' : '🔄 Sinkron'}
+                              </button>
+                            )}
                             {(() => {
                               const allShiftKeys = ['SHIFT_1','SHIFT_2','SHIFT_3']
                               const doneShifts = dayReports.map(r => r.shift).filter(Boolean)
