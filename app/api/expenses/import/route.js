@@ -69,10 +69,12 @@ export async function POST(req) {
       errors.push(`Baris ${rowNum}: Kolom tidak lengkap (${cols.length} kolom)`); skipped++; continue
     }
 
-    // Format: Tanggal, Kode, Kategori, Nama, Keterangan, Satuan, Harga, Qty
-    const [dateStr, codeRaw, kategoriRaw, nameRaw, keterangan, satuanRaw, hargaStr, qtyStr] = cols
+    // Format: Tanggal, Kode, Kategori, Nama, Keterangan, Satuan, Harga, Isi, Qty
+    const [dateStr, codeRaw, kategoriRaw, nameRaw, keterangan, satuanRaw, hargaStr, isiStr, qtyStr] = cols
     const date = parseDate(dateStr)
     const harga = parseFloat(String(hargaStr || '0').replace(/[^0-9.,]/g, '').replace(',', '.')) || 0
+    const isiRaw = parseFloat(String(isiStr || '').replace(/[^0-9.,]/g, '').replace(',', '.'))
+    const isi = isNaN(isiRaw) || isiRaw <= 0 ? null : isiRaw
     const qty = parseFloat(String(qtyStr || '1').replace(/[^0-9.,]/g, '').replace(',', '.')) || 1
     const codeStr = (codeRaw?.trim() === '-' || !codeRaw?.trim()) ? '' : codeRaw.trim()
 
@@ -108,7 +110,7 @@ export async function POST(req) {
 
     const dateKey = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`
     if (!byDate[dateKey]) byDate[dateKey] = []
-    byDate[dateKey].push({ expenseItemId, name, category, keterangan: keterangan || '', satuan, harga, qty })
+    byDate[dateKey].push({ expenseItemId, name, category, keterangan: keterangan || '', satuan, harga, isi, qty })
   }
 
   // Create one Expense per date
@@ -116,7 +118,7 @@ export async function POST(req) {
     const details = items.map(i => ({
       expenseItemId: i.expenseItemId,
       name: i.name, category: i.category, keterangan: i.keterangan, satuan: i.satuan,
-      harga: i.harga, qty: i.qty, subtotal: i.harga * i.qty,
+      harga: i.harga, isi: i.isi ?? null, qty: i.qty, subtotal: i.harga * i.qty,
     }))
     const total = details.reduce((s, d) => s + d.subtotal, 0)
     try {

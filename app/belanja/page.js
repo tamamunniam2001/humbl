@@ -369,11 +369,12 @@ export default function BelanjaPage() {
   }
 
   function downloadTemplate() {
-    const header = 'Tanggal,Kode,Kategori,Nama,Keterangan,Satuan,Harga,Qty'
+    const header = 'Tanggal,Kode,Kategori,Nama,Keterangan,Satuan,Harga,Isi,Qty'
     const contoh = [
-      '23/04/2025,EXP-001,,,,,50000,2',
-      '23/04/2025,,Bahan Baku,Kopi Robusta,,kg,120000,1',
-      '24/04/2025,,Operasional,Listrik,Bulan April,,350000,1',
+      '23/04/2025,EXP-001,,,,,50000,,2',
+      '23/04/2025,,Bahan Baku,Kopi Robusta,,kg,120000,,1',
+      '23/04/2025,,Bahan Baku,Susu UHT,Full Cream,ml,18000,1000,6',
+      '24/04/2025,,Operasional,Listrik,Bulan April,,350000,,1',
     ].join('\n')
     const blob = new Blob(['\uFEFF' + header + '\n' + contoh], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -1067,6 +1068,23 @@ export default function BelanjaPage() {
                 <input className="input" placeholder="Nama barang atau jasa..." value={manual.name}
                   onChange={e => setManual({ ...manual, name: e.target.value })} required autoFocus />
               </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <label className="label">Kategori <span style={{ color: 'var(--muted)', fontWeight: '400' }}>(opsional)</span></label>
+                  <input className="input" placeholder="Operasional, Bahan..." value={manual.kategori}
+                    onChange={e => setManual({ ...manual, kategori: e.target.value })}
+                    list="belanja-manual-cat-list" />
+                  <datalist id="belanja-manual-cat-list">
+                    {expenseCategories.map(c => <option key={c} value={c} />)}
+                  </datalist>
+                </div>
+                <div>
+                  <label className="label">Keterangan <span style={{ color: 'var(--muted)', fontWeight: '400' }}>(opsional)</span></label>
+                  <input className="input" placeholder="Merek, toko, dll..." value={manual.keterangan}
+                    onChange={e => setManual({ ...manual, keterangan: e.target.value })} />
+                </div>
+              </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <label className="label">Harga</label>
