@@ -396,7 +396,9 @@ export default function BelanjaPage() {
     try {
       const fd = new FormData()
       fd.append('file', file)
-      const res = await api.post('/expenses/import', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      // Hasil import menjadi pengajuan belanja (PENDING), bukan langsung masuk Rekap Pengeluaran.
+      // Baru dicatat sebagai pengeluaran setelah di-ACC di tab Riwayat Pengajuan.
+      const res = await api.post('/operational/belanja/import', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
       clearInterval(progressInterval)
       setImportProgress(100)
       setTimeout(() => { setImportResult(res.data); setImporting(false); setImportProgress(0) }, 400)
@@ -745,6 +747,7 @@ export default function BelanjaPage() {
               </button>
               <input ref={fileRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={handleImport} />
               <button className="btn" style={{ background: '#F0FDF4', color: '#10B981', border: '1px solid #A7F3D0' }}
+                title="Hasil import menjadi pengajuan (PENDING) — masuk Rekap Pengeluaran setelah di-ACC"
                 onClick={() => fileRef.current.click()} disabled={importing}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                 Import CSV
@@ -1025,11 +1028,18 @@ export default function BelanjaPage() {
                 {importResult.error
                   ? <div style={{ fontSize: '13px', fontWeight: '600', color: '#EF4444' }}>{importResult.error}</div>
                   : <>
-                      <div style={{ fontSize: '13px', fontWeight: '700', color: '#10B981', marginBottom: '4px' }}>Import selesai</div>
-                      <div style={{ fontSize: '12px', color: '#4A5578', display: 'flex', gap: '16px', marginBottom: importResult.errors?.length > 0 ? '8px' : '0' }}>
-                        <span>✚ <b>{importResult.created}</b> berhasil</span>
+                      <div style={{ fontSize: '13px', fontWeight: '700', color: '#10B981', marginBottom: '4px' }}>Import selesai — menunggu ACC</div>
+                      <div style={{ fontSize: '12px', color: '#4A5578', display: 'flex', gap: '16px', marginBottom: '4px' }}>
+                        <span>✚ <b>{importResult.created}</b> item</span>
                         <span>⊘ <b>{importResult.skipped}</b> gagal</span>
                       </div>
+                      <div style={{ fontSize: '12px', color: '#4A5578', marginBottom: importResult.errors?.length > 0 ? '8px' : '0' }}>
+                        <b>{importResult.pengajuan ?? 0}</b> pengajuan dibuat · belum masuk Rekap Pengeluaran sampai di-ACC
+                      </div>
+                      <button type="button" onClick={() => { setImportResult(null); setActiveTab('HISTORY') }}
+                        style={{ background: '#DCFCE7', border: '1px solid #86EFAC', color: '#15803D', borderRadius: '8px', padding: '6px 10px', fontSize: '12px', fontWeight: '700', cursor: 'pointer', marginBottom: importResult.errors?.length > 0 ? '8px' : '0' }}>
+                        Lihat Riwayat Pengajuan
+                      </button>
                       {importResult.debug?.length > 0 && (
                         <div style={{ fontSize: '11px', color: '#6B7280', marginBottom: '4px' }}>Tanggal diproses: {importResult.debug.join(', ')}</div>
                       )}
