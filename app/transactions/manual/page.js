@@ -196,7 +196,10 @@ export default function ManualTransactionPage() {
             <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '8px' }}>
               <input style={inp} placeholder="Nama item" value={manualName} onChange={(e) => setManualName(e.target.value)} />
               <input style={inp} type="number" placeholder="Harga" value={manualPrice} onChange={(e) => setManualPrice(e.target.value)} />
-              <input style={inp} placeholder="Kategori" value={manualCategory} onChange={(e) => setManualCategory(e.target.value)} />
+              <select style={inp} value={manualCategory} onChange={(e) => setManualCategory(e.target.value)}>
+                <option value="">Pilih kategori</option>
+                {expenseCategories.map((c) => (<option key={c.id} value={c.name}>{c.name}</option>))}
+              </select>
               <button onClick={addManual} style={{ padding: '9px 14px', borderRadius: '9px', border: '1px solid var(--border)', background: '#F1F5F9', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>Tambah</button>
             </div>
           </div>
