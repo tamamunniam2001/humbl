@@ -9,35 +9,48 @@ const TABS = [
   { key: 'CLOSING_2', label: 'Shift 3',  jam: '13.00 – 18.00' },
  ]
 
+const TYPE_LABEL = {
+  OPENING: 'Shift 1',
+  CLOSING_1: 'Shift 2 (07.00–13.00)',
+  CLOSING_2: 'Shift 3 (13.00–18.00)',
+}
+
+const fmtTime = (d) => new Date(d).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
+const fmtDate = (d) => new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
+
 export default function AbsensiPage() {
   const [tab, setTab] = useState('OPENING')
   const [employees, setEmployees] = useState([])
   const [sopItems, setSopItems] = useState([])
-  
+  const [activeRecords, setActiveRecords] = useState([])
+
   const [employeeId, setEmployeeId] = useState('')
   const [helperId, setHelperId] = useState('')
-  const [kasAwal, setKasAwal] = useState('')
   const [checklist, setChecklist] = useState({})
   const [saving, setSaving] = useState(false)
   const [savedData, setSavedData] = useState(null)
+
+  function loadActive() {
+    api.get('/attendance/active').then(r => setActiveRecords(Array.isArray(r.data) ? r.data : [])).catch(() => {})
+  }
 
   useEffect(() => {
     Promise.all([api.get('/admin/employees'), api.get('/admin/sop')]).then(([e, s]) => {
       setEmployees(e.data.filter(x => x.isActive))
       setSopItems(s.data)
     }).catch(() => {})
+    loadActive()
   }, [])
 
   const filtered = sopItems.filter(s => s.type === tab)
   const activeTab = TABS.find(t => t.key === tab)
-  const isOpening = tab === 'OPENING'
 
   function toggleCheck(id) {
     setChecklist(prev => ({ ...prev, [id]: !prev[id] }))
   }
 
   function reset() {
-    setEmployeeId(''); setHelperId(''); setKasAwal(''); setChecklist({})
+    setEmployeeId(''); setHelperId(''); setChecklist({})
   }
 
   async function handleSave() {
@@ -46,7 +59,7 @@ export default function AbsensiPage() {
     try {
       await api.post('/attendance', {
         employeeId, helperId: helperId || null, type: tab,
-        kasAwal: isOpening ? (Number(kasAwal) || 0) : 0,
+        kasAwal: 0,
         checklist: filtered.map(s => ({ id: s.id, text: s.text, checked: !!checklist[s.id] })),
       })
       setSavedData({
@@ -55,9 +68,9 @@ export default function AbsensiPage() {
         jam: activeTab.jam,
         staff1: employees.find(e => e.id === employeeId)?.name || '-',
         staff2: helperId ? employees.find(e => e.id === helperId)?.name : null,
-        kasAwal: isOpening ? (Number(kasAwal) || 0) : null,
         checklist: filtered.map(s => ({ text: s.text, checked: !!checklist[s.id] })),
       })
+      loadActive()
     } catch (e) {
       alert(e.response?.data?.message || 'Gagal menyimpan absensi')
     } finally { setSaving(false) }
@@ -74,6 +87,49 @@ export default function AbsensiPage() {
 
         <div className="content">
           <div style={{ maxWidth: '560px', margin: '0 auto' }}>
+
+            {/* Panel Absensi Berjalan */}
+            {activeRecords.length > 0 && (
+              <div className="card" style={{ padding: '18px 20px', marginBottom: '20px', borderLeft: '4px solid #10B981' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                  <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', background: '#10B981', boxShadow: '0 0 0 3px rgba(16,185,129,0.25)', animation: 'pulse 1.5s infinite' }} />
+                  <div style={{ fontSize: '13px', fontWeight: '800', color: '#047857' }}>Absensi Sedang Berjalan</div>
+                  <span style={{ marginLeft: 'auto', fontSize: '11px', fontWeight: '700', background: '#ECFDF5', color: '#047857', padding: '2px 10px', borderRadius: '20px', border: '1px solid #A7F3D0' }}>
+                    {activeRecords.length} aktif
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {activeRecords.map(r => {
+                    const checklist = Array.isArray(r.checklist) ? r.checklist : []
+                    const done = checklist.filter(c => c.checked).length
+                    return (
+                      <div key={r.id} style={{ background: '#F0FDF4', border: '1px solid #A7F3D0', borderRadius: '10px', padding: '12px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                        <div>
+                          <div style={{ fontWeight: '700', fontSize: '13px', color: 'var(--text)' }}>
+                            {r.employee?.name || '-'}
+                            {r.helperName && <span style={{ color: 'var(--muted)', fontWeight: '400' }}> + {r.helperName}</span>}
+                          </div>
+                          <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '3px' }}>
+                            {TYPE_LABEL[r.type] || r.type} · Mulai {fmtTime(r.date)}, {fmtDate(r.date)}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+                          {checklist.length > 0 && (
+                            <span style={{ fontSize: '11px', fontWeight: '700', color: '#047857', background: '#ECFDF5', padding: '3px 10px', borderRadius: '20px', border: '1px solid #A7F3D0' }}>
+                              ✓ {done}/{checklist.length} SOP
+                            </span>
+                          )}
+                          <span style={{ fontSize: '11px', fontWeight: '700', background: '#FEF3C7', color: '#B45309', padding: '3px 10px', borderRadius: '20px', border: '1px solid #FDE68A' }}>
+                            Aktif
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                <style>{`@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }`}</style>
+              </div>
+            )}
 
             {/* Tab */}
             <div style={{ display: 'flex', background: 'var(--surface2)', borderRadius: '12px', padding: '4px', marginBottom: '24px', border: '1px solid var(--border)', gap: '2px' }}>
@@ -109,24 +165,11 @@ export default function AbsensiPage() {
                 </select>
               </div>
 
-              {/* Kas Awal — hanya Opening */}
-              {isOpening && (
-                <div>
-                  <label className="label">Kas Awal di Laci Kasir</label>
-                  <div style={{ position: 'relative' }}>
-                    <span style={{ position: 'absolute', left: '13px', top: '50%', transform: 'translateY(-50%)', fontSize: '13px', fontWeight: '600', color: 'var(--muted)' }}>Rp</span>
-                    <input className="input" type="number" placeholder="0" value={kasAwal}
-                      onChange={e => setKasAwal(e.target.value)}
-                      style={{ paddingLeft: '40px' }} />
-                  </div>
-                </div>
-              )}
-
               {/* Checklist SOP */}
               <div>
                 <label className="label">
                   Checklist SOP{' '}
-                  <span style={{ color: isOpening ? 'var(--accent)' : 'var(--red)', fontWeight: '700' }}>
+                  <span style={{ color: tab === 'OPENING' ? 'var(--accent)' : 'var(--red)', fontWeight: '700' }}>
                     {activeTab.label}{activeTab.jam ? ` (${activeTab.jam})` : ''}
                   </span>
                 </label>
@@ -189,8 +232,8 @@ export default function AbsensiPage() {
             {/* Body */}
             <div style={{ flex: 1, padding: '20px 28px', display: 'flex', flexDirection: 'column', gap: '16px', overflow: 'hidden' }}>
 
-              {/* Info Staff + Kas Awal */}
-              <div style={{ display: 'grid', gridTemplateColumns: savedData.kasAwal !== null ? '1fr 1fr 1fr' : savedData.staff2 ? '1fr 1fr' : '1fr', gap: '12px', flexShrink: 0 }}>
+              {/* Info Staff */}
+              <div style={{ display: 'grid', gridTemplateColumns: savedData.staff2 ? '1fr 1fr' : '1fr', gap: '12px', flexShrink: 0 }}>
                 <div style={{ background: 'var(--accent-light)', borderRadius: '10px', padding: '14px 16px', border: '1px solid #C7D4F0' }}>
                   <div style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '5px', fontWeight: '700', letterSpacing: '0.5px' }}>STAFF 1</div>
                   <div style={{ fontSize: '15px', fontWeight: '700', color: 'var(--accent)' }}>{savedData.staff1}</div>
@@ -199,12 +242,6 @@ export default function AbsensiPage() {
                   <div style={{ background: 'var(--surface2)', borderRadius: '10px', padding: '14px 16px', border: '1px solid var(--border)' }}>
                     <div style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '5px', fontWeight: '700', letterSpacing: '0.5px' }}>STAFF 2</div>
                     <div style={{ fontSize: '15px', fontWeight: '700', color: 'var(--text)' }}>{savedData.staff2}</div>
-                  </div>
-                )}
-                {savedData.kasAwal !== null && (
-                  <div style={{ background: 'var(--green-light)', borderRadius: '10px', padding: '14px 16px', border: '1px solid #A7DFC8' }}>
-                    <div style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '5px', fontWeight: '700', letterSpacing: '0.5px' }}>KAS AWAL</div>
-                    <div style={{ fontSize: '15px', fontWeight: '800', color: 'var(--green)' }}>Rp {Number(savedData.kasAwal).toLocaleString('id-ID')}</div>
                   </div>
                 )}
               </div>
