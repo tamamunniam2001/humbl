@@ -66,6 +66,20 @@ export default function ManualTransactionPage() {
     api.get('/products?slim=1').then((r) => setProducts(Array.isArray(r.data) ? r.data : [])).catch(() => {})
   }, [isAdmin])
 
+  // Fetch expense categories for manual entry dropdown
+  useEffect(() => {
+    if (!isAdmin) return
+    api.get('/admin/expense-categories')
+      .then((r) => {
+        const data = Array.isArray(r.data) ? r.data : []
+        const normalized = data.map((c) =>
+          typeof c === 'object' && c !== null ? { id: c.id ?? c.name, name: c.name ?? c.id } : { id: c, name: c }
+        )
+        setExpenseCategories(normalized)
+      })
+      .catch(() => setExpenseCategories([]))
+  }, [isAdmin])
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return products.slice(0, 8)
