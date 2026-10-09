@@ -18,6 +18,16 @@ const TYPE_LABEL = {
 const fmtTime = (d) => new Date(d).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })
 const fmtDate = (d) => new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
 
+// Timer kerja: selisih menit/jam dari waktu mulai absensi (HH:MM:SS)
+const fmtDuration = (start, end) => {
+  if (!start) return '00:00:00'
+  const totalSeconds = Math.max(0, Math.floor((new Date(end ?? Date.now()).getTime() - new Date(start).getTime()) / 1000))
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+}
+
 export default function AbsensiPage() {
   const [tab, setTab] = useState('OPENING')
   const [employees, setEmployees] = useState([])
@@ -29,6 +39,8 @@ export default function AbsensiPage() {
   const [checklist, setChecklist] = useState({})
   const [saving, setSaving] = useState(false)
   const [savedData, setSavedData] = useState(null)
+  const [finishingId, setFinishingId] = useState(null)
+  const [now, setNow] = useState(() => Date.now())
 
   function loadActive() {
     api.get('/attendance/active').then(r => setActiveRecords(Array.isArray(r.data) ? r.data : [])).catch(() => {})
@@ -41,6 +53,31 @@ export default function AbsensiPage() {
     }).catch(() => {})
     loadActive()
   }, [])
+
+  // Timer kerja — tick tiap detik selama ada absensi berjalan
+  useEffect(() => {
+    if (activeRecords.length === 0) return
+    setNow(Date.now())
+    const id = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [activeRecords.length])
+
+  async function handleFinish(record) {
+    if (finishingId) return
+    const name = record.employee?.name || 'Staff'
+    if (!window.confirm(`Tandai absensi ${name} selesai?\nTimer kerja akan dihentikan dan durasi dicatat.`)) return
+    setFinishingId(record.id)
+    try {
+      const res = await api.patch(`/attendance/${record.id}/clock-out`)
+      const durasi = fmtDuration(record.date, res.data?.clockOut)
+      alert(`Absensi ${name} selesai.\nDurasi kerja: ${durasi}`)
+      loadActive()
+    } catch (e) {
+      alert(e.response?.data?.message || 'Gagal menyelesaikan absensi')
+    } finally {
+      setFinishingId(null)
+    }
+  }
 
   const filtered = sopItems.filter(s => s.type === tab)
   const activeTab = TABS.find(t => t.key === tab)
@@ -107,21 +144,38 @@ export default function AbsensiPage() {
                         <div>
                           <div style={{ fontWeight: '700', fontSize: '13px', color: 'var(--text)' }}>
                             {r.employee?.name || '-'}
-                            {r.helperName && <span style={{ color: 'var(--muted)', fontWeight: '400' }}> + {r.helperName}</span>}
+                            {r.helper?.name && <span style={{ color: 'var(--muted)', fontWeight: '400' }}> + {r.helper.name}</span>}
                           </div>
                           <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '3px' }}>
                             {TYPE_LABEL[r.type] || r.type} · Mulai {fmtTime(r.date)}, {fmtDate(r.date)}
                           </div>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                           {checklist.length > 0 && (
                             <span style={{ fontSize: '11px', fontWeight: '700', color: '#047857', background: '#ECFDF5', padding: '3px 10px', borderRadius: '20px', border: '1px solid #A7F3D0' }}>
                               ✓ {done}/{checklist.length} SOP
                             </span>
                           )}
-                          <span style={{ fontSize: '11px', fontWeight: '700', background: '#FEF3C7', color: '#B45309', padding: '3px 10px', borderRadius: '20px', border: '1px solid #FDE68A' }}>
-                            Aktif
+                          {/* Timer kerja berjalan */}
+                          <span title="Timer kerja" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: '800', fontFamily: 'inherit', fontVariantNumeric: 'tabular-nums', letterSpacing: '0.5px', color: '#34D399', background: '#0F172A', padding: '5px 11px', borderRadius: '20px' }}>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <circle cx="12" cy="12" r="9" /><polyline points="12 7 12 12 15.5 14" />
+                            </svg>
+                            {fmtDuration(r.date, now)}
                           </span>
+                          {/* Tombol Selesai (clock-out) */}
+                          <button
+                            onClick={() => handleFinish(r)}
+                            disabled={finishingId === r.id}
+                            style={{
+                              fontSize: '12px', fontWeight: '800', fontFamily: 'inherit', padding: '8px 14px',
+                              borderRadius: '8px', border: 'none', whiteSpace: 'nowrap', transition: 'all 0.15s',
+                              background: finishingId === r.id ? '#94A3B8' : '#10B981',
+                              color: '#fff', cursor: finishingId === r.id ? 'not-allowed' : 'pointer',
+                              boxShadow: finishingId === r.id ? 'none' : '0 1px 3px rgba(16,185,129,0.35)',
+                            }}>
+                            {finishingId === r.id ? 'Menyimpan...' : 'Selesai'}
+                          </button>
                         </div>
                       </div>
                     )

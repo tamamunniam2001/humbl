@@ -9,7 +9,10 @@ export async function GET(req) {
   const records = await prisma.attendance.findMany({
     where: { isActive: true },
     orderBy: { date: 'desc' },
-    include: { employee: { select: { name: true } } },
+    include: {
+      employee: { select: { name: true } },
+      helper: { select: { name: true } },
+    },
   })
   return NextResponse.json(records)
 }
