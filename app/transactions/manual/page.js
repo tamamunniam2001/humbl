@@ -35,6 +35,7 @@ export default function ManualTransactionPage() {
   const [cart, setCart] = useState([])
   const [manualName, setManualName] = useState('')
   const [manualPrice, setManualPrice] = useState('')
+  const [manualCategory, setManualCategory] = useState('')
   const [payMethod, setPayMethod] = useState('CASH')
   const [payment, setPayment] = useState('')
   const [customerName, setCustomerName] = useState('')
@@ -86,14 +87,15 @@ export default function ManualTransactionPage() {
   }
 
   function addManual() {
-    const name = manualName.trim()
-    const price = Math.round(Number(manualPrice) || 0)
-    if (!name) return setMsg({ type: 'error', text: 'Nama item wajib diisi' })
-    if (price <= 0) return setMsg({ type: 'error', text: 'Harga item harus lebih dari 0' })
-    addItem({ productId: null, name, price, category: '' })
-    setManualName(''); setManualPrice('')
-    setMsg(null)
-  }
+  const name = manualName.trim()
+  const price = Math.round(Number(manualPrice) || 0)
+  const category = manualCategory.trim()
+  if (!name) return setMsg({ type: 'error', text: 'Nama item wajib diisi' })
+  if (price <= 0) return setMsg({ type: 'error', text: 'Harga item harus lebih dari 0' })
+  addItem({ productId: null, name, price, category })
+  setManualName(''); setManualPrice(''); setManualCategory('')
+  setMsg(null)
+}
 
   function setQty(idx, delta) {
     setCart((prev) => prev.map((i, n) => (n === idx ? { ...i, qty: Math.max(1, i.qty + delta) } : i)))
@@ -190,9 +192,10 @@ export default function ManualTransactionPage() {
             </div>
             <div style={{ height: '1px', background: 'var(--border)', margin: '14px 0' }} />
             <span style={lbl}>Item tanpa produk (mis. barang yang sudah tidak ada di daftar produk)</span>
-            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: '8px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '8px' }}>
               <input style={inp} placeholder="Nama item" value={manualName} onChange={(e) => setManualName(e.target.value)} />
               <input style={inp} type="number" placeholder="Harga" value={manualPrice} onChange={(e) => setManualPrice(e.target.value)} />
+              <input style={inp} placeholder="Kategori" value={manualCategory} onChange={(e) => setManualCategory(e.target.value)} />
               <button onClick={addManual} style={{ padding: '9px 14px', borderRadius: '9px', border: '1px solid var(--border)', background: '#F1F5F9', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'inherit' }}>Tambah</button>
             </div>
           </div>
