@@ -36,6 +36,7 @@ export default function ManualTransactionPage() {
   const [manualName, setManualName] = useState('')
   const [manualPrice, setManualPrice] = useState('')
   const [manualCategory, setManualCategory] = useState('')
+  const [expenseCategories, setExpenseCategories] = useState([])
   const [payMethod, setPayMethod] = useState('CASH')
   const [payment, setPayment] = useState('')
   const [customerName, setCustomerName] = useState('')
