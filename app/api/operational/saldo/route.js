@@ -9,7 +9,8 @@ export async function GET(req) {
   try {
     const ledger = await prisma.operationalSaldoLedger.findMany({
       where: { roleKey: 'operasional' },
-      orderBy: { createdAt: 'desc' },
+      // Tiebreaker id agar urutan deterministik saat ada dua mutasi dengan waktu sama
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: 100,
     })
 
@@ -50,7 +51,7 @@ export async function POST(req) {
     // Hitung saldo terkini dari ledger terakhir
     const lastLedger = await prisma.operationalSaldoLedger.findFirst({
       where: { roleKey: 'operasional' },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     })
 
     const lastBalance = lastLedger ? lastLedger.balanceAfter : 0

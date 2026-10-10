@@ -66,7 +66,7 @@ export async function PATCH(req, { params }) {
 
       const lastLedger = await tx.operationalSaldoLedger.findFirst({
         where: { roleKey: 'operasional' },
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       })
       const lastBalance = lastLedger ? lastLedger.balanceAfter : 0
       const balanceAfter = lastBalance - belanja.total

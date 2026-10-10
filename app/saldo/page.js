@@ -52,6 +52,12 @@ export default function SaldoPage() {
   const [adminNote, setAdminNote] = useState('')
   const [processingAction, setProcessingAction] = useState(false)
 
+  // Edit / hapus riwayat mutasi saldo (Admin)
+  const [editLedger, setEditLedger] = useState(null)
+  const [editTanggal, setEditTanggal] = useState('')
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [deletingId, setDeletingId] = useState(null)
+
   // Peta Bahan Baku (kunci: nama lowercase) untuk HET
   const [bahanMap, setBahanMap] = useState(new Map())
 
@@ -90,6 +96,44 @@ export default function SaldoPage() {
       setPendingBelanja(res.data || [])
     } catch (err) {
       console.error('Gagal mengambil pengajuan belanja:', err)
+    }
+  }
+
+  // Ubah tanggal riwayat mutasi saldo — saldo dihitung ulang otomatis di server
+  function openEditLedger(item) {
+    const dt = new Date(item.createdAt)
+    const pad = n => String(n).padStart(2, '0')
+    setEditTanggal(`${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`)
+    setEditLedger(item)
+  }
+
+  async function handleSaveTanggal(e) {
+    e.preventDefault()
+    if (!editLedger || !editTanggal) return
+    setSavingEdit(true)
+    try {
+      await api.patch(`/operational/saldo/${editLedger.id}`, { tanggal: editTanggal })
+      setEditLedger(null)
+      fetchSaldoData()
+    } catch (err) {
+      alert(err.response?.data?.message || 'Gagal mengubah tanggal riwayat saldo')
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
+  // Hapus riwayat mutasi saldo — saldo otomatis kembali/dihitung ulang di server
+  async function handleDeleteLedger(item) {
+    const ok = window.confirm('Hapus riwayat mutasi saldo ini?\n\nSaldo operasional akan otomatis dihitung ulang mengikuti riwayat yang tersisa.\nCatatan: penghapusan ini tidak menghapus catatan Pengeluaran Toko yang terkait.')
+    if (!ok) return
+    setDeletingId(item.id)
+    try {
+      await api.delete(`/operational/saldo/${item.id}`)
+      fetchSaldoData()
+    } catch (err) {
+      alert(err.response?.data?.message || 'Gagal menghapus riwayat saldo')
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -372,6 +416,7 @@ export default function SaldoPage() {
                       <th style={{ padding: '12px 10px' }}>Oleh</th>
                       <th style={{ padding: '12px 10px', textAlign: 'right' }}>Nominal</th>
                       <th style={{ padding: '12px 10px', textAlign: 'right' }}>Saldo Akhir</th>
+                      {isAdmin && <th style={{ padding: '12px 10px', textAlign: 'right' }}>Aksi</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -410,6 +455,31 @@ export default function SaldoPage() {
                           <td style={{ padding: '12px 10px', textAlign: 'right', fontWeight: '700', color: 'var(--text)', whiteSpace: 'nowrap' }}>
                             {fmt(item.balanceAfter)}
                           </td>
+                          {isAdmin && (
+                            <td style={{ padding: '12px 10px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                              <button
+                                type="button"
+                                className="btn"
+                                title="Ubah tanggal mutasi ini"
+                                onClick={() => openEditLedger(item)}
+                                style={{ padding: '5px 9px', fontSize: '11px', background: 'var(--orange-light, #FFF7ED)', color: '#C2410C', border: '1px solid #FED7AA' }}
+                              >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+                                Tanggal
+                              </button>
+                              <button
+                                type="button"
+                                className="btn"
+                                title="Hapus riwayat ini (saldo dihitung ulang otomatis)"
+                                onClick={() => handleDeleteLedger(item)}
+                                disabled={deletingId === item.id}
+                                style={{ padding: '5px 9px', fontSize: '11px', marginLeft: '6px', background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA' }}
+                              >
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+                                {deletingId === item.id ? 'Menghapus...' : 'Hapus'}
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       )
                     })}
@@ -634,6 +704,69 @@ export default function SaldoPage() {
                 {processingAction ? 'Memproses...' : 'ACC / Setujui'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Ubah Tanggal Riwayat Saldo (Admin) */}
+      {editLedger && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500, backdropFilter: 'blur(4px)' }}
+          onClick={e => { if (e.target === e.currentTarget && !savingEdit) setEditLedger(null) }}
+        >
+          <div className="card fade-in" style={{ width: '420px', maxWidth: '96vw', overflow: 'hidden' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(135deg, #D8E4F4, #E8EEF8)' }}>
+              <div style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text)' }}>Ubah Tanggal Riwayat Saldo</div>
+              <button onClick={() => setEditLedger(null)} disabled={savingEdit} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748B', fontSize: '20px', lineHeight: 1 }}>×</button>
+            </div>
+
+            <form onSubmit={handleSaveTanggal} style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ padding: '12px', background: 'var(--surface2)', borderRadius: '10px', fontSize: '12px', color: 'var(--muted)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
+                  <span>Tipe</span>
+                  <strong style={{ color: 'var(--text)' }}>{editLedger.type === 'RESTOCK' ? '+ Isi Saldo' : editLedger.type === 'ADJUST' ? '- Kurang Saldo' : '- Pengeluaran'}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
+                  <span>Nominal</span>
+                  <strong style={{ color: 'var(--text)' }}>{fmt(editLedger.amount)}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
+                  <span>Keterangan</span>
+                  <strong style={{ color: 'var(--text)', textAlign: 'right' }}>{editLedger.note || '-'}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
+                  <span>Tanggal saat ini</span>
+                  <strong style={{ color: 'var(--text)' }}>
+                    {new Date(editLedger.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  </strong>
+                </div>
+              </div>
+
+              <div>
+                <label className="label">Tanggal Baru</label>
+                <input
+                  type="datetime-local"
+                  className="input"
+                  value={editTanggal}
+                  onChange={e => setEditTanggal(e.target.value)}
+                  required
+                  autoFocus
+                />
+              </div>
+
+              <div style={{ fontSize: '12px', color: 'var(--muted)', padding: '8px 12px', background: '#EFF6FF', borderRadius: '8px', border: '1px solid #BFDBFE' }}>
+                💡 <strong>Info:</strong> Jika urutan mutasi berubah, seluruh <strong>Saldo Akhir</strong> pada riwayat akan otomatis dihitung ulang oleh sistem.
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', paddingTop: '4px' }}>
+                <button type="button" className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setEditLedger(null)} disabled={savingEdit}>
+                  Batal
+                </button>
+                <button type="submit" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} disabled={savingEdit}>
+                  {savingEdit ? 'Menyimpan...' : 'Simpan Tanggal'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
