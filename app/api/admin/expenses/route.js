@@ -29,6 +29,24 @@ export async function GET(req) {
     if (to) where.date.lte = new Date(`${to}T23:59:59`)
   }
 
+  // Pencarian kata kunci (q): catatan, kasir, nama/keterangan/kategori item, kode & nama bahan
+  const q = (searchParams.get('q') || '').trim()
+  const ins = (v) => ({ contains: v, mode: 'insensitive' })
+  if (q) {
+    const itemMatch = {
+      OR: [
+        { name: ins(q) },
+        { keterangan: ins(q) },
+        { category: ins(q) },
+        { expenseItem: { OR: [{ name: ins(q) }, { category: ins(q) }, { code: ins(q) }] } },
+      ],
+    }
+    where.AND = [
+      ...(where.AND || []),
+      { OR: [{ catatan: ins(q) }, { cashier: { name: ins(q) } }, { items: { some: itemMatch } }] },
+    ]
+  }
+
   if (monthly) {
     const rows = await prisma.expense.findMany({
       where: { date: { gte: new Date(`${year}-01-01`), lte: new Date(`${year}-12-31T23:59:59`) } },
@@ -69,16 +87,24 @@ export async function GET(req) {
   const [expenses, total] = await Promise.all([
     prisma.expense.findMany({
       where, orderBy: { date: 'desc' }, take: LIMIT, skip: (page - 1) * LIMIT,
-      include: { cashier: { select: { name: true } }, items: { include: { expenseItem: { select: { code: true, category: true, satuan: true } } } } },
+      include: { cashier: { select: { name: true } }, items: { include: { expenseItem: { select: { code: true, name: true, category: true, satuan: true } } } } },
     }),
     prisma.expense.count({ where }),
   ])
 
   // Flatten ke per-item rows
+  // Saat ada pencarian (q): pengeluaran yang cocok lewat catatan/kasir tetap menampilkan
+  // seluruh itemnya, sedangkan yang cocok lewat item hanya menampilkan item yang cocok.
+  const ql = q.toLowerCase()
+  const hit = (v) => String(v ?? '').toLowerCase().includes(ql)
   const rows = []
   expenses.forEach(e => {
+    const expenseLevelHit = !q || hit(e.catatan) || hit(e.cashier?.name)
     e.items
       .filter(item => !kategori || (item.category || item.expenseItem?.category || '') === kategori)
+      .filter(item => expenseLevelHit
+        || hit(item.name) || hit(item.keterangan) || hit(item.category)
+        || hit(item.expenseItem?.name) || hit(item.expenseItem?.category) || hit(item.expenseItem?.code))
       .forEach(item => {
       rows.push({
         expenseId: e.id,

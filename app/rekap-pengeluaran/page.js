@@ -34,13 +34,18 @@ export default function RekapPengeluaranPage() {
   const [selected, setSelected] = useState(new Set())
   const [massDeleting, setMassDeleting] = useState(false)
   const [activeKategori, setActiveKategori] = useState('')
+  // Pencarian kata kunci (item, keterangan, kategori, kode, catatan, kasir)
+  const [search, setSearch] = useState('')
+  const searchRef = useRef('')
+  const searchInitRef = useRef(true)
 
-  async function loadByKategori(f = from, t = to) {
+  async function loadByKategori(f = from, t = to, q = searchRef.current) {
     setByKategoriLoading(true)
     try {
       const params = new URLSearchParams({ bykategori: 1 })
       if (f) params.append('from', f)
       if (t) params.append('to', t)
+      if (q) params.append('q', q)
       const res = await api.get(`/admin/expenses?${params}`)
       setByKategori(res.data.byKategori)
     } catch { } finally { setByKategoriLoading(false) }
@@ -52,19 +57,32 @@ export default function RekapPengeluaranPage() {
     catch { } finally { setMonthlyLoading(false) }
   }
 
-  async function load(p = page, f = from, t = to, kat = activeKategori) {
+  async function load(p = page, f = from, t = to, kat = activeKategori, q = searchRef.current) {
     setLoading(true)
     try {
       const params = new URLSearchParams({ page: p })
       if (f) params.append('from', f)
       if (t) params.append('to', t)
       if (kat) params.append('kategori', kat)
+      if (q) params.append('q', q)
       const res = await api.get(`/admin/expenses?${params}`)
       setData(res.data)
     } catch { } finally { setLoading(false) }
   }
 
   useEffect(() => { load(page, from, to, activeKategori) }, [page])
+  // Pencarian: debounce 350ms, reset ke halaman 1
+  useEffect(() => {
+    searchRef.current = search
+    if (searchInitRef.current) { searchInitRef.current = false; return }
+    const t = setTimeout(() => {
+      setPage(1)
+      setSelected(new Set())
+      load(1, from, to, activeKategori, search)
+      loadByKategori(from, to, search)
+    }, 350)
+    return () => clearTimeout(t)
+  }, [search])
   useEffect(() => { loadMonthly(); loadByKategori() }, [])
   useEffect(() => {
     api.get('/admin/expense-categories').then(r => setCategories(r.data.map(c => c.name))).catch(() => {})
@@ -77,8 +95,9 @@ export default function RekapPengeluaranPage() {
   }
   function handleReset() {
     setFrom(''); setTo(''); setPage(1); setActiveKategori(''); setSelected(new Set())
+    setSearch(''); searchRef.current = ''
     load(1, '', '', '')
-    loadByKategori('', '')
+    loadByKategori('', '', '')
   }
 
   function handleClickMonth(i) {
@@ -171,6 +190,7 @@ export default function RekapPengeluaranPage() {
       const params = new URLSearchParams({ page: 1 })
       if (exportFrom) params.append('from', exportFrom)
       if (exportTo) params.append('to', exportTo)
+      if (searchRef.current) params.append('q', searchRef.current)
       // fetch all pages
       const first = await api.get(`/admin/expenses?${params}`)
       let rows = first.data.rows || []
@@ -210,7 +230,7 @@ export default function RekapPengeluaranPage() {
         <div className="topbar">
           <div>
             <div className="topbar-title">Rekap Pengeluaran</div>
-            <div className="topbar-sub">{data.total} catatan pengeluaran</div>
+            <div className="topbar-sub">{data.total} catatan pengeluaran{search ? ` · hasil pencarian "${search}"` : ''}</div>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             {selected.size > 0 && (
@@ -317,12 +337,22 @@ export default function RekapPengeluaranPage() {
               <label className="label">Sampai Tanggal</label>
               <input type="date" className="input" style={{ width: 'auto' }} value={to} onChange={e => setTo(e.target.value)} />
             </div>
+            <div style={{ flex: '1 1 240px', minWidth: '200px' }}>
+              <label className="label">Cari</label>
+              <div style={{ position: 'relative' }}>
+                <svg style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--muted)', pointerEvents: 'none' }} width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input className="input" style={{ paddingLeft: '36px', width: '100%' }}
+                  placeholder="Item, keterangan, kategori, kode, catatan, kasir..."
+                  value={search} onChange={e => setSearch(e.target.value)} />
+              </div>
+            </div>
             <button className="btn btn-primary" onClick={handleFilter}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
               Filter
             </button>
-            {(from || to || activeKategori) && <button className="btn btn-ghost" onClick={handleReset}>Reset</button>}
+            {(from || to || activeKategori || search) && <button className="btn btn-ghost" onClick={handleReset}>Reset</button>}
             {activeKategori && <span style={{ fontSize: '12px', color: 'var(--accent)', background: 'var(--accent-light)', padding: '4px 10px', borderRadius: '20px', border: '1px solid #C7D4F0', fontWeight: '600' }}>Kategori: {activeKategori}</span>}
+            {search && <span style={{ fontSize: '12px', color: 'var(--red)', background: 'var(--red-light)', padding: '4px 10px', borderRadius: '20px', border: '1px solid #FECACA', fontWeight: '600', maxWidth: '260px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>Cari: {search}</span>}
           </div>
 
           {/* Summary */}
@@ -370,7 +400,8 @@ export default function RekapPengeluaranPage() {
                   ) : data.rows.length === 0 ? (
                     <tr><td colSpan={10} style={{ padding: '48px', textAlign: 'center', color: 'var(--muted)' }}>
                       <div style={{ fontSize: '32px', marginBottom: '8px' }}>💸</div>
-                      <div>Belum ada data pengeluaran</div>
+                      <div>{search ? `Tidak ada pengeluaran yang cocok dengan "${search}"` : 'Belum ada data pengeluaran'}</div>
+                      {search && <div style={{ fontSize: '12px', marginTop: '6px' }}>Coba kata kunci lain atau tekan Reset</div>}
                     </td></tr>
                   ) : data.rows.map((r, i) => (
                     <tr key={i} style={{ background: selected.has(r.expenseId) ? 'var(--accent-light)' : undefined }}>
@@ -562,6 +593,11 @@ export default function RekapPengeluaranPage() {
             </div>
             <div style={{ padding: '20px' }}>
               <p style={{ fontSize: '13px', color: 'var(--muted)', marginBottom: '16px' }}>Kosongkan untuk export semua data.</p>
+              {search && (
+                <p style={{ fontSize: '12px', color: 'var(--red)', marginBottom: '16px', background: 'var(--red-light)', border: '1px solid #FECACA', borderRadius: '8px', padding: '8px 10px' }}>
+                  Kata kunci pencarian <b>&quot;{search}&quot;</b> ikut diterapkan pada hasil export.
+                </p>
+              )}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
                 <div><label className="label">Dari Tanggal</label><input type="date" className="input" value={exportFrom} onChange={e => setExportFrom(e.target.value)} /></div>
                 <div><label className="label">Sampai Tanggal</label><input type="date" className="input" value={exportTo} onChange={e => setExportTo(e.target.value)} /></div>
