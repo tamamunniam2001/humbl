@@ -322,6 +322,24 @@ function InvoiceModal({ tx, onClose, onPrint, printingId }) {
                 <span>Rp {fmt(subtotal)}</span>
               </div>
             )}
+            {tx.discountAmount > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#059669', marginBottom: '6px' }}>
+                <span>Diskon ({tx.discount}%)</span>
+                <span>- Rp {fmt(tx.discountAmount)}</span>
+              </div>
+            )}
+            {tx.voucherDiscount > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#059669', marginBottom: '6px' }}>
+                <span>Voucher ({tx.voucherCode})</span>
+                <span>- Rp {fmt(tx.voucherDiscount)}</span>
+              </div>
+            )}
+            {tx.taxAmount > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#D97706', marginBottom: '6px' }}>
+                <span>Pajak ({tx.tax}%)</span>
+                <span>+ Rp {fmt(tx.taxAmount)}</span>
+              </div>
+            )}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tx.payment > 0 ? '8px' : '0' }}>
               <span style={{ fontSize: '14px', fontWeight: '700' }}>Total</span>
               <span style={{ fontSize: '18px', fontWeight: '800', color: '#2563EB' }}>Rp {fmt(tx.total)}</span>

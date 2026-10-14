@@ -31,6 +31,8 @@ export default function KasirPage() {
   const [cart, setCart] = useState([])
   const [tax, setTax] = useState(0)        // persen, misal 10 = 10%
   const [discount, setDiscount] = useState(0) // persen, misal 5 = 5%
+  // Voucher yang dipakai pada keranjang saat ini: { id, code, discount, type, value }
+  const [voucher, setVoucher] = useState(null)
   const [cartOpen, setCartOpen] = useState(false)
   const [checkoutOpen, setCheckoutOpen] = useState(false)
   const [pendingOrder, setPendingOrder] = useState(null)
@@ -244,12 +246,14 @@ export default function KasirPage() {
     )
   }
 
-  function clearCart() { setCart([]); setTax(0); setDiscount(0) }
+  function clearCart() { setCart([]); setTax(0); setDiscount(0); setVoucher(null) }
 
   const subtotal = cart.reduce((s, i) => s + i.product.price * i.qty, 0)
   const discountAmount = Math.round(subtotal * discount / 100)
   const taxAmount = Math.round((subtotal - discountAmount) * tax / 100)
-  const total = subtotal - discountAmount + taxAmount
+  // Potongan voucher (nominal). Dibatasi agar tidak melebihi subtotal.
+  const voucherDiscount = voucher ? Math.min(voucher.discount, Math.max(0, subtotal - discountAmount)) : 0
+  const total = Math.max(0, subtotal - discountAmount - voucherDiscount + taxAmount)
   const qtyOf = (id) => cart.find((i) => i.product.id === id)?.qty || 0
   const totalQty = cart.reduce((s, i) => s + i.qty, 0)
 
@@ -593,6 +597,9 @@ export default function KasirPage() {
           discount={discount}
           taxAmount={taxAmount}
           discountAmount={discountAmount}
+          voucher={voucher}
+          voucherDiscount={voucherDiscount}
+          onVoucherChange={setVoucher}
           onClose={() => setCheckoutOpen(false)}
           onSuccess={(newTx) => {
             clearCart(); setCheckoutOpen(false); setCartOpen(false)
@@ -1426,7 +1433,7 @@ function ClosingModal({ orders, todayShifts = [], kasAwalOtomatis = 0, onClose, 
 }
 
 // ── Checkout Modal ──
-function CheckoutModal({ cart, total, subtotal = total, tax = 0, discount = 0, taxAmount = 0, discountAmount = 0, onClose, onSuccess, existingOrderId }) {
+function CheckoutModal({ cart, total, subtotal = total, tax = 0, discount = 0, taxAmount = 0, discountAmount = 0, voucher = null, voucherDiscount = 0, onVoucherChange, onClose, onSuccess, existingOrderId }) {
   const [payMethod, setPayMethod] = useState('CASH')
   const [payment, setPayment] = useState('')
   const [payLater, setPayLater] = useState(false)
@@ -1435,6 +1442,32 @@ function CheckoutModal({ cart, total, subtotal = total, tax = 0, discount = 0, t
   const [loading, setLoading] = useState(false)
   const [tx, setTx] = useState(null)
   const [printing, setPrinting] = useState(false)
+
+  // ── Voucher ──
+  const [voucherCode, setVoucherCode] = useState('')
+  const [voucherLoading, setVoucherLoading] = useState(false)
+  const [voucherError, setVoucherError] = useState('')
+
+  async function applyVoucher() {
+    setVoucherError('')
+    const code = voucherCode.trim()
+    if (!code) { setVoucherError('Masukkan kode voucher'); return }
+    setVoucherLoading(true)
+    try {
+      const res = await api.post('/vouchers/validate', { code, subtotal })
+      const v = res.data.voucher
+      onVoucherChange?.({ id: v.id, code: v.code, discount: res.data.discount, type: v.type, value: v.value })
+    } catch (e) {
+      onVoucherChange?.(null)
+      setVoucherError(e.response?.data?.message || 'Kode voucher tidak valid')
+    } finally { setVoucherLoading(false) }
+  }
+
+  function removeVoucher() {
+    onVoucherChange?.(null)
+    setVoucherCode('')
+    setVoucherError('')
+  }
 
   const paid = Number(payment) || 0
   const change = payMethod === 'CASH' && !payLater ? paid - total : 0
@@ -1460,6 +1493,9 @@ function CheckoutModal({ cart, total, subtotal = total, tax = 0, discount = 0, t
       servedAt: null, createdAt: new Date().toISOString(),
       customerName, note,
       discount, tax, discountAmount, taxAmount,
+      voucherId: voucher?.id || null,
+      voucherCode: voucher?.code || '',
+      voucherDiscount: voucherDiscount || 0,
       cashier: { name: '' },
       items: cart.map((i) => ({ qty: i.qty, price: i.product.price, subtotal: i.product.price * i.qty, category: i.product.category?.name || '', product: { name: i.product.name, imageUrl: i.product.imageUrl, category: i.product.category } })),
     }
@@ -1490,8 +1526,11 @@ function CheckoutModal({ cart, total, subtotal = total, tax = 0, discount = 0, t
           payment: later ? 0 : (payMethod === 'CASH' ? paid : total),
           payMethod, payLater: later, customerName, note,
           discount, tax, discountAmount, taxAmount,
+          voucherId: voucher?.id || null,
+          voucherCode: voucher?.code || '',
+          voucherDiscount: voucherDiscount || 0,
         })
-        setTx({ subtotal, discount, tax, discountAmount, taxAmount, ...res.data })
+        setTx({ subtotal, discount, tax, discountAmount, taxAmount, voucherDiscount: voucherDiscount || 0, voucherCode: voucher?.code || '', ...res.data })
       }
     } catch (e) {
       setTx(null)
@@ -1546,7 +1585,7 @@ function CheckoutModal({ cart, total, subtotal = total, tax = 0, discount = 0, t
             </div>
           ))}
           <div style={{ borderTop: '1px solid var(--border)', marginTop: '8px', paddingTop: '8px' }}>
-            {(tx.discountAmount > 0 || tx.taxAmount > 0) && (
+            {(tx.discountAmount > 0 || tx.taxAmount > 0 || tx.voucherDiscount > 0) && (
               <div style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '3px', marginBottom: '6px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text2)' }}>
                   <span>Subtotal</span><span>Rp {fmt(subtotal)}</span>
@@ -1554,6 +1593,11 @@ function CheckoutModal({ cart, total, subtotal = total, tax = 0, discount = 0, t
                 {tx.discountAmount > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--green)' }}>
                     <span>Diskon ({tx.discount}%)</span><span>- Rp {fmt(tx.discountAmount)}</span>
+                  </div>
+                )}
+                {tx.voucherDiscount > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--green)' }}>
+                    <span>Voucher ({tx.voucherCode})</span><span>- Rp {fmt(tx.voucherDiscount)}</span>
                   </div>
                 )}
                 {tx.taxAmount > 0 && (
@@ -1618,6 +1662,34 @@ function CheckoutModal({ cart, total, subtotal = total, tax = 0, discount = 0, t
               </div>
             </div>
 
+            {/* Voucher */}
+            <div style={{ marginBottom: '14px' }}>
+              <div className="section-label" style={{ marginBottom: '6px' }}>Kode Voucher</div>
+              {voucher ? (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: '10px', padding: '10px 12px' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: '13px', fontWeight: '800', color: 'var(--green)', fontFamily: 'monospace' }}>{voucher.code}</div>
+                    <div style={{ fontSize: '11px', color: 'var(--muted)' }}>
+                      {voucher.type === 'PERCENT' ? `Diskon ${voucher.value}%` : `Potongan Rp ${fmt(voucher.value)}`} · hemat Rp {fmt(voucherDiscount)}
+                    </div>
+                  </div>
+                  <button onClick={removeVoucher} style={{ background: 'none', border: 'none', color: 'var(--red)', fontWeight: '700', fontSize: '12px', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Hapus</button>
+                </div>
+              ) : (
+                <>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input className="input" style={{ flex: 1 }} placeholder="Masukkan kode promo" value={voucherCode}
+                      onChange={(e) => setVoucherCode(e.target.value.toUpperCase())}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyVoucher() } }} />
+                    <button className="btn btn-primary" onClick={applyVoucher} disabled={voucherLoading} style={{ whiteSpace: 'nowrap' }}>
+                      {voucherLoading ? '...' : 'Pakai'}
+                    </button>
+                  </div>
+                  {voucherError && <div style={{ fontSize: '12px', color: 'var(--red)', marginTop: '5px' }}>{voucherError}</div>}
+                </>
+              )}
+            </div>
+
             {/* Items */}
             <div className="section-label">Pesanan</div>
             <div style={{ background: 'var(--surface2)', borderRadius: '10px', border: '1px solid var(--border)', marginBottom: '14px', overflow: 'hidden' }}>
@@ -1631,7 +1703,7 @@ function CheckoutModal({ cart, total, subtotal = total, tax = 0, discount = 0, t
 
             {/* Total */}
             <div style={{ background: 'var(--surface2)', borderRadius: '10px', padding: '12px 14px', border: '1px solid var(--border)' }}>
-              {(discountAmount > 0 || taxAmount > 0) && (
+              {(discountAmount > 0 || taxAmount > 0 || voucherDiscount > 0) && (
                 <>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text2)', marginBottom: '4px' }}>
                     <span>Subtotal</span><span>Rp {fmt(subtotal)}</span>
@@ -1639,6 +1711,11 @@ function CheckoutModal({ cart, total, subtotal = total, tax = 0, discount = 0, t
                   {discountAmount > 0 && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--green)', marginBottom: '4px' }}>
                       <span>Diskon ({discount}%)</span><span>- Rp {fmt(discountAmount)}</span>
+                    </div>
+                  )}
+                  {voucherDiscount > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--green)', marginBottom: '4px' }}>
+                      <span>Voucher ({voucher?.code})</span><span>- Rp {fmt(voucherDiscount)}</span>
                     </div>
                   )}
                   {taxAmount > 0 && (

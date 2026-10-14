@@ -26,6 +26,7 @@ export default function LaporanHarianPage() {
   const [expandedDay, setExpandedDay] = useState(null)
   const [deletingDay, setDeletingDay] = useState(null)
   const [addClosingTarget, setAddClosingTarget] = useState(null) // { dayKey, existingShifts, dayReports }
+  const [voucherRekap, setVoucherRekap] = useState(null)
   const user = (() => { try { return JSON.parse(Cookies.get('user') || '{}') } catch { return {} } })()
   const isAdmin = user.role === 'ADMIN'
 
@@ -39,6 +40,14 @@ export default function LaporanHarianPage() {
     finally { setLoading(false) }
   }, [])
 
+  // Ringkasan pemakaian voucher (semua periode)
+  const loadVoucherRekap = useCallback(async () => {
+    try {
+      const res = await api.get('/admin/vouchers/rekap')
+      setVoucherRekap(res.data)
+    } catch { }
+  }, [])
+
   const pathname = usePathname()
   useEffect(() => {
     try {
@@ -46,9 +55,10 @@ export default function LaporanHarianPage() {
       if (cached) { setReports(JSON.parse(cached)); setLoading(false) }
     } catch { }
     load()
+    loadVoucherRekap()
     const t = setInterval(() => { if (!document.hidden) load() }, 30000)
     return () => clearInterval(t)
-  }, [load, pathname])
+  }, [load, loadVoucherRekap, pathname])
 
   async function handleReopen(r) {
     if (!confirm('Batalkan closing dan buka kembali order list?\n\nHanya laporan closing ini yang dihapus. Transaksi penjualan TIDAK akan terhapus dan tetap muncul di History Transaksi.')) return
@@ -132,6 +142,26 @@ export default function LaporanHarianPage() {
         </div>
 
         <div className="content">
+          {/* Ringkasan Diskon Voucher */}
+          {voucherRekap && voucherRekap.totalTransactions > 0 && (
+            <div className="card" style={{ padding: '16px 20px', marginBottom: '14px', border: '1px solid #A7DFC8', background: 'linear-gradient(135deg, #F0FBF6, #FFFFFF)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+                <div>
+                  <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '2px' }}>🎟️ Total Diskon Voucher</div>
+                  <div style={{ fontSize: '22px', fontWeight: '800', color: '#2A9D6E' }}>{fmt(voucherRekap.totalDiscount)}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>{voucherRekap.totalTransactions} transaksi memakai voucher</div>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '220px' }}>
+                  {voucherRekap.byCode.slice(0, 5).map(v => (
+                    <div key={v.code} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', gap: '16px' }}>
+                      <span style={{ fontFamily: 'monospace', fontWeight: '700', color: 'var(--text)' }}>{v.code}</span>
+                      <span style={{ color: 'var(--muted)' }}>{v.count}× · <b style={{ color: '#2A9D6E' }}>{fmt(v.discount)}</b></span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
           <div className="card" style={{ overflow: 'hidden' }}>
             {reports.length === 0 && loading ? (
               <div style={{ padding: '40px', textAlign: 'center', color: '#94A3B8' }}>Memuat...</div>

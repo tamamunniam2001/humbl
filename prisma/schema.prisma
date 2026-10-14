@@ -122,11 +122,17 @@ model Transaction {
   deletedAt    DateTime?
   // Transaksi yang diinput manual oleh ADMIN (mis. rekonstruksi data)
   isManual     Boolean     @default(false)
+  // Voucher yang dipakai (snapshot agar nilai historis tetap walau voucher diubah/dihapus)
+  voucherId    String?
+  voucher      Voucher?    @relation(fields: [voucherId], references: [id], onDelete: SetNull)
+  voucherCode  String?     @default("")
+  voucherDiscount Int      @default(0)  // nominal potongan dari voucher (rupiah)
 
   @@index([createdAt])
   @@index([cashierId])
   @@index([status, createdAt])
   @@index([deletedAt])
+  @@index([voucherId])
 }
 
 model OrderItem {
@@ -460,6 +466,36 @@ model OperationalSaldoLedger {
 
   @@index([roleKey])
   @@index([type])
+}
+
+// --- Voucher / Kode Promo ---
+// Jenis potongan voucher:
+//  PERCENT = potongan persentase dari subtotal (value = persen, mis. 10 = 10%)
+//  NOMINAL = potongan tunai langsung (value = rupiah, mis. 5000)
+enum VoucherType {
+  PERCENT
+  NOMINAL
+}
+
+model Voucher {
+  id          String       @id @default(cuid())
+  code        String       @unique        // kode voucher (disimpan UPPERCASE)
+  description String?      @default("")
+  type        VoucherType  @default(PERCENT)
+  value       Int          @default(0)     // persen (jika PERCENT) atau rupiah (jika NOMINAL)
+  minSpend    Int          @default(0)     // minimal subtotal agar voucher bisa dipakai (rupiah)
+  maxDiscount Int          @default(0)     // batas maksimal potongan untuk tipe PERCENT (0 = tanpa batas)
+  quota       Int          @default(0)     // 0 = tanpa batas kuota
+  usedCount   Int          @default(0)     // jumlah kali voucher sudah terpakai
+  startDate   DateTime?                     // masa berlaku mulai (null = langsung aktif)
+  endDate     DateTime?                     // masa berlaku sampai (null = tanpa batas waktu)
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  transactions Transaction[]
+
+  @@index([isActive])
+  @@index([code])
 }
 
 // --- Catatan Waste (halaman Waste) ---

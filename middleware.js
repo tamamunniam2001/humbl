@@ -12,6 +12,7 @@ const ADMIN_ONLY_PATHS = [
   '/users',
   '/rekap-absensi',
   '/absensi-settings',
+  '/voucher-settings',
   '/rekap-pengeluaran',
   '/expense-settings',
   '/transactions/manual',

@@ -51,6 +51,7 @@ export async function GET(req) {
           id: true, invoiceNo: true, customerName: true, note: true, total: true,
           payment: true, change: true, payMethod: true, status: true, servedAt: true, createdAt: true,
           discount: true, discountAmount: true, tax: true, taxAmount: true,
+          voucherId: true, voucherCode: true, voucherDiscount: true,
           cashier: { select: { name: true } },
           items: { select: { id: true, qty: true, price: true, subtotal: true, productId: true, name: true, category: true, product: { select: { name: true, imageUrl: true, category: { select: { name: true } } } } } },
         }
@@ -70,7 +71,7 @@ export async function POST(req) {
   const { error, user } = verifyAuth(req)
   if (error) return error
   try {
-    const { items, payment, payMethod, payLater, customerName, note, discount = 0, tax = 0, discountAmount = 0, taxAmount = 0 } = await req.json()
+    const { items, payment, payMethod, payLater, customerName, note, discount = 0, tax = 0, discountAmount = 0, taxAmount = 0, voucherId = null, voucherCode = '', voucherDiscount = 0 } = await req.json()
     if (!items?.length) return NextResponse.json({ message: 'Items tidak boleh kosong' }, { status: 400 })
     if (!payMethod) return NextResponse.json({ message: 'payMethod wajib diisi' }, { status: 400 })
 
@@ -88,9 +89,27 @@ export async function POST(req) {
       }
     })
     const subtotal = orderItems.reduce((s, i) => s + i.subtotal, 0)
-    const total = subtotal - (discountAmount || 0) + (taxAmount || 0)
+    // Potongan voucher (nominal, dari kode promo) dipotong terpisah dari diskon manual
+    const vDiscount = Math.max(0, Math.round(Number(voucherDiscount) || 0))
+    const total = Math.max(0, subtotal - (discountAmount || 0) - vDiscount + (taxAmount || 0))
     const actualPayment = payLater ? 0 : (payment || 0)
     const invoiceNo = `BK-${Date.now()}`
+
+    // Verifikasi voucher (jika dipakai) & naikkan pemakaiannya secara aman
+    let validVoucherId = null
+    if (voucherId) {
+      const voucher = await prisma.voucher.findUnique({ where: { id: voucherId } })
+      if (voucher && voucher.isActive) {
+        const now = new Date()
+        const stillValid = (!voucher.startDate || now >= voucher.startDate)
+          && (!voucher.endDate || now <= voucher.endDate)
+          && (voucher.quota === 0 || voucher.usedCount < voucher.quota)
+        if (stillValid) {
+          validVoucherId = voucher.id
+          await prisma.voucher.update({ where: { id: voucher.id }, data: { usedCount: { increment: 1 } } })
+        }
+      }
+    }
 
     // Buat transaksi tanpa nested select berat — hanya ambil id & invoiceNo dulu
     const transaction = await prisma.transaction.create({
@@ -105,9 +124,12 @@ export async function POST(req) {
         discountAmount: Math.round(discountAmount) || 0,
         tax: Math.round(tax) || 0,
         taxAmount: Math.round(taxAmount) || 0,
+        voucherId: validVoucherId,
+        voucherCode: validVoucherId ? String(voucherCode || '').trim().toUpperCase() : '',
+        voucherDiscount: validVoucherId ? vDiscount : 0,
         items: { create: orderItems },
       },
-      select: { id: true, invoiceNo: true, total: true, change: true, payment: true, payMethod: true, status: true, servedAt: true, createdAt: true, customerName: true, note: true, discount: true, discountAmount: true, tax: true, taxAmount: true },
+      select: { id: true, invoiceNo: true, total: true, change: true, payment: true, payMethod: true, status: true, servedAt: true, createdAt: true, customerName: true, note: true, discount: true, discountAmount: true, tax: true, taxAmount: true, voucherId: true, voucherCode: true, voucherDiscount: true },
     })
 
     // Decrement stock + fetch cashier name secara paralel, tidak blocking response
@@ -129,7 +151,7 @@ export async function POST(req) {
       product: { name: i.name, imageUrl: null, category: i.category ? { name: i.category } : null },
     }))
 
-    return NextResponse.json({ ...transaction, cashier, items: responseItems, subtotal, discount, tax, discountAmount, taxAmount }, { status: 201 })
+    return NextResponse.json({ ...transaction, cashier, items: responseItems, subtotal, discount, tax, discountAmount, taxAmount, voucherDiscount: validVoucherId ? vDiscount : 0 }, { status: 201 })
   } catch (err) {
     return NextResponse.json({ message: err.message || 'Gagal menyimpan transaksi' }, { status: 500 })
   }
