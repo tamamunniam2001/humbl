@@ -4,6 +4,7 @@ import Sidebar from '@/components/Sidebar'
 import Link from 'next/link'
 import Cookies from 'js-cookie'
 import api from '@/lib/api'
+import { renderTemplate, templateNeedsVoucher, isVoucherAvailable, voucherDetailText } from '@/lib/wa-templates'
 
 const fmt = (n) => 'Rp ' + Number(n || 0).toLocaleString('id-ID')
 const fmtDate = (d) => new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -16,6 +17,17 @@ export default function MembersPage() {
   const [statusFilter, setStatusFilter] = useState('all') // all | active | inactive
   const [detail, setDetail] = useState(null) // { member, transactions, totalSpent }
   const [detailLoading, setDetailLoading] = useState(false)
+
+  // Kirim pesan WhatsApp (admin) — popup pilih template dari Pengaturan Pesan WhatsApp
+  const [waMember, setWaMember] = useState(null)   // member tujuan (null = popup tertutup)
+  const [waTemplates, setWaTemplates] = useState([])
+  const [waTemplateId, setWaTemplateId] = useState('')
+  const [waVouchers, setWaVouchers] = useState(null) // null = belum dimuat (lazy)
+  const [waVoucherId, setWaVoucherId] = useState('')
+  const [waLoading, setWaLoading] = useState(false)
+  const [waSending, setWaSending] = useState(false)
+  const [waError, setWaError] = useState('')
+  const [waDone, setWaDone] = useState(null)         // hasil kirim terakhir
 
   const user = (() => { try { return JSON.parse(Cookies.get('user') || '{}') } catch { return {} } })()
   const isAdmin = user.role === 'ADMIN'
@@ -40,6 +52,78 @@ export default function MembersPage() {
       alert(err.response?.data?.message || 'Gagal memuat pembelian member')
     } finally { setDetailLoading(false) }
   }
+
+  // ── Kirim pesan WhatsApp (admin) ──
+  function closeWa() {
+    setWaMember(null)
+    setWaError('')
+    setWaDone(null)
+  }
+
+  // Muat voucher tersedia (sekali saja) bila template membutuhkan kode voucher.
+  async function waLoadVouchers() {
+    if (waVouchers) return
+    setWaLoading(true)
+    try {
+      const res = await api.get('/admin/vouchers')
+      setWaVouchers(res.data)
+    } catch (err) {
+      setWaError(err.response?.data?.message || 'Gagal memuat daftar voucher')
+    } finally { setWaLoading(false) }
+  }
+
+  async function waPickTemplate(t) {
+    if (!t) { setWaTemplateId(''); return }
+    setWaTemplateId(t.id)
+    setWaVoucherId('')
+    setWaError('')
+    if (templateNeedsVoucher(t)) await waLoadVouchers()
+  }
+
+  async function openWa(m) {
+    setWaMember(m)
+    setWaTemplates([])
+    setWaTemplateId('')
+    setWaVouchers(null)
+    setWaVoucherId('')
+    setWaError('')
+    setWaDone(null)
+    setWaLoading(true)
+    try {
+      const res = await api.get('/admin/message-templates', { params: { active: '1' } })
+      setWaTemplates(res.data)
+      // Cuma ada satu template aktif → langsung pilih (sekalian muat voucher bila perlu)
+      if (res.data.length === 1) await waPickTemplate(res.data[0])
+    } catch (err) {
+      setWaError(err.response?.data?.message || 'Gagal memuat template pesan')
+    } finally { setWaLoading(false) }
+  }
+
+  async function waSend() {
+    setWaError('')
+    const t = waTemplates.find(x => x.id === waTemplateId)
+    if (!t) { setWaError('Pilih template pesan terlebih dahulu'); return }
+    if (templateNeedsVoucher(t) && !waVoucherId) { setWaError('Pilih kode voucher terlebih dahulu'); return }
+    setWaSending(true)
+    try {
+      const res = await api.post(`/members/${waMember.id}/send-message`, {
+        templateId: t.id,
+        ...(waVoucherId ? { voucherId: waVoucherId } : {}),
+      })
+      setWaDone(res.data)
+    } catch (err) {
+      setWaError(err.response?.data?.message || 'Gagal mengirim pesan')
+    } finally { setWaSending(false) }
+  }
+
+  // Turunan untuk popup kirim (preview, voucher tersedia, dsb.)
+  const waTemplate = waTemplates.find(t => t.id === waTemplateId) || null
+  const waVoucher = waVouchers ? waVouchers.find(v => v.id === waVoucherId) || null : null
+  const waNeedsVoucher = templateNeedsVoucher(waTemplate)
+  const waAvailableVouchers = (waVouchers || []).filter(v => isVoucherAvailable(v))
+  const waPreview = waTemplate && waMember && (!waNeedsVoucher || waVoucher)
+    ? renderTemplate(waTemplate.body, { memberName: waMember.name, voucher: waVoucher })
+    : ''
 
   const q = search.trim().toLowerCase()
   const filtered = members
@@ -145,9 +229,17 @@ export default function MembersPage() {
                           {m.lastPurchase ? fmtDate(m.lastPurchase) : '—'}
                         </td>
                         <td style={{ padding: '10px 14px', textAlign: 'right' }}>
-                          <button className="btn" style={{ padding: '4px 12px', fontSize: '11px' }} onClick={() => openDetail(m)}>
-                            Lihat Pembelian
-                          </button>
+                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                            {isAdmin && (
+                              <button className="btn" style={{ padding: '4px 12px', fontSize: '11px', background: '#ECFDF5', color: '#0EA472', border: '1px solid #A7DFC8' }}
+                                onClick={() => openWa(m)}>
+                                ✈️ Kirim Pesan
+                              </button>
+                            )}
+                            <button className="btn" style={{ padding: '4px 12px', fontSize: '11px' }} onClick={() => openDetail(m)}>
+                              Lihat Pembelian
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -230,6 +322,127 @@ export default function MembersPage() {
                     </div>
                   </>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* ── Modal kirim pesan WhatsApp (admin) ── */}
+          {waMember && (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(13,21,38,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, backdropFilter: 'blur(4px)', padding: '16px' }}
+              onClick={(e) => { if (e.target === e.currentTarget && !waSending) closeWa() }}>
+              <div className="card fade-in" style={{ width: '560px', maxWidth: '96vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                {/* Header */}
+                <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexShrink: 0 }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text)' }}>Kirim Pesan WhatsApp</div>
+                    <div style={{ fontSize: '12.5px', color: 'var(--muted)', marginTop: '3px' }}>
+                      👤 {waMember.name} · <span style={{ fontFamily: 'monospace' }}>{waMember.phone}</span>
+                    </div>
+                  </div>
+                  <button onClick={() => !waSending && closeWa()}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '22px', color: 'var(--muted)', lineHeight: 1 }}>
+                    ×
+                  </button>
+                </div>
+
+                {/* Body */}
+                <div style={{ padding: '16px 20px', overflowY: 'auto' }}>
+                  {waDone ? (
+                    <div style={{ textAlign: 'center', padding: '6px 0' }}>
+                      <div style={{ fontSize: '40px', marginBottom: '6px' }}>✅</div>
+                      <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text)' }}>
+                        {waDone.dryRun ? 'Pesan terkirim (mode uji)' : 'Pesan terkirim!'}
+                      </div>
+                      <div style={{ fontSize: '12.5px', color: 'var(--muted)', marginTop: '4px' }}>
+                        Ke <span style={{ fontFamily: 'monospace' }}>{waDone.target}</span> · {waDone.template}
+                      </div>
+                      <pre style={{ margin: '12px 0', padding: '10px 12px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '8px', fontSize: '12.5px', color: 'var(--text2)', textAlign: 'left', whiteSpace: 'pre-wrap', fontFamily: 'inherit', maxHeight: '180px', overflowY: 'auto' }}>{waDone.message}</pre>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button className="btn" style={{ flex: 1, justifyContent: 'center', padding: '10px' }} onClick={() => setWaDone(null)}>
+                          Kirim Lagi
+                        </button>
+                        <button className="btn btn-primary" style={{ flex: 1, padding: '10px' }} onClick={closeWa}>
+                          Selesai
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {waError && (
+                        <div style={{ background: 'var(--red-light)', border: '1px solid var(--red-border)', color: 'var(--red)', padding: '10px 12px', borderRadius: '8px', fontSize: '13px', marginBottom: '12px' }}>
+                          {waError}
+                        </div>
+                      )}
+
+                      {waLoading && waTemplates.length === 0 ? (
+                        <div style={{ padding: '28px', textAlign: 'center', color: 'var(--muted)' }}>Memuat…</div>
+                      ) : waTemplates.length === 0 ? (
+                        <div style={{ padding: '28px 8px', textAlign: 'center', color: 'var(--muted)', fontSize: '13px', lineHeight: 1.6 }}>
+                          Belum ada template pesan aktif.<br />
+                          Atur dulu di <Link href="/wa-message-settings" style={{ color: 'var(--accent)', fontWeight: 700 }}>Pengaturan Pesan WhatsApp</Link>
+                        </div>
+                      ) : (
+                        <>
+                          {/* Pilih template */}
+                          <div style={{ marginBottom: '12px' }}>
+                            <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text2)', display: 'block', marginBottom: '5px' }}>Template Pesan *</label>
+                            <select className="input" value={waTemplateId}
+                              onChange={e => waPickTemplate(waTemplates.find(x => x.id === e.target.value))}>
+                              <option value="">— Pilih template pesan —</option>
+                              {waTemplates.map(t => (
+                                <option key={t.id} value={t.id}>{t.name}{t.inputType === 'VOUCHER_CODE' ? ' 🎫' : ''}</option>
+                              ))}
+                            </select>
+                          </div>
+                          {/* Pilih kode voucher (bila template membutuhkan) */}
+                          {waNeedsVoucher && (
+                            <div style={{ marginBottom: '12px' }}>
+                              <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text2)', display: 'block', marginBottom: '5px' }}>Kode Voucher *</label>
+                              {waVouchers === null ? (
+                                <div style={{ fontSize: '12.5px', color: 'var(--muted)' }}>Memuat daftar voucher…</div>
+                              ) : waAvailableVouchers.length === 0 ? (
+                                <div style={{ fontSize: '12.5px', color: '#B4770B' }}>
+                                  Tidak ada voucher tersedia. Buat atau aktifkan dulu di menu Voucher &amp; Promo.
+                                </div>
+                              ) : (
+                                <select className="input" value={waVoucherId}
+                                  onChange={e => { setWaVoucherId(e.target.value); setWaError('') }}>
+                                  <option value="">— Pilih kode voucher —</option>
+                                  {waAvailableVouchers.map(v => (
+                                    <option key={v.id} value={v.id}>
+                                      {v.code} — {voucherDetailText(v)}{v.quota > 0 ? ` · sisa ${v.quota - v.usedCount}` : ''}
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      )}
+
+                      {/* Preview pesan yang akan terkirim */}
+                      {waPreview && (
+                        <div style={{ marginBottom: '12px' }}>
+                          <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text2)', marginBottom: '5px' }}>Preview Pesan</div>
+                          <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '8px', padding: '10px 12px', fontSize: '12.5px', color: 'var(--text2)', lineHeight: 1.6, whiteSpace: 'pre-wrap', maxHeight: '180px', overflowY: 'auto' }}>
+                            {waPreview}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Aksi */}
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                        <button className="btn" style={{ flex: 1, justifyContent: 'center', padding: '10px' }} disabled={waSending} onClick={closeWa}>
+                          Batal
+                        </button>
+                        <button className="btn btn-primary" style={{ flex: 1, padding: '10px' }}
+                          disabled={waSending || waLoading || !waTemplateId} onClick={waSend}>
+                          {waSending ? 'Mengirim…' : '📤 Kirim Pesan'}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           )}

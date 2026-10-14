@@ -7,10 +7,6 @@ node_modules/
 .vercel
 .env*.local
 
-# WhatsApp bot
-.wa-session/
-.wwebjs_cache/
-.wwebjs_auth/
 
 # Hasil diff SQL Prisma (file review, jangan di-commit)
 sqldiff-*.sql

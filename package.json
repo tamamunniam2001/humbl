@@ -9,7 +9,6 @@
     "lint": "eslint",
     "check:db": "node --env-file=.env scripts/check-db.cjs",
     "sync:db": "powershell -ExecutionPolicy Bypass -File scripts/sync-db.ps1",
-    "wa": "node server-wa.js",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -24,11 +23,9 @@
     "jspdf": "^4.2.1",
     "next": "16.2.4",
     "pdfkit": "^0.18.0",
-    "qrcode-terminal": "^0.12.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "recharts": "^3.8.1",
-    "whatsapp-web.js": "^1.34.7",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

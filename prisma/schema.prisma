@@ -515,6 +515,31 @@ model Voucher {
   @@index([code])
 }
 
+// --- Template Pesan WhatsApp (Pengaturan > Pesan WhatsApp) ---
+// Template pesan yang dipilih admin saat mengirim WA ke member dari halaman
+// Daftar Member (kirim lewat Fonnte). inputType menentukan input tambahan di
+// popup kirim:
+//  NONE          = teks biasa tanpa input tambahan
+//  VOUCHER_CODE  = admin memilih kode voucher; placeholder {kode_voucher} dan
+//                  {detail_voucher} diisi otomatis dari voucher tersebut
+// Placeholder yang didukung di body: {nama}, {kode_voucher}, {detail_voucher}
+enum TemplateInput {
+  NONE
+  VOUCHER_CODE
+}
+
+model MessageTemplate {
+  id        String        @id @default(cuid())
+  name      String        @unique
+  body      String        @db.Text
+  inputType TemplateInput @default(NONE)
+  isActive  Boolean       @default(true)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@index([isActive])
+}
+
 // --- Catatan Waste (halaman Waste) ---
 // Kategori kejadian waste. Label yang tampil di UI:
 // RND = RnD, BUSUK = Busuk, TIDAK_TERPAKAI = Tidak Terpakai,
