@@ -36,6 +36,7 @@ export default function KasirPage() {
   const [cartOpen, setCartOpen] = useState(false)
   const [checkoutOpen, setCheckoutOpen] = useState(false)
   const [pendingOrder, setPendingOrder] = useState(null)
+  const [payVoucher, setPayVoucher] = useState(null) // draft voucher saat bayar open bill
   const [closingOpen, setClosingOpen] = useState(false)
   const [printer, setPrinter] = useState({ connected: false, name: null })
   const [connecting, setConnecting] = useState(false)
@@ -616,7 +617,15 @@ export default function KasirPage() {
           user={user}
           onClose={() => setSelectedOrder(null)}
           onToggleServed={() => toggleServed(selectedOrder.id, selectedOrder.servedAt)}
-          onPayNow={(order) => { setSelectedOrder(null); setPendingOrder(order) }}
+          onPayNow={(order) => {
+            setSelectedOrder(null)
+            // Voucher yang sudah tercatat saat open bill dibuat, agar tampil di
+            // checkout dan ikut masuk ke struk. Draft baru disimpan di payVoucher.
+            setPayVoucher(order.voucherId
+              ? { id: order.voucherId, code: order.voucherCode, discount: order.voucherDiscount, type: 'NOMINAL', value: order.voucherDiscount }
+              : null)
+            setPendingOrder(order)
+          }}
           onRefresh={() => { loadOrders(); setSelectedOrder(null) }}
         />
       )}
@@ -625,9 +634,18 @@ export default function KasirPage() {
         <CheckoutModal
           cart={pendingOrder.items.map((i) => ({ product: { id: i.productId || `manual_${i.id}`, name: i.product?.name || 'Item Manual', price: i.price, stock: 999, imageUrl: i.product?.imageUrl || null, category: null }, qty: i.qty }))}
           total={pendingOrder.total}
+          subtotal={pendingOrder.items.reduce((s, i) => s + (i.subtotal || 0), 0)}
+          discount={pendingOrder.discount || 0}
+          discountAmount={pendingOrder.discountAmount || 0}
+          tax={pendingOrder.tax || 0}
+          taxAmount={pendingOrder.taxAmount || 0}
+          voucher={payVoucher}
+          voucherDiscount={payVoucher?.discount || 0}
+          onVoucherChange={setPayVoucher}
+          originalVoucherId={pendingOrder.voucherId || null}
           existingOrderId={pendingOrder.id}
-          onClose={() => setPendingOrder(null)}
-          onSuccess={() => { setPendingOrder(null); loadOrders() }}
+          onClose={() => { setPendingOrder(null); setPayVoucher(null) }}
+          onSuccess={() => { setPendingOrder(null); setPayVoucher(null); loadOrders() }}
         />
       )}
 
@@ -688,6 +706,9 @@ function OrderDetailModal({ order, products = [], user = {}, onClose, onToggleSe
   const isAdminUser = user.role === 'ADMIN'
   const canEdit = isAdminUser || !paid
   const editTotal = editItems.reduce((s, i) => s + i.price * i.qty, 0)
+  // Rincian potongan untuk popup "Order Hari Ini" (data dari slim select).
+  const itemsSubtotal = order.items.reduce((s, i) => s + (i.subtotal ?? (i.price || 0) * (i.qty || 0)), 0)
+  const hasBreakdown = (order.discountAmount || 0) > 0 || (order.voucherDiscount || 0) > 0 || (order.taxAmount || 0) > 0
 
   async function handlePrint() {
     setPrinting(true)
@@ -914,6 +935,29 @@ function OrderDetailModal({ order, products = [], user = {}, onClose, onToggleSe
               </div>
               {/* Total */}
               <div style={{ background: 'var(--surface2)', borderRadius: '10px', padding: '14px', border: '1px solid var(--border)', marginBottom: paid ? '0' : '16px' }}>
+                {hasBreakdown && (
+                  <div style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '3px', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text2)' }}>
+                      <span>Subtotal</span><span>Rp {fmt(itemsSubtotal)}</span>
+                    </div>
+                    {(order.discountAmount || 0) > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--green)' }}>
+                        <span>Diskon ({order.discount}%)</span><span>- Rp {fmt(order.discountAmount)}</span>
+                      </div>
+                    )}
+                    {(order.voucherDiscount || 0) > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--green)' }}>
+                        <span>Voucher ({order.voucherCode})</span><span>- Rp {fmt(order.voucherDiscount)}</span>
+                      </div>
+                    )}
+                    {(order.taxAmount || 0) > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--orange)' }}>
+                        <span>Pajak ({order.tax}%)</span><span>+ Rp {fmt(order.taxAmount)}</span>
+                      </div>
+                    )}
+                    <div style={{ borderTop: '1px solid var(--border)', marginTop: '4px', paddingTop: '6px' }} />
+                  </div>
+                )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: paid && order.payment > 0 ? '6px' : '0' }}>
                   <span style={{ fontSize: '14px', fontWeight: '700' }}>Total</span>
                   <span style={{ fontSize: '16px', fontWeight: '800', color: 'var(--accent)' }}>Rp {fmt(order.total)}</span>
@@ -1433,7 +1477,10 @@ function ClosingModal({ orders, todayShifts = [], kasAwalOtomatis = 0, onClose, 
 }
 
 // ── Checkout Modal ──
-function CheckoutModal({ cart, total, subtotal = total, tax = 0, discount = 0, taxAmount = 0, discountAmount = 0, voucher = null, voucherDiscount = 0, onVoucherChange, onClose, onSuccess, existingOrderId }) {
+function CheckoutModal({ cart, total: totalProp, subtotal = totalProp, tax = 0, discount = 0, taxAmount = 0, discountAmount = 0, voucher = null, voucherDiscount = 0, onVoucherChange, originalVoucherId = null, onClose, onSuccess, existingOrderId }) {
+  // Total dihitung ulang dari komponennya agar ikut berubah saat voucher
+  // dipasang/dihapus — berlaku untuk cart baru maupun pembayaran open bill.
+  const total = Math.max(0, subtotal - discountAmount - (voucherDiscount || 0) + taxAmount)
   const [payMethod, setPayMethod] = useState('CASH')
   const [payment, setPayment] = useState('')
   const [payLater, setPayLater] = useState(false)
@@ -1503,10 +1550,18 @@ function CheckoutModal({ cart, total, subtotal = total, tax = 0, discount = 0, t
     setLoading(true)
     try {
       if (existingOrderId) {
-        const res = await api.patch(`/transactions/${existingOrderId}`, {
+        const patchBody = {
           payment: later ? 0 : (payMethod === 'CASH' ? paid : total),
           payMethod, total,
-        })
+        }
+        // Kirim voucher hanya bila berbeda dari yang sudah tercatat di pesanan,
+        // agar usedCount tidak ter-increment dua kali saat open bill dibayar.
+        if ((voucher?.id || null) !== (originalVoucherId ?? null)) {
+          patchBody.voucherId = voucher?.id || null
+          patchBody.voucherCode = voucher?.code || ''
+          patchBody.voucherDiscount = voucherDiscount || 0
+        }
+        const res = await api.patch(`/transactions/${existingOrderId}`, patchBody)
         setTx({ ...optimisticTx, invoiceNo: existingOrderId, ...res.data })
       } else {
         const items = cart.map((i) => {

@@ -200,17 +200,74 @@ export async function PATCH(req, { params }) {
     data.total = newItems.reduce((s, i) => s + i.subtotal, 0)
     data.items = { deleteMany: {}, create: newItems }
   }
+
+  // ── Voucher (diubah saat pembayaran open bill, mis. kasir memasukkan kode
+  // promo saat order dibayar). Klien hanya mengirim field ini bila voucher
+  // berbeda dari yang sudah tercatat — mencegah double-increment usedCount.
+  if ('voucherId' in body) {
+    const requestedId = body.voucherId || null
+    const target = await prisma.transaction.findUnique({
+      where: { id },
+      select: {
+        voucherId: true, total: true, deletedAt: true,
+        discountAmount: true, taxAmount: true,
+        items: { select: { subtotal: true } },
+      },
+    })
+    if (!target) return NextResponse.json({ message: 'Transaksi tidak ditemukan' }, { status: 404 })
+    if (target.deletedAt) return NextResponse.json({ message: 'Pesanan sudah dihapus' }, { status: 403 })
+
+    const itemsSum = target.items.reduce((s, i) => s + (i.subtotal || 0), 0)
+    if (requestedId) {
+      const voucher = await prisma.voucher.findUnique({ where: { id: requestedId } })
+      const now = new Date()
+      const stillValid = voucher && voucher.isActive
+        && (!voucher.startDate || now >= voucher.startDate)
+        && (!voucher.endDate || now <= voucher.endDate)
+        && (voucher.quota === 0 || voucher.usedCount < voucher.quota)
+
+      if (stillValid) {
+        const raw = Math.max(0, Math.round(Number(body.voucherDiscount) || 0))
+        const cap = Math.max(0, itemsSum - (target.discountAmount || 0))
+        data.voucherId = voucher.id
+        data.voucherCode = String(body.voucherCode || voucher.code).trim().toUpperCase()
+        data.voucherDiscount = Math.min(raw, cap)
+        // Naikkan pemakaian hanya bila voucher berbeda dari yang tercatat di pesanan.
+        if (target.voucherId !== voucher.id) {
+          await prisma.voucher.update({ where: { id: voucher.id }, data: { usedCount: { increment: 1 } } })
+        }
+      } else {
+        // Voucher tidak valid lagi — batalkan agar total tetap konsisten.
+        data.voucherId = null
+        data.voucherCode = ''
+        data.voucherDiscount = 0
+      }
+    } else {
+      // Dihapus dari pesanan. usedCount sengaja TIDAK dikurangi agar riwayat
+      // tetap mencatat bahwa kode pernah terpakai.
+      data.voucherId = null
+      data.voucherCode = ''
+      data.voucherDiscount = 0
+    }
+    // Total order mengikuti voucher yang berlaku (server yang menghitung ulang).
+    data.total = Math.max(0, itemsSum - (data.discountAmount ?? target.discountAmount ?? 0)
+      - (data.voucherDiscount ?? 0) + (data.taxAmount ?? target.taxAmount ?? 0))
+  }
+
   const transaction = await prisma.transaction.update({
     where: { id },
     data,
     select: {
       id: true, servedAt: true, status: true, payment: true, change: true, payMethod: true,
       invoiceNo: true, total: true, createdAt: true, customerName: true, note: true,
+      discount: true, discountAmount: true, tax: true, taxAmount: true,
+      voucherId: true, voucherCode: true, voucherDiscount: true,
       cashier: { select: { name: true } },
       items: { include: { product: { select: { name: true, imageUrl: true } } } },
     },
   })
-  return NextResponse.json(transaction)
+  const subtotal = transaction.items.reduce((s, i) => s + (i.subtotal ?? i.price * i.qty), 0)
+  return NextResponse.json({ ...transaction, subtotal })
 }
 
 export async function DELETE(req, { params }) {
