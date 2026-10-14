@@ -113,177 +113,200 @@ export default function VoucherSettingsPage() {
 
   const now = new Date()
   function statusBadge(v) {
-    if (!v.isActive) return { text: 'Nonaktif', color: '#64748B', bg: '#F1F5F9' }
-    if (v.startDate && now < new Date(v.startDate)) return { text: 'Terjadwal', color: '#B45309', bg: '#FFFBEB' }
-    if (v.endDate && now > new Date(v.endDate)) return { text: 'Kedaluwarsa', color: '#C95555', bg: '#FEF2F2' }
-    if (v.quota > 0 && v.usedCount >= v.quota) return { text: 'Kuota Habis', color: '#C95555', bg: '#FEF2F2' }
-    return { text: 'Aktif', color: '#2A9D6E', bg: '#ECFDF5' }
+    if (!v.isActive) return { text: 'Nonaktif', cls: 'v-badge-gray' }
+    if (v.startDate && now < new Date(v.startDate)) return { text: 'Terjadwal', cls: 'v-badge-orange' }
+    if (v.endDate && now > new Date(v.endDate)) return { text: 'Kedaluwarsa', cls: 'v-badge-red' }
+    if (v.quota > 0 && v.usedCount >= v.quota) return { text: 'Kuota Habis', cls: 'v-badge-red' }
+    return { text: 'Aktif', cls: 'v-badge-green' }
   }
 
   function valueLabel(v) {
     if (v.type === 'PERCENT') {
       let s = `${v.value}%`
-      if (v.maxDiscount > 0) s += ` (maks ${fmt(v.maxDiscount)})`
+      if (v.maxDiscount > 0) s += ` · maks ${fmt(v.maxDiscount)}`
       return s
     }
     return fmt(v.value)
   }
 
-  const inputS = { width: '100%' }
-  const labelS = { fontSize: '12px', fontWeight: '600', color: 'var(--text2)', marginBottom: '4px', display: 'block' }
 
+  // Statistik ringkasan
+  const totalVoucher = vouchers.length
+  const activeVoucher = vouchers.filter(v => statusBadge(v).text === 'Aktif').length
+  const totalTerpakai = vouchers.reduce((s, v) => s + (v.usedCount || 0), 0)
 
   return (
-    <>
+    <div className="page vch-page">
       <Sidebar />
-      <main className="main-content">
-        <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
-            <div>
-              <h1 style={{ fontSize: '22px', fontWeight: '800', color: 'var(--text)' }}>Voucher & Kode Promo</h1>
-              <p style={{ fontSize: '13px', color: 'var(--muted)', marginTop: '2px' }}>Atur kode voucher beserta potongan (persen atau tunai). Voucher bisa dipakai kasir saat transaksi.</p>
+      <main className="main" style={{ paddingBottom: '90px' }}>
+        {/* ── Topbar ── */}
+        <div className="topbar">
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="topbar-title">Voucher & Kode Promo</div>
+            <div className="topbar-sub">Atur kode voucher beserta potongannya</div>
+          </div>
+          <button className="btn btn-primary vch-add-btn" onClick={openAdd}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Tambah Voucher
+          </button>
+        </div>
+
+        <div className="content">
+          {/* ── Statistik ── */}
+          <div className="vch-stats">
+            <div className="vch-stat">
+              <div className="vch-stat-label">Total Voucher</div>
+              <div className="vch-stat-value">{totalVoucher}</div>
             </div>
-            <button className="btn btn-primary" onClick={openAdd}>+ Tambah Voucher</button>
+            <div className="vch-stat">
+              <div className="vch-stat-label">Sedang Aktif</div>
+              <div className="vch-stat-value" style={{ color: '#0EA472' }}>{activeVoucher}</div>
+            </div>
+            <div className="vch-stat">
+              <div className="vch-stat-label">Total Terpakai</div>
+              <div className="vch-stat-value" style={{ color: '#4F6EF7' }}>{totalTerpakai}×</div>
+            </div>
           </div>
 
-          <div className="card" style={{ overflow: 'hidden' }}>
-            <div style={{ overflowX: 'auto' }}>
-              <table className="table" style={{ minWidth: 860 }}>
-                <thead>
-                  <tr>
-                    <th>Kode</th>
-                    <th>Jenis & Potongan</th>
-                    <th>Min. Belanja</th>
-                    <th>Masa Berlaku</th>
-                    <th>Terpakai</th>
-                    <th>Status</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr><td colSpan={7} style={{ padding: '40px', textAlign: 'center', color: 'var(--muted)' }}>Memuat...</td></tr>
-                  ) : vouchers.length === 0 ? (
-                    <tr><td colSpan={7} style={{ padding: '48px', textAlign: 'center', color: 'var(--muted)' }}>
-                      <div style={{ fontSize: '32px', marginBottom: '8px' }}>🎟️</div>
-                      <div>Belum ada voucher</div>
-                      <div style={{ fontSize: '12px', marginTop: '4px' }}>Klik "Tambah Voucher" untuk membuat kode promo pertama</div>
-                    </td></tr>
-                  ) : vouchers.map(v => {
-                    const badge = statusBadge(v)
-                    return (
-                      <tr key={v.id}>
-                        <td>
-                          <div style={{ fontWeight: '800', color: 'var(--accent)', fontFamily: 'monospace', fontSize: '14px' }}>{v.code}</div>
-                          {v.description && <div style={{ fontSize: '11px', color: 'var(--muted)', marginTop: '2px' }}>{v.description}</div>}
-                        </td>
-                        <td>
-                          <span className="badge badge-gray" style={{ marginRight: '6px' }}>{v.type === 'PERCENT' ? 'Persen' : 'Tunai'}</span>
-                          <span style={{ fontWeight: '700' }}>{valueLabel(v)}</span>
-                        </td>
-                        <td style={{ fontSize: '13px', color: 'var(--text2)' }}>{v.minSpend > 0 ? fmt(v.minSpend) : '-'}</td>
-                        <td style={{ fontSize: '12px', color: 'var(--text2)' }}>
-                          {v.startDate || v.endDate ? (
-                            <>{toDateInput(v.startDate) || '∞'} → {toDateInput(v.endDate) || '∞'}</>
-                          ) : 'Selalu'}
-                        </td>
-                        <td style={{ fontSize: '13px' }}>{v.quota > 0 ? `${v.usedCount} / ${v.quota}` : `${v.usedCount}×`}</td>
-                        <td><span className="badge" style={{ background: badge.bg, color: badge.color }}>{badge.text}</span></td>
-                        <td>
-                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
-                            <button className="btn btn-ghost" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => openEdit(v)}>Edit</button>
-                            <button className="btn btn-ghost" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => handleToggle(v)}>
-                              {v.isActive ? 'Nonaktifkan' : 'Aktifkan'}
-                            </button>
-                            <button className="btn btn-danger" style={{ padding: '5px 10px', fontSize: '12px' }} onClick={() => handleDelete(v)}>Hapus</button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+          {/* ── Daftar Voucher ── */}
+          {loading ? (
+            <div className="card" style={{ padding: '48px', textAlign: 'center', color: 'var(--muted)' }}>Memuat...</div>
+          ) : vouchers.length === 0 ? (
+            <div className="card" style={{ padding: '48px', textAlign: 'center', color: 'var(--muted)' }}>
+              <div style={{ fontSize: '44px', marginBottom: '10px' }}>🎟️</div>
+              <div style={{ fontWeight: '700', fontSize: '15px', color: 'var(--text)' }}>Belum ada voucher</div>
+              <div style={{ fontSize: '13px', marginTop: '4px' }}>Klik "Tambah Voucher" untuk membuat kode promo pertama</div>
             </div>
-          </div>
+          ) : (
+            <div className="vch-grid">
+              {vouchers.map(v => {
+                const badge = statusBadge(v)
+                return (
+                  <div key={v.id} className="card vch-card">
+                    <div className="vch-card-head">
+                      <div className="vch-code">{v.code}</div>
+                      <span className={`v-badge ${badge.cls}`}>{badge.text}</span>
+                    </div>
+                    {v.description && <div className="vch-desc">{v.description}</div>}
+
+                    <div className="vch-card-body">
+                      <div className="vch-rows">
+                        <div className="vch-row">
+                          <span className="vch-row-k">Jenis</span>
+                          <span className="vch-row-v"><span className="badge badge-gray">{v.type === 'PERCENT' ? 'Persen' : 'Tunai'}</span></span>
+                        </div>
+                        <div className="vch-row">
+                          <span className="vch-row-k">Potongan</span>
+                          <span className="vch-row-v" style={{ fontWeight: '800', color: 'var(--green)' }}>{valueLabel(v)}</span>
+                        </div>
+                        <div className="vch-row">
+                          <span className="vch-row-k">Min. Belanja</span>
+                          <span className="vch-row-v">{v.minSpend > 0 ? fmt(v.minSpend) : '—'}</span>
+                        </div>
+                        <div className="vch-row">
+                          <span className="vch-row-k">Masa Berlaku</span>
+                          <span className="vch-row-v">
+                            {v.startDate || v.endDate ? `${toDateInput(v.startDate) || '∞'} → ${toDateInput(v.endDate) || '∞'}` : 'Selalu'}
+                          </span>
+                        </div>
+                        <div className="vch-row">
+                          <span className="vch-row-k">Terpakai</span>
+                          <span className="vch-row-v">{v.quota > 0 ? `${v.usedCount} / ${v.quota}` : `${v.usedCount}×`}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="vch-actions">
+                      <button className="btn vch-btn vch-btn-edit" onClick={() => openEdit(v)}>Edit</button>
+                      <button className="btn vch-btn vch-btn-toggle" onClick={() => handleToggle(v)}>
+                        {v.isActive ? 'Nonaktifkan' : 'Aktifkan'}
+                      </button>
+                      <button className="btn vch-btn vch-btn-del" onClick={() => handleDelete(v)}>Hapus</button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       </main>
 
+      {/* ── Modal Form ── */}
       {modalOpen && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(13,21,38,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500, backdropFilter: 'blur(4px)', padding: '20px' }}
-          onClick={e => { if (e.target === e.currentTarget) setModalOpen(false) }}>
-          <div className="card fade-in" style={{ width: '520px', maxWidth: '96vw', maxHeight: '92vh', overflowY: 'auto' }}>
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontSize: '15px', fontWeight: '800' }}>{editing ? `Edit Voucher — ${editing.code}` : 'Tambah Voucher'}</div>
-              <button onClick={() => setModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '22px', color: 'var(--muted)', lineHeight: 1 }}>×</button>
+        <div className="vch-modal-overlay" onClick={e => { if (e.target === e.currentTarget) setModalOpen(false) }}>
+          <div className="card vch-modal fade-in">
+            <div className="vch-modal-head">
+              <div className="vch-modal-title">{editing ? `Edit Voucher — ${editing.code}` : 'Tambah Voucher'}</div>
+              <button onClick={() => setModalOpen(false)} className="vch-modal-close">×</button>
             </div>
-            <form onSubmit={handleSave} style={{ padding: '20px' }}>
-              {error && <div style={{ background: 'var(--red-light)', border: '1px solid #FECACA', color: 'var(--red)', padding: '10px 12px', borderRadius: '8px', fontSize: '13px', marginBottom: '14px' }}>{error}</div>}
+            <form onSubmit={handleSave} className="vch-modal-body">
+              {error && <div className="vch-error">{error}</div>}
 
-              <div style={{ marginBottom: '14px' }}>
-                <label style={labelS}>Kode Voucher *</label>
-                <input className="input" style={inputS} placeholder="mis. DISKON10" value={form.code} onChange={e => setForm({ ...form, code: e.target.value.toUpperCase() })} />
+              <div className="vch-field">
+                <label className="vch-label">Kode Voucher *</label>
+                <input className="input" placeholder="mis. DISKON10" value={form.code} onChange={e => setForm({ ...form, code: e.target.value.toUpperCase() })} />
               </div>
 
-              <div style={{ marginBottom: '14px' }}>
-                <label style={labelS}>Deskripsi</label>
-                <input className="input" style={inputS} placeholder="mis. Promo akhir pekan" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
+              <div className="vch-field">
+                <label className="vch-label">Deskripsi</label>
+                <input className="input" placeholder="mis. Promo akhir pekan" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
               </div>
 
-              <div style={{ marginBottom: '14px' }}>
-                <label style={labelS}>Jenis Potongan</label>
-                <div style={{ display: 'flex', gap: '8px' }}>
+              <div className="vch-field">
+                <label className="vch-label">Jenis Potongan</label>
+                <div className="vch-seg">
                   {[{ k: 'PERCENT', label: 'Persen (%)' }, { k: 'NOMINAL', label: 'Tunai (Rp)' }].map(o => (
                     <button type="button" key={o.k} onClick={() => setForm({ ...form, type: o.k })}
-                      style={{ flex: 1, padding: '9px', borderRadius: '9px', border: `1.5px solid ${form.type === o.k ? 'var(--accent)' : 'var(--border)'}`, background: form.type === o.k ? 'var(--accent)' : '#fff', color: form.type === o.k ? '#fff' : 'var(--text2)', fontWeight: '700', fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit' }}>
+                      className={`vch-seg-btn ${form.type === o.k ? 'active' : ''}`}>
                       {o.label}
                     </button>
                   ))}
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
-                <div>
-                  <label style={labelS}>Nilai Potongan * {form.type === 'PERCENT' ? '(%)' : '(Rp)'}</label>
-                  <input className="input" type="number" min="0" style={inputS} placeholder={form.type === 'PERCENT' ? '10' : '5000'} value={form.value} onChange={e => setForm({ ...form, value: e.target.value })} />
+              <div className="vch-form-grid">
+                <div className="vch-field">
+                  <label className="vch-label">Nilai Potongan * {form.type === 'PERCENT' ? '(%)' : '(Rp)'}</label>
+                  <input className="input" type="number" min="0" placeholder={form.type === 'PERCENT' ? '10' : '5000'} value={form.value} onChange={e => setForm({ ...form, value: e.target.value })} />
                 </div>
-                <div>
-                  <label style={labelS}>Min. Belanja (Rp)</label>
-                  <input className="input" type="number" min="0" style={inputS} placeholder="0" value={form.minSpend} onChange={e => setForm({ ...form, minSpend: e.target.value })} />
+                <div className="vch-field">
+                  <label className="vch-label">Min. Belanja (Rp)</label>
+                  <input className="input" type="number" min="0" placeholder="0" value={form.minSpend} onChange={e => setForm({ ...form, minSpend: e.target.value })} />
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
+              <div className="vch-form-grid">
                 {form.type === 'PERCENT' && (
-                  <div>
-                    <label style={labelS}>Maks. Potongan (Rp)</label>
-                    <input className="input" type="number" min="0" style={inputS} placeholder="0 = tanpa batas" value={form.maxDiscount} onChange={e => setForm({ ...form, maxDiscount: e.target.value })} />
+                  <div className="vch-field">
+                    <label className="vch-label">Maks. Potongan (Rp)</label>
+                    <input className="input" type="number" min="0" placeholder="0 = tanpa batas" value={form.maxDiscount} onChange={e => setForm({ ...form, maxDiscount: e.target.value })} />
                   </div>
                 )}
-                <div>
-                  <label style={labelS}>Kuota Pemakaian</label>
-                  <input className="input" type="number" min="0" style={inputS} placeholder="0 = tanpa batas" value={form.quota} onChange={e => setForm({ ...form, quota: e.target.value })} />
+                <div className="vch-field">
+                  <label className="vch-label">Kuota Pemakaian</label>
+                  <input className="input" type="number" min="0" placeholder="0 = tanpa batas" value={form.quota} onChange={e => setForm({ ...form, quota: e.target.value })} />
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
-                <div>
-                  <label style={labelS}>Mulai Berlaku</label>
-                  <input className="input" type="date" style={inputS} value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })} />
+              <div className="vch-form-grid">
+                <div className="vch-field">
+                  <label className="vch-label">Mulai Berlaku</label>
+                  <input className="input" type="date" value={form.startDate} onChange={e => setForm({ ...form, startDate: e.target.value })} />
                 </div>
-                <div>
-                  <label style={labelS}>Berakhir</label>
-                  <input className="input" type="date" style={inputS} value={form.endDate} onChange={e => setForm({ ...form, endDate: e.target.value })} />
+                <div className="vch-field">
+                  <label className="vch-label">Berakhir</label>
+                  <input className="input" type="date" value={form.endDate} onChange={e => setForm({ ...form, endDate: e.target.value })} />
                 </div>
               </div>
 
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '18px', cursor: 'pointer', fontSize: '13px', color: 'var(--text2)' }}>
-                <input type="checkbox" checked={form.isActive} onChange={e => setForm({ ...form, isActive: e.target.checked })} style={{ width: '16px', height: '16px' }} />
+              <label className="vch-check">
+                <input type="checkbox" checked={form.isActive} onChange={e => setForm({ ...form, isActive: e.target.checked })} />
                 Voucher aktif (bisa dipakai kasir)
               </label>
 
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button type="button" className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setModalOpen(false)}>Batal</button>
-                <button type="submit" className="btn btn-primary" style={{ flex: 2, justifyContent: 'center' }} disabled={saving}>
+              <div className="vch-modal-actions">
+                <button type="button" className="btn btn-ghost" onClick={() => setModalOpen(false)}>Batal</button>
+                <button type="submit" className="btn btn-primary" disabled={saving}>
                   {saving ? 'Menyimpan...' : 'Simpan Voucher'}
                 </button>
               </div>
@@ -291,7 +314,75 @@ export default function VoucherSettingsPage() {
           </div>
         </div>
       )}
-    </>
+
+      <style>{`
+        .vch-add-btn { white-space: nowrap; }
+        .vch-add-btn svg { flex-shrink: 0; }
+
+        /* Statistik */
+        .vch-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 18px; }
+        .vch-stat { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+        .vch-stat-label { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+        .vch-stat-value { font-size: 22px; font-weight: 800; color: var(--text); }
+
+        /* Grid kartu voucher */
+        .vch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+        .vch-card { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+        .vch-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+        .vch-code { font-family: monospace; font-weight: 800; font-size: 16px; color: var(--accent); letter-spacing: 0.5px; }
+        .vch-desc { font-size: 12px; color: var(--muted); margin-top: -6px; }
+        .vch-rows { display: flex; flex-direction: column; gap: 7px; }
+        .vch-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 13px; }
+        .vch-row-k { color: var(--muted); }
+        .vch-row-v { color: var(--text2); font-weight: 600; text-align: right; }
+
+        /* Badge status */
+        .v-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+        .v-badge-green { background: #ECFDF5; color: #0EA472; }
+        .v-badge-red { background: #FEF2F2; color: #E03E3E; }
+        .v-badge-orange { background: #FFFBEB; color: #B45309; }
+        .v-badge-gray { background: #F1F5F9; color: #64748B; }
+
+        /* Tombol aksi kartu */
+        .vch-actions { display: flex; gap: 8px; }
+        .vch-btn { flex: 1; justify-content: center; padding: 8px 6px; font-size: 12px; font-weight: 700; }
+        .vch-btn-edit { background: var(--accent-light); color: var(--accent); border: 1px solid #C7D4F0; }
+        .vch-btn-toggle { background: var(--surface2); color: var(--text2); border: 1px solid var(--border); }
+        .vch-btn-del { background: var(--red-light); color: var(--red); border: 1px solid var(--red-border); }
+
+        /* Modal */
+        .vch-modal-overlay { position: fixed; inset: 0; background: rgba(13,21,38,0.55); display: flex; align-items: center; justify-content: center; z-index: 500; backdrop-filter: blur(4px); padding: 16px; }
+        .vch-modal { width: 520px; max-width: 100%; max-height: 92vh; overflow-y: auto; padding: 0; }
+        .vch-modal-head { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface); z-index: 1; }
+        .vch-modal-title { font-size: 15px; font-weight: 800; color: var(--text); }
+        .vch-modal-close { background: none; border: none; cursor: pointer; font-size: 24px; color: var(--muted); line-height: 1; }
+        .vch-modal-body { padding: 20px; }
+        .vch-error { background: var(--red-light); border: 1px solid var(--red-border); color: var(--red); padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 14px; }
+        .vch-field { margin-bottom: 14px; }
+        .vch-label { font-size: 12px; font-weight: 600; color: var(--text2); margin-bottom: 5px; display: block; }
+        .vch-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .vch-seg { display: flex; gap: 8px; }
+        .vch-seg-btn { flex: 1; padding: 9px; border-radius: 9px; border: 1.5px solid var(--border); background: #fff; color: var(--text2); font-weight: 700; font-size: 13px; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+        .vch-seg-btn.active { border-color: var(--accent); background: var(--accent); color: #fff; }
+        .vch-check { display: flex; align-items: center; gap: 8px; margin: 4px 0 18px; cursor: pointer; font-size: 13px; color: var(--text2); }
+        .vch-check input { width: 16px; height: 16px; }
+        .vch-modal-actions { display: flex; gap: 8px; }
+        .vch-modal-actions .btn { flex: 1; justify-content: center; padding: 11px; }
+
+        /* ── Mobile ── */
+        @media (max-width: 640px) {
+          .vch-stats { gap: 8px; }
+          .vch-stat { padding: 12px; }
+          .vch-stat-value { font-size: 18px; }
+          .vch-stat-label { font-size: 11px; }
+          .vch-grid { grid-template-columns: 1fr; gap: 12px; }
+          .vch-form-grid { grid-template-columns: 1fr; gap: 0; }
+          .vch-btn { min-height: 38px; }
+          .vch-modal-overlay { padding: 0; align-items: flex-end; }
+          .vch-modal { width: 100%; max-height: 94vh; border-radius: 16px 16px 0 0; }
+          .vch-modal-body { padding: 16px; }
+        }
+      `}</style>
+    </div>
   )
 }
-
