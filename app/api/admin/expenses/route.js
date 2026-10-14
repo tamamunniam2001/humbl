@@ -76,11 +76,25 @@ export async function GET(req) {
 
   const LIMIT = 50
   const kategori = searchParams.get('kategori')
-  if (kategori) where['items'] = {
+  // Penanda khusus untuk item yang benar-benar tanpa kategori (sesuai tampilan
+  // "Pengeluaran per Kategori" yang memberi label '(Tanpa Kategori)').
+  const TANPA_KATEGORI = '(Tanpa Kategori)'
+  const isTanpaKategori = kategori === TANPA_KATEGORI
+  if (kategori && !isTanpaKategori) where['items'] = {
     some: {
       OR: [
         { category: kategori },
         { category: '', expenseItem: { category: kategori } },
+      ]
+    }
+  }
+  if (isTanpaKategori) where['items'] = {
+    some: {
+      category: '',
+      OR: [
+        { expenseItemId: null },
+        { expenseItem: null },
+        { expenseItem: { category: '' } },
       ]
     }
   }
@@ -97,11 +111,16 @@ export async function GET(req) {
   // seluruh itemnya, sedangkan yang cocok lewat item hanya menampilkan item yang cocok.
   const ql = q.toLowerCase()
   const hit = (v) => String(v ?? '').toLowerCase().includes(ql)
+  const itemCategory = (item) => (item.category || item.expenseItem?.category || '').trim()
   const rows = []
   expenses.forEach(e => {
     const expenseLevelHit = !q || hit(e.catatan) || hit(e.cashier?.name)
     e.items
-      .filter(item => !kategori || (item.category || item.expenseItem?.category || '') === kategori)
+      .filter(item => {
+        if (!kategori) return true
+        if (isTanpaKategori) return itemCategory(item) === ''
+        return itemCategory(item) === kategori
+      })
       .filter(item => expenseLevelHit
         || hit(item.name) || hit(item.keterangan) || hit(item.category)
         || hit(item.expenseItem?.name) || hit(item.expenseItem?.category) || hit(item.expenseItem?.code))

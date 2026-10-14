@@ -411,7 +411,7 @@ export default function RekapPengeluaranPage() {
                         }} style={{ cursor: 'pointer', width: '15px', height: '15px' }} />
                       </td>
                       <td style={{ fontSize: '12px', color: 'var(--text2)', whiteSpace: 'nowrap' }}>{fmtDate(r.date)}</td>
-                      <td>{r.category ? <span className="badge badge-blue">{r.category}</span> : null}</td>
+                      <td>{r.category ? <span className="badge badge-blue">{r.category}</span> : <span className="badge badge-gray">Tanpa Kategori</span>}</td>
                       <td>
                         <div style={{ fontWeight: '600', color: 'var(--text)' }}>{r.name}</div>
                         {r.keterangan && <div style={{ fontSize: '11px', color: 'var(--muted)' }}>{r.keterangan}</div>}
@@ -452,14 +452,19 @@ export default function RekapPengeluaranPage() {
               </table>
             </div>
 
-            {data.totalPages > 1 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 20px', borderTop: '1px solid var(--border)', background: '#FAFBFF' }}>
-                <span style={{ fontSize: '13px', color: 'var(--muted)' }}>{data.rows.length} item dari {data.total} catatan</span>
-                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                  <button className="btn btn-ghost" style={{ padding: '6px 12px', fontSize: '13px' }} disabled={page === 1} onClick={() => setPage(page - 1)}>‹ Prev</button>
-                  <span style={{ fontSize: '13px', fontWeight: '600', padding: '0 8px' }}>{page} / {data.totalPages}</span>
-                  <button className="btn btn-ghost" style={{ padding: '6px 12px', fontSize: '13px' }} disabled={page === data.totalPages} onClick={() => setPage(page + 1)}>Next ›</button>
-                </div>
+            {!loading && data.rows.length > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', padding: '14px 20px', borderTop: '1px solid var(--border)', background: '#FAFBFF' }}>
+                <span style={{ fontSize: '13px', color: 'var(--muted)' }}>
+                  Halaman <b style={{ color: 'var(--text)' }}>{page}</b> dari <b style={{ color: 'var(--text)' }}>{data.totalPages || 1}</b>
+                  {' '}· {data.rows.length} item ditampilkan · {data.total} catatan
+                </span>
+                {data.totalPages > 1 && (
+                  <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    <button className="btn btn-ghost" style={{ padding: '6px 12px', fontSize: '13px' }} disabled={page === 1} onClick={() => setPage(page - 1)}>‹ Prev</button>
+                    <span style={{ fontSize: '13px', fontWeight: '600', padding: '0 8px' }}>{page} / {data.totalPages}</span>
+                    <button className="btn btn-ghost" style={{ padding: '6px 12px', fontSize: '13px' }} disabled={page === data.totalPages} onClick={() => setPage(page + 1)}>Next ›</button>
+                  </div>
+                )}
               </div>
             )}
           </div>
