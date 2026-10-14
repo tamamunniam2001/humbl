@@ -158,7 +158,7 @@ export async function PATCH(req, { params }) {
   }
 
   const data = {}
-  const isOrderEdit = ('items' in body) || ('customerName' in body) || ('note' in body)
+  const isOrderEdit = ('items' in body) || ('customerName' in body) || ('note' in body) || ('memberId' in body)
   if (isOrderEdit && user.role !== 'ADMIN') {
     // Kasir boleh mengedit pesanan, namun hanya pesanan hari ini (WIB).
     // Pembayaran yang sudah lunas tetap terlindungi agar angka laporan tidak berubah diam-diam.
@@ -187,6 +187,19 @@ export async function PATCH(req, { params }) {
   }
   if ('customerName' in body) data.customerName = body.customerName
   if ('note' in body) data.note = body.note
+  // Pemasangan/penggantian member saat pesanan dibayar (open bill) atau diedit.
+  // Hanya member aktif yang diterima; null = lepas member dari pesanan.
+  if ('memberId' in body) {
+    const requestedMemberId = body.memberId || null
+    if (requestedMemberId) {
+      const m = await prisma.member.findUnique({ where: { id: requestedMemberId } })
+      if (!m) return NextResponse.json({ message: 'Member tidak ditemukan' }, { status: 400 })
+      if (!m.isActive) return NextResponse.json({ message: 'Member sudah tidak aktif' }, { status: 400 })
+      data.memberId = m.id
+    } else {
+      data.memberId = null
+    }
+  }
   if ('items' in body) {
     const newItems = body.items.map(i => ({
       productId: i.productId || null,

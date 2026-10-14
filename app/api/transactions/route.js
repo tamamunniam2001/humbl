@@ -51,7 +51,7 @@ export async function GET(req) {
           id: true, invoiceNo: true, customerName: true, note: true, total: true,
           payment: true, change: true, payMethod: true, status: true, servedAt: true, createdAt: true,
           discount: true, discountAmount: true, tax: true, taxAmount: true,
-          voucherId: true, voucherCode: true, voucherDiscount: true,
+          voucherId: true, voucherCode: true, voucherDiscount: true, memberId: true,
           cashier: { select: { name: true } },
           items: { select: { id: true, qty: true, price: true, subtotal: true, productId: true, name: true, category: true, product: { select: { name: true, imageUrl: true, category: { select: { name: true } } } } } },
         }
@@ -71,7 +71,7 @@ export async function POST(req) {
   const { error, user } = verifyAuth(req)
   if (error) return error
   try {
-    const { items, payment, payMethod, payLater, customerName, note, discount = 0, tax = 0, discountAmount = 0, taxAmount = 0, voucherId = null, voucherCode = '', voucherDiscount = 0 } = await req.json()
+    const { items, payment, payMethod, payLater, customerName, note, discount = 0, tax = 0, discountAmount = 0, taxAmount = 0, voucherId = null, voucherCode = '', voucherDiscount = 0, memberId = null } = await req.json()
     if (!items?.length) return NextResponse.json({ message: 'Items tidak boleh kosong' }, { status: 400 })
     if (!payMethod) return NextResponse.json({ message: 'payMethod wajib diisi' }, { status: 400 })
 
@@ -111,6 +111,14 @@ export async function POST(req) {
       }
     }
 
+    // Member (opsional) — hanya member aktif yang tercatat; id tidak valid
+    // diabaikan agar transaksi tetap tersimpan (nama pelanggan ikut snapshot).
+    let validMemberId = null
+    if (memberId) {
+      const m = await prisma.member.findUnique({ where: { id: memberId } })
+      if (m && m.isActive) validMemberId = m.id
+    }
+
     // Buat transaksi tanpa nested select berat — hanya ambil id & invoiceNo dulu
     const transaction = await prisma.transaction.create({
       data: {
@@ -120,6 +128,7 @@ export async function POST(req) {
         status: payLater ? 'PENDING' : 'COMPLETED',
         customerName: customerName || '',
         note: note || '',
+        memberId: validMemberId,
         discount: Math.round(discount) || 0,
         discountAmount: Math.round(discountAmount) || 0,
         tax: Math.round(tax) || 0,
@@ -129,7 +138,7 @@ export async function POST(req) {
         voucherDiscount: validVoucherId ? vDiscount : 0,
         items: { create: orderItems },
       },
-      select: { id: true, invoiceNo: true, total: true, change: true, payment: true, payMethod: true, status: true, servedAt: true, createdAt: true, customerName: true, note: true, discount: true, discountAmount: true, tax: true, taxAmount: true, voucherId: true, voucherCode: true, voucherDiscount: true },
+      select: { id: true, invoiceNo: true, total: true, change: true, payment: true, payMethod: true, status: true, servedAt: true, createdAt: true, customerName: true, note: true, discount: true, discountAmount: true, tax: true, taxAmount: true, voucherId: true, voucherCode: true, voucherDiscount: true, memberId: true },
     })
 
     // Decrement stock + fetch cashier name secara paralel, tidak blocking response

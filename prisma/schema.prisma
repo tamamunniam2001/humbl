@@ -97,6 +97,18 @@ model ProductIngredient {
   @@unique([productId, ingredientId])
 }
 
+model Member {
+  id            String        @id @default(cuid())
+  name          String
+  phone         String        @unique
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  transactions  Transaction[]
+
+  @@index([name])
+}
+
 model Transaction {
   id           String      @id @default(cuid())
   invoiceNo    String      @unique
@@ -127,12 +139,17 @@ model Transaction {
   voucher      Voucher?    @relation(fields: [voucherId], references: [id], onDelete: SetNull)
   voucherCode  String?     @default("")
   voucherDiscount Int      @default(0)  // nominal potongan dari voucher (rupiah)
+  // Member (opsional) — pembelian yang tercatat atas nama member.
+  // onDelete: SetNull agar riwayat transaksi tetap aman bila member dihapus.
+  memberId    String?
+  member      Member?   @relation(fields: [memberId], references: [id], onDelete: SetNull)
 
   @@index([createdAt])
   @@index([cashierId])
   @@index([status, createdAt])
   @@index([deletedAt])
   @@index([voucherId])
+  @@index([memberId])
 }
 
 model OrderItem {

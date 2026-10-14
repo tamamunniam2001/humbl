@@ -643,6 +643,8 @@ export default function KasirPage() {
           voucherDiscount={payVoucher?.discount || 0}
           onVoucherChange={setPayVoucher}
           originalVoucherId={pendingOrder.voucherId || null}
+          initialCustomerName={pendingOrder.customerName || ''}
+          originalMemberId={pendingOrder.memberId || null}
           existingOrderId={pendingOrder.id}
           onClose={() => { setPendingOrder(null); setPayVoucher(null) }}
           onSuccess={() => { setPendingOrder(null); setPayVoucher(null); loadOrders() }}
@@ -1477,18 +1479,40 @@ function ClosingModal({ orders, todayShifts = [], kasAwalOtomatis = 0, onClose, 
 }
 
 // ── Checkout Modal ──
-function CheckoutModal({ cart, total: totalProp, subtotal = totalProp, tax = 0, discount = 0, taxAmount = 0, discountAmount = 0, voucher = null, voucherDiscount = 0, onVoucherChange, originalVoucherId = null, onClose, onSuccess, existingOrderId }) {
+function CheckoutModal({ cart, total: totalProp, subtotal = totalProp, tax = 0, discount = 0, taxAmount = 0, discountAmount = 0, voucher = null, voucherDiscount = 0, onVoucherChange, originalVoucherId = null, initialCustomerName = '', originalMemberId = null, onClose, onSuccess, existingOrderId }) {
   // Total dihitung ulang dari komponennya agar ikut berubah saat voucher
   // dipasang/dihapus — berlaku untuk cart baru maupun pembayaran open bill.
   const total = Math.max(0, subtotal - discountAmount - (voucherDiscount || 0) + taxAmount)
   const [payMethod, setPayMethod] = useState('CASH')
   const [payment, setPayment] = useState('')
   const [payLater, setPayLater] = useState(false)
-  const [customerName, setCustomerName] = useState('')
+  const [customerName, setCustomerName] = useState(initialCustomerName)
   const [note, setNote] = useState('')
   const [loading, setLoading] = useState(false)
   const [tx, setTx] = useState(null)
   const [printing, setPrinting] = useState(false)
+
+  // ── Member ──
+  const [member, setMember] = useState(null)
+  const [memberList, setMemberList] = useState(null) // null = belum dimuat
+  const [showMemberSuggest, setShowMemberSuggest] = useState(false)
+
+  // Daftar member aktif untuk autocomplete "Nama pelanggan"
+  useEffect(() => {
+    let alive = true
+    api.get('/members?active=1')
+      .then(r => { if (alive) setMemberList(r.data || []) })
+      .catch(() => { if (alive) setMemberList([]) })
+    return () => { alive = false }
+  }, [])
+
+  // Setelah daftar termuat: pulihkan member pesanan open bill (bila ada)
+  useEffect(() => {
+    if (!member && originalMemberId && memberList) {
+      const m = memberList.find(x => x.id === originalMemberId)
+      if (m) setMember(m)
+    }
+  }, [memberList]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Voucher ──
   const [voucherCode, setVoucherCode] = useState('')
@@ -1538,7 +1562,7 @@ function CheckoutModal({ cart, total: totalProp, subtotal = totalProp, tax = 0, 
       payment: later ? 0 : (payMethod === 'CASH' ? paid : total),
       payMethod, status: later ? 'PENDING' : 'COMPLETED',
       servedAt: null, createdAt: new Date().toISOString(),
-      customerName, note,
+      customerName, note, memberId: member?.id || null,
       discount, tax, discountAmount, taxAmount,
       voucherId: voucher?.id || null,
       voucherCode: voucher?.code || '',
@@ -1561,6 +1585,10 @@ function CheckoutModal({ cart, total: totalProp, subtotal = totalProp, tax = 0, 
           patchBody.voucherCode = voucher?.code || ''
           patchBody.voucherDiscount = voucherDiscount || 0
         }
+        // Nama & member hanya dikirim bila berbeda dari yang sudah tercatat
+        // pada pesanan, agar tidak menimpa data secara diam-diam.
+        if (customerName !== initialCustomerName) patchBody.customerName = customerName
+        if ((member?.id || null) !== (originalMemberId ?? null)) patchBody.memberId = member?.id || null
         const res = await api.patch(`/transactions/${existingOrderId}`, patchBody)
         setTx({ ...optimisticTx, invoiceNo: existingOrderId, ...res.data })
       } else {
@@ -1579,7 +1607,7 @@ function CheckoutModal({ cart, total: totalProp, subtotal = totalProp, tax = 0, 
         const res = await api.post('/transactions', {
           items,
           payment: later ? 0 : (payMethod === 'CASH' ? paid : total),
-          payMethod, payLater: later, customerName, note,
+          payMethod, payLater: later, customerName, note, memberId: member?.id || null,
           discount, tax, discountAmount, taxAmount,
           voucherId: voucher?.id || null,
           voucherCode: voucher?.code || '',
@@ -1707,9 +1735,51 @@ function CheckoutModal({ cart, total: totalProp, subtotal = totalProp, tax = 0, 
           <div style={{ flex: 1, padding: '16px 20px', overflowY: 'auto', borderRight: '1px solid var(--border)' }}>
             {/* Nama + Catatan */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
-              <div>
+              <div style={{ position: 'relative' }}>
                 <label className="label">{t('namaPembeli')}</label>
-                <input className="input" placeholder="Nama pelanggan" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
+                <input className="input" placeholder="Nama pelanggan / pilih member" value={customerName} autoComplete="off"
+                  onChange={(e) => {
+                    const v = e.target.value
+                    setCustomerName(v)
+                    // Nama diubah manual → lepas pilihan member bila tidak cocok lagi
+                    if (member && v.trim() !== member.name) setMember(null)
+                  }}
+                  onFocus={() => setShowMemberSuggest(true)}
+                  onBlur={() => setShowMemberSuggest(false)} />
+                {/* Saran member (autocomplete) */}
+                {showMemberSuggest && memberList && memberList.length > 0 && (() => {
+                  const q = customerName.trim().toLowerCase()
+                  const list = memberList
+                    .filter(m => !q || m.name.toLowerCase().includes(q) || m.phone.includes(q))
+                    .slice(0, 6)
+                  if (!list.length) return null
+                  return (
+                    <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '10px', boxShadow: '0 10px 26px rgba(13,21,38,0.16)', zIndex: 30, maxHeight: '216px', overflowY: 'auto' }}>
+                      {list.map(m => (
+                        <button key={m.id} type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => { setMember(m); setCustomerName(m.name); setShowMemberSuggest(false) }}
+                          style={{ display: 'flex', width: '100%', justifyContent: 'space-between', alignItems: 'center', gap: '8px', padding: '8px 10px', background: 'none', border: 'none', borderBottom: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}>
+                          <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text)' }}>{m.name}</span>
+                          <span style={{ fontSize: '11px', color: 'var(--muted)', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{m.phone}</span>
+                        </button>
+                      ))}
+                      <div style={{ padding: '6px 10px', fontSize: '10px', color: 'var(--muted)', fontStyle: 'italic' }}>
+                        Ketik nama biasa untuk pelanggan non-member
+                      </div>
+                    </div>
+                  )
+                })()}
+                {/* Badge member terpilih */}
+                {member && (
+                  <div style={{ marginTop: '6px', display: 'flex', alignItems: 'center', gap: '6px', background: '#F3EEFF', border: '1px solid #DDD0FB', borderRadius: '8px', padding: '5px 10px', width: 'fit-content', maxWidth: '100%' }}>
+                    <span style={{ fontSize: '9px', fontWeight: 800, color: '#7C3AED', letterSpacing: '.5px', textTransform: 'uppercase' }}>Member</span>
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#5B4BC4', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{member.name}</span>
+                    <span style={{ fontSize: '10px', color: '#8B7FD4', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{member.phone}</span>
+                    <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setMember(null); setCustomerName('') }}
+                      style={{ background: 'none', border: 'none', color: '#7C3AED', cursor: 'pointer', fontSize: '13px', fontWeight: 800, padding: 0, lineHeight: 1 }} title="Lepas member">×</button>
+                  </div>
+                )}
               </div>
               <div>
                 <label className="label">{t('catatan')}</label>
