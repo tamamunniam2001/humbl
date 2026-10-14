@@ -32,6 +32,11 @@ export async function GET(req, { params }) {
       // yang pernah dipindahkan ke shift lain.
       originalCreatedAt: true,
       customerName: true,
+      // Field potongan dibutuhkan popup laporan harian (kartu Diskon/Voucher
+      // di Ringkasan Penjualan + baris keterangan potongan tiap transaksi).
+      discount: true, discountAmount: true,
+      tax: true, taxAmount: true,
+      voucherCode: true, voucherDiscount: true,
       items: { select: { name: true, qty: true, price: true, subtotal: true } },
     },
     orderBy: { createdAt: 'asc' },

@@ -319,6 +319,16 @@ const PAY_TABS = [
   { key: 'NONTUNAI', label: 'Non-Tunai', color: '#0891B2', bg: '#E0F7FA', border: '#A5D8E6' },
 ]
 
+// Baris keterangan potongan satu transaksi (untuk popup laporan harian) —
+// mengikuti urutan struk: Diskon → Voucher → Pajak. Hanya yang nilainya > 0.
+function potonganRows(tx) {
+  const rows = []
+  if ((tx.discountAmount || 0) > 0) rows.push({ label: `Diskon${tx.discount ? ` (${tx.discount}%)` : ''}`, val: `-${fmt(tx.discountAmount)}`, color: '#C95555' })
+  if ((tx.voucherDiscount || 0) > 0) rows.push({ label: `Voucher${tx.voucherCode ? ` (${tx.voucherCode})` : ''}`, val: `-${fmt(tx.voucherDiscount)}`, color: '#7C3AED' })
+  if ((tx.taxAmount || 0) > 0) rows.push({ label: `Pajak${tx.tax ? ` (${tx.tax}%)` : ''}`, val: `+${fmt(tx.taxAmount)}`, color: '#C47D1A' })
+  return rows
+}
+
 function DetailModal({ report: r, onClose, fmt, fmtDate, totalPengeluaran, kasAkhir, onEdit, onReopen, reopening, isAdmin }) {
   const kAkhir = kasAkhir(r)
   const totPengeluaran = totalPengeluaran(r)
@@ -340,6 +350,20 @@ function DetailModal({ report: r, onClose, fmt, fmtDate, totalPengeluaran, kasAk
     setActiveTab(prev => prev === key ? null : key)
     loadTransactions()
   }
+
+  // Transaksi dimuat sejak modal dibuka (loadTransactions idempoten — ada guard
+  // `transactions !== null`), agar kartu Diskon/Voucher di Ringkasan Penjualan
+  // langsung terisi tanpa menunggu klik tab.
+  useEffect(() => { loadTransactions() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const potongan = (transactions || []).reduce(
+    (a, t) => ({
+      diskon: a.diskon + (t.discountAmount || 0),
+      voucher: a.voucher + (t.voucherDiscount || 0),
+    }),
+    { diskon: 0, voucher: 0 }
+  )
+  const txLoaded = transactions !== null
 
   const txByMethod = (key) => (transactions || []).filter(t => t.payMethod === key)
 
@@ -381,10 +405,14 @@ function DetailModal({ report: r, onClose, fmt, fmtDate, totalPengeluaran, kasAk
                 { label: 'Cash', value: r.uangDisetor, color: '#2A9D6E', bg: '#E8F7F1', border: '#A7DFC8' },
                 { label: 'QRIS', value: r.qris, color: '#6B5BAF', bg: '#EEEAF8', border: '#C8C0E8' },
                 { label: 'Transfer', value: r.transfer, color: '#C47D1A', bg: '#FDF4E3', border: '#F0D090' },
+                { label: 'Total Diskon', value: potongan.diskon, color: '#C95555', bg: '#FDECEC', border: '#F5C2C2' },
+                { label: 'Total Voucher', value: potongan.voucher, color: '#7C3AED', bg: '#F3EEFF', border: '#DDD0FB' },
               ].map(({ label, value, color, bg, border }) => (
                 <div key={label} style={{ background: bg, border: `1px solid ${border}`, borderRadius: '9px', padding: '10px 12px' }}>
                   <div style={{ fontSize: '10px', color: 'var(--muted)', marginBottom: '3px' }}>{label}</div>
-                  <div style={{ fontSize: '14px', fontWeight: '800', color }}>{fmt(value)}</div>
+                  <div style={{ fontSize: '14px', fontWeight: '800', color }}>
+                    {(label === 'Total Diskon' || label === 'Total Voucher') && !txLoaded ? '…' : fmt(value)}
+                  </div>
                 </div>
               ))}
             </div>
@@ -485,6 +513,16 @@ function DetailModal({ report: r, onClose, fmt, fmtDate, totalPengeluaran, kasAk
                                 <span style={{ color: 'var(--text)', fontWeight: '600' }}>{fmt(item.subtotal)}</span>
                               </div>
                             ))}
+                            {potonganRows(tx).length > 0 && (
+                              <div style={{ borderTop: '1px dashed var(--border)', marginTop: '3px', paddingTop: '4px', display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                {potonganRows(tx).map(row => (
+                                  <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px' }}>
+                                    <span style={{ color: 'var(--muted)' }}>{row.label}</span>
+                                    <span style={{ color: row.color, fontWeight: '700' }}>{row.val}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))}
