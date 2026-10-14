@@ -434,6 +434,9 @@ export default function BelanjaPage() {
         items: cartItems.map(i => ({
           itemId: i.isManual ? null : i.id,
           name: i.name,
+          // Kategori asli item (dipilih untuk manual / kategori item master),
+          // agar saat pengajuan di-ACC pengeluarannya masuk kategori yang benar.
+          category: (i.isManual ? (cart[i.id].category || i.category || '') : (i.category || '')).trim(),
           harga: Number(cart[i.id].harga),
           qty: Number(cart[i.id].qty) || 1,
           satuan: i.satuan || cart[i.id].satuan || '',
@@ -461,6 +464,7 @@ export default function BelanjaPage() {
         key: it.id || `it_${idx}`,
         itemId: it.itemId || null,
         itemName: it.itemName || '',
+        category: it.category || '',
         harga: it.harga ?? '',
         isi: it.isi ?? null,
         qty: it.qty ?? 1,
@@ -484,7 +488,7 @@ export default function BelanjaPage() {
   function addEditItem() {
     setEditForm(prev => ({
       ...prev,
-      items: [...prev.items, { key: `new_${Date.now()}`, itemId: null, itemName: '', harga: '', isi: null, qty: 1, satuan: '', keterangan: '' }],
+      items: [...prev.items, { key: `new_${Date.now()}`, itemId: null, itemName: '', category: '', harga: '', isi: null, qty: 1, satuan: '', keterangan: '' }],
     }))
   }
 
@@ -508,6 +512,7 @@ export default function BelanjaPage() {
         items: editForm.items.map(it => ({
           itemId: it.itemId || null,
           name: it.itemName,
+          category: (it.category || '').trim(),
           harga: Number(it.harga) || 0,
           isi: Number(it.isi) > 0 ? Number(it.isi) : null,
           qty: Number(it.qty) || 1,
@@ -1234,6 +1239,14 @@ export default function BelanjaPage() {
                         <input className="input" placeholder="Keterangan item (opsional)" value={it.keterangan}
                           onChange={e => setEditItemField(idx, 'keterangan', e.target.value)}
                           style={{ fontSize: '12px' }} />
+
+                        <input className="input" placeholder="Kategori (opsional) — mis. Listrik, Marketing, Perlengkapan" value={it.category || ''}
+                          onChange={e => setEditItemField(idx, 'category', e.target.value)}
+                          list="belanja-edit-cat-list"
+                          style={{ fontSize: '12px' }} />
+                        <datalist id="belanja-edit-cat-list">
+                          {expenseCategories.map(c => <option key={c} value={c} />)}
+                        </datalist>
                       </div>
                     ))}
                   </div>

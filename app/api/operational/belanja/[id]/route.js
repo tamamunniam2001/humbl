@@ -17,6 +17,8 @@ function normalizeItems(items) {
     return {
       itemId: i.itemId || null,
       itemName: String(i.name || i.itemName || '').trim(),
+      // Bawa kategori yang dipilih agar tetap tersimpan saat pengajuan diedit.
+      category: String(i.category || '').trim(),
       harga,
       isi,
       qty,
@@ -180,6 +182,17 @@ export async function PATCH(req, { params }) {
         : []
       const categoryByItemId = Object.fromEntries(expenseItems.map(e => [e.id, e.category]))
 
+      // Tentukan kategori pengeluaran untuk tiap item:
+      //  - Item master (!isManual): utamakan kategori terkini dari ExpenseItem.
+      //  - Item manual: pakai kategori yang dipilih saat input (item.category).
+      //  - Fallback netral 'Lainnya' bila keduanya kosong (BUKAN lagi 'Operasional').
+      const resolveCategory = (item) => {
+        if (!item.isManual && item.itemId && categoryByItemId[item.itemId]) {
+          return categoryByItemId[item.itemId]
+        }
+        return (item.category || '').trim() || 'Lainnya'
+      }
+
       // Catat ke Pengeluaran Toko (Expense & ExpenseDetail)
       const newExpense = await tx.expense.create({
         data: {
@@ -191,9 +204,7 @@ export async function PATCH(req, { params }) {
             create: belanja.items.map(item => ({
               expenseItemId: item.isManual ? null : item.itemId,
               name: item.itemName,
-              // Pakai kategori dari ExpenseItem jika ada, fallback ke kategori item belanja,
-              // lalu 'Operasional' hanya jika benar-benar tidak ada kategori sama sekali.
-              category: (item.isManual ? null : categoryByItemId[item.itemId]) || item.category || 'Operasional',
+              category: resolveCategory(item),
               keterangan: item.keterangan || '',
               satuan: item.satuan || '',
               harga: item.harga,

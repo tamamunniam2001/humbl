@@ -66,6 +66,9 @@ export async function POST(req) {
           create: items.map(i => ({
             itemId: i.itemId || null,
             itemName: i.name,
+            // Simpan kategori yang dipilih (item manual) / snapshot kategori item master,
+            // agar saat pengajuan di-ACC pengeluarannya masuk kategori yang benar.
+            category: String(i.category || '').trim(),
             harga: Number(i.harga) || 0,
             isi: Number(i.isi) > 0 ? Number(i.isi) : null,
             qty: Number(i.qty) || 1,

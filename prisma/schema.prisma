@@ -443,6 +443,9 @@ model OperationalBelanjaItem {
   keterangan  String?
   subtotal    Float
   isManual    Boolean            @default(false)
+  // Kategori yang dipilih saat input (khusus item manual / snapshot kategori item master)
+  // agar saat pengajuan di-ACC, pengeluarannya masuk kategori yang benar — bukan 'Operasional'.
+  category    String?            @default("")
 }
 
 model OperationalSaldoLedger {

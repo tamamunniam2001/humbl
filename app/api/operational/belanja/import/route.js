@@ -50,6 +50,9 @@ export async function POST(req) {
             create: items.map(i => ({
               itemId: i.expenseItemId || null,
               itemName: i.name,
+              // Bawa kategori dari hasil parse CSV (kolom Kategori / kategori item master)
+              // supaya saat pengajuan di-ACC pengeluarannya masuk kategori yang benar.
+              category: String(i.category || '').trim(),
               harga: i.harga,
               isi: i.isi ?? null,
               qty: i.qty,
