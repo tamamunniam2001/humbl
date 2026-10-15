@@ -1519,6 +1519,8 @@ function CheckoutModal({ cart, total: totalProp, subtotal = totalProp, tax = 0, 
   const [tx, setTx] = useState(null)
   const [printing, setPrinting] = useState(false)
 
+  const [newMemberOpen, setNewMemberOpen] = useState(false)
+
   // Daftar member aktif untuk autocomplete "Nama pelanggan"
   // + pengaturan promo global (diskon member) untuk tombol otomatis.
   useEffect(() => {
@@ -1781,7 +1783,13 @@ function CheckoutModal({ cart, total: totalProp, subtotal = totalProp, tax = 0, 
             {/* Nama + Catatan */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
               <div style={{ position: 'relative' }}>
-                <label className="label">{t('namaPembeli')}</label>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                  <label className="label" style={{ margin: 0 }}>{t('namaPembeli')}</label>
+                  <button type="button" onClick={() => setNewMemberOpen(true)}
+                    style={{ fontSize: '11px', fontWeight: '700', color: 'var(--accent)', background: 'var(--accent-light)', border: '1px solid #C7D4F0', borderRadius: '6px', padding: '2px 8px', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+                    + New Member
+                  </button>
+                </div>
                 <input className="input" placeholder="Nama pelanggan / pilih member" value={customerName} autoComplete="off"
                   onChange={(e) => {
                     const v = e.target.value
@@ -1837,6 +1845,17 @@ function CheckoutModal({ cart, total: totalProp, subtotal = totalProp, tax = 0, 
                   </div>
                 )}
               </div>
+              {newMemberOpen && (
+                <NewMemberModal
+                  onClose={() => setNewMemberOpen(false)}
+                  onCreated={(m) => {
+                    setMemberList(prev => prev ? [m, ...prev] : [m])
+                    setMember(m)
+                    setCustomerName(m.name)
+                    setNewMemberOpen(false)
+                  }}
+                />
+              )}
               <div>
                 <label className="label">{t('catatan')}</label>
                 <input className="input" placeholder="Tanpa es, extra shot..." value={note} onChange={(e) => setNote(e.target.value)} />
@@ -1980,6 +1999,57 @@ function CheckoutModal({ cart, total: totalProp, subtotal = totalProp, tax = 0, 
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ── New Member Modal (dari Kasir) ──
+function NewMemberModal({ onClose, onCreated }) {
+  const normPhone = (v) => String(v || '').replace(/[\s\-().]/g, '')
+  const [name, setName] = useState('')
+  const [phone, setPhone] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    setError('')
+    const n = name.trim()
+    const p = normPhone(phone)
+    if (!n) { setError('Nama member wajib diisi'); return }
+    if (!/^\+?[0-9]{8,15}$/.test(p)) { setError('Nomor telepon tidak valid (8–15 digit)'); return }
+    setSaving(true)
+    try {
+      const res = await api.post('/members', { name: n, phone: p })
+      onCreated(res.data)
+    } catch (err) {
+      setError(err.response?.data?.message || 'Gagal menyimpan member')
+    } finally { setSaving(false) }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(13,21,38,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, backdropFilter: 'blur(4px)' }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="card fade-in" style={{ width: '360px', padding: '24px' }}>
+        <div style={{ fontSize: '15px', fontWeight: '800', marginBottom: '16px' }}>👤 Daftarkan Member Baru</div>
+        <form onSubmit={handleSubmit}>
+          <div style={{ marginBottom: '12px' }}>
+            <label className="label">Nama Member</label>
+            <input className="input" placeholder="mis. Budi Santoso" value={name} onChange={e => setName(e.target.value)} autoFocus />
+          </div>
+          <div style={{ marginBottom: '16px' }}>
+            <label className="label">Nomor Telepon</label>
+            <input className="input" placeholder="mis. 081234567890" inputMode="tel" value={phone} onChange={e => setPhone(e.target.value)} />
+          </div>
+          {error && <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--red)', marginBottom: '10px' }}>{error}</div>}
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button type="submit" className="btn btn-primary" disabled={saving} style={{ flex: 1, justifyContent: 'center' }}>
+              {saving ? 'Menyimpan…' : 'Daftarkan'}
+            </button>
+            <button type="button" className="btn btn-ghost" onClick={onClose}>Batal</button>
+          </div>
+        </form>
       </div>
     </div>
   )

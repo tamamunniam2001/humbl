@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { verifyAuth, adminOnly } from '@/lib/auth'
+import { verifyAuth, adminOnly, canUseKasir } from '@/lib/auth'
 
 // Normalisasi nomor telepon: buang spasi/tanda hubung agar konsisten.
 function normPhone(v) {
@@ -82,12 +82,13 @@ export async function GET(req) {
   }))
 }
 
-// POST /api/members — tambah member baru (admin)
+// POST /api/members — tambah member baru (admin atau kasir)
 export async function POST(req) {
   const { error, user } = verifyAuth(req)
   if (error) return error
-  const denied = adminOnly(user)
-  if (denied) return denied
+  if (user.role !== 'ADMIN' && !canUseKasir(user)) {
+    return NextResponse.json({ message: 'Akses ditolak' }, { status: 403 })
+  }
 
   const body = await req.json()
   const v = validate(body.name, body.phone)
