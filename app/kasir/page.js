@@ -710,7 +710,7 @@ function OrderDetailModal({ order, products = [], user = {}, onClose, onToggleSe
   const editTotal = editItems.reduce((s, i) => s + i.price * i.qty, 0)
   // Rincian potongan untuk popup "Order Hari Ini" (data dari slim select).
   const itemsSubtotal = order.items.reduce((s, i) => s + (i.subtotal ?? (i.price || 0) * (i.qty || 0)), 0)
-  const hasBreakdown = (order.discountAmount || 0) > 0 || (order.voucherDiscount || 0) > 0 || (order.taxAmount || 0) > 0
+  const hasBreakdown = (order.discountAmount || 0) > 0 || (order.voucherDiscount || 0) > 0 || (order.taxAmount || 0) > 0 || (order.memberDiscount || 0) > 0
 
   async function handlePrint() {
     setPrinting(true)
@@ -945,6 +945,12 @@ function OrderDetailModal({ order, products = [], user = {}, onClose, onToggleSe
                     {(order.discountAmount || 0) > 0 && (
                       <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--green)' }}>
                         <span>Diskon ({order.discount}%)</span><span>- Rp {fmt(order.discountAmount)}</span>
+                      </div>
+                    )}
+                    {(order.memberDiscount || 0) > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--green)' }}>
+                        <span>Diskon Member {order.memberDiscountValue > 0 && order.memberDiscountType === 'NOMINAL' ? `(Rp ${fmt(order.memberDiscountValue)})` : order.memberDiscountValue > 0 ? `(${order.memberDiscountValue}%)` : ''}</span>
+                        <span>- Rp {fmt(order.memberDiscount)}</span>
                       </div>
                     )}
                     {(order.voucherDiscount || 0) > 0 && (
@@ -1701,7 +1707,7 @@ function CheckoutModal({ cart, total: totalProp, subtotal = totalProp, tax = 0, 
             </div>
           ))}
           <div style={{ borderTop: '1px solid var(--border)', marginTop: '8px', paddingTop: '8px' }}>
-            {(tx.discountAmount > 0 || tx.taxAmount > 0 || tx.voucherDiscount > 0) && (
+            {(tx.discountAmount > 0 || tx.taxAmount > 0 || tx.voucherDiscount > 0 || (tx.memberDiscount || 0) > 0) && (
               <div style={{ fontSize: '12px', display: 'flex', flexDirection: 'column', gap: '3px', marginBottom: '6px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text2)' }}>
                   <span>Subtotal</span><span>Rp {fmt(subtotal)}</span>
@@ -1709,6 +1715,12 @@ function CheckoutModal({ cart, total: totalProp, subtotal = totalProp, tax = 0, 
                 {tx.discountAmount > 0 && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--green)' }}>
                     <span>Diskon ({tx.discount}%)</span><span>- Rp {fmt(tx.discountAmount)}</span>
+                  </div>
+                )}
+                {(tx.memberDiscount || 0) > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--green)' }}>
+                    <span>Diskon Member {tx.memberDiscountValue > 0 && tx.memberDiscountType === 'NOMINAL' ? `(Rp ${fmt(tx.memberDiscountValue)})` : tx.memberDiscountValue > 0 ? `(${tx.memberDiscountValue}%)` : ''}</span>
+                    <span>- Rp {fmt(tx.memberDiscount)}</span>
                   </div>
                 )}
                 {tx.voucherDiscount > 0 && (

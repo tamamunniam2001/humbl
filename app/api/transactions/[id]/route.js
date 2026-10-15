@@ -291,6 +291,7 @@ export async function PATCH(req, { params }) {
       invoiceNo: true, total: true, createdAt: true, customerName: true, note: true,
       discount: true, discountAmount: true, tax: true, taxAmount: true,
       voucherId: true, voucherCode: true, voucherDiscount: true,
+      memberId: true, memberDiscount: true, memberDiscountType: true, memberDiscountValue: true, memberDiscountMax: true,
       cashier: { select: { name: true } },
       items: { include: { product: { select: { name: true, imageUrl: true } } } },
     },

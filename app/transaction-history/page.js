@@ -328,6 +328,12 @@ function InvoiceModal({ tx, onClose, onPrint, printingId }) {
                 <span>- Rp {fmt(tx.discountAmount)}</span>
               </div>
             )}
+            {(tx.memberDiscount || 0) > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#059669', marginBottom: '6px' }}>
+                <span>Diskon Member {tx.memberDiscountValue > 0 && tx.memberDiscountType === 'NOMINAL' ? `(Rp ${fmt(tx.memberDiscountValue)})` : tx.memberDiscountValue > 0 ? `(${tx.memberDiscountValue}%)` : ''}</span>
+                <span>- Rp {fmt(tx.memberDiscount)}</span>
+              </div>
+            )}
             {tx.voucherDiscount > 0 && (
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#059669', marginBottom: '6px' }}>
                 <span>Voucher ({tx.voucherCode})</span>

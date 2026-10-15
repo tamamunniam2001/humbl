@@ -49,6 +49,14 @@ export async function GET(req) {
       discountAmount: true,
       tax: true,
       taxAmount: true,
+      voucherId: true,
+      voucherCode: true,
+      voucherDiscount: true,
+      memberId: true,
+      memberDiscount: true,
+      memberDiscountType: true,
+      memberDiscountValue: true,
+      memberDiscountMax: true,
       cashier: { select: { name: true } },
       items: {
         select: {
