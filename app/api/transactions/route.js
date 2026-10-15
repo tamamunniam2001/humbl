@@ -89,9 +89,12 @@ export async function POST(req) {
       }
     })
     const subtotal = orderItems.reduce((s, i) => s + i.subtotal, 0)
-    // Potongan voucher (nominal, dari kode promo) dipotong terpisah dari diskon manual
-    const vDiscount = Math.max(0, Math.round(Number(voucherDiscount) || 0))
-    const total = Math.max(0, subtotal - (discountAmount || 0) - vDiscount + (taxAmount || 0))
+    const discAmount = Math.max(0, Math.round(Number(discountAmount) || 0))
+    const taxAmt = Math.max(0, Math.round(Number(taxAmount) || 0))
+    // Voucher yang sudah tidak valid diberi 0 agar total tetap konsisten.
+    // (validVoucherId = voucher yang lolos cek aktif/masa berlaku/kuota.)
+    let vDiscount = 0
+    if (validVoucherId) vDiscount = Math.max(0, Math.round(Number(voucherDiscount) || 0))
     const actualPayment = payLater ? 0 : (payment || 0)
     const invoiceNo = `BK-${Date.now()}`
 
@@ -118,6 +121,38 @@ export async function POST(req) {
       const m = await prisma.member.findUnique({ where: { id: memberId } })
       if (m && m.isActive) validMemberId = m.id
     }
+    // Diskon member — OTOMATIS penuh dari server (tanpa tombol di kasir).
+    // Dihitung ulang dari PromoSettings agar tidak bisa dimanipulasi browser.
+    // Berlaku hanya bila: ada member valid & aktif, pengaturan promo aktif, dan
+    // subtotal (setelah diskon manual) mencapai minimal belanja.
+    // Urutan potong: diskon manual -> diskon member -> voucher -> + pajak.
+    // Cukup atur on/off + nilai dari halaman Voucher & Promo.
+    let mType = 'PERCENT'
+    let mValue = 0
+    let mMax = 0
+    let mDiscount = 0
+    if (validMemberId) {
+      let promo = null
+      try { promo = await prisma.promoSettings.findUnique({ where: { id: 'singleton' } }) } catch { promo = null }
+      if (promo?.memberDiscountActive && (promo.memberDiscountValue || 0) > 0) {
+        mType = promo.memberDiscountType === 'NOMINAL' ? 'NOMINAL' : 'PERCENT'
+        mValue = Math.max(0, Math.round(promo.memberDiscountValue || 0))
+        mMax = Math.max(0, Math.round(promo.memberDiscountMax || 0))
+        const base = Math.max(0, subtotal - discAmount)
+        const minSpend = Math.max(0, Math.round(promo.memberDiscountMin || 0))
+        if (base >= minSpend && base > 0 && mValue > 0) {
+          if (mType === 'PERCENT') {
+            mDiscount = Math.round(base * Math.min(100, mValue) / 100)
+            if (mMax > 0) mDiscount = Math.min(mDiscount, mMax)
+          } else {
+            mDiscount = mValue
+          }
+          mDiscount = Math.min(mDiscount, base)
+        }
+      }
+    }
+    if (mType === 'NOMINAL') mMax = 0
+    const total = Math.max(0, subtotal - discAmount - mDiscount - vDiscount + taxAmt)
 
     // Buat transaksi tanpa nested select berat — hanya ambil id & invoiceNo dulu
     const transaction = await prisma.transaction.create({
@@ -136,9 +171,13 @@ export async function POST(req) {
         voucherId: validVoucherId,
         voucherCode: validVoucherId ? String(voucherCode || '').trim().toUpperCase() : '',
         voucherDiscount: validVoucherId ? vDiscount : 0,
+        memberDiscountType: mDiscount > 0 ? mType : 'PERCENT',
+        memberDiscountValue: mDiscount > 0 ? mValue : 0,
+        memberDiscountMax: mDiscount > 0 ? mMax : 0,
+        memberDiscount: mDiscount,
         items: { create: orderItems },
       },
-      select: { id: true, invoiceNo: true, total: true, change: true, payment: true, payMethod: true, status: true, servedAt: true, createdAt: true, customerName: true, note: true, discount: true, discountAmount: true, tax: true, taxAmount: true, voucherId: true, voucherCode: true, voucherDiscount: true, memberId: true },
+      select: { id: true, invoiceNo: true, total: true, change: true, payment: true, payMethod: true, status: true, servedAt: true, createdAt: true, customerName: true, note: true, discount: true, discountAmount: true, tax: true, taxAmount: true, voucherId: true, voucherCode: true, voucherDiscount: true, memberId: true, memberDiscountType: true, memberDiscountValue: true, memberDiscountMax: true, memberDiscount: true },
     })
 
     // Decrement stock + fetch cashier name secara paralel, tidak blocking response
@@ -160,7 +199,7 @@ export async function POST(req) {
       product: { name: i.name, imageUrl: null, category: i.category ? { name: i.category } : null },
     }))
 
-    return NextResponse.json({ ...transaction, cashier, items: responseItems, subtotal, discount, tax, discountAmount, taxAmount, voucherDiscount: validVoucherId ? vDiscount : 0 }, { status: 201 })
+    return NextResponse.json({ ...transaction, cashier, items: responseItems, subtotal, discount, tax, discountAmount: discAmount, taxAmount: taxAmt, voucherDiscount: validVoucherId ? vDiscount : 0, memberDiscount: mDiscount, memberDiscountType: mType, memberDiscountValue: mValue, memberDiscountMax: mMax }, { status: 201 })
   } catch (err) {
     return NextResponse.json({ message: err.message || 'Gagal menyimpan transaksi' }, { status: 500 })
   }

@@ -1480,9 +1480,30 @@ function ClosingModal({ orders, todayShifts = [], kasAwalOtomatis = 0, onClose, 
 
 // ── Checkout Modal ──
 function CheckoutModal({ cart, total: totalProp, subtotal = totalProp, tax = 0, discount = 0, taxAmount = 0, discountAmount = 0, voucher = null, voucherDiscount = 0, onVoucherChange, originalVoucherId = null, initialCustomerName = '', originalMemberId = null, onClose, onSuccess, existingOrderId }) {
-  // Total dihitung ulang dari komponennya agar ikut berubah saat voucher
-  // dipasang/dihapus — berlaku untuk cart baru maupun pembayaran open bill.
-  const total = Math.max(0, subtotal - discountAmount - (voucherDiscount || 0) + taxAmount)
+  // Total dihitung ulang dari komponennya agar ikut berubah saat voucher dipilih
+  // maupun saat member otomatis dapat diskon promo — berlaku untuk cart baru
+  // maupun open bill. Urutan potong: diskon manual -> diskon member -> voucher -> + pajak.
+  const [promo, setPromo] = useState(null) // PromoSettings global (diskon member)
+  // ── Member ── (dideklarasikan di atas agar preview diskon bisa membaca member)
+  const [member, setMember] = useState(null)
+  const [memberList, setMemberList] = useState(null) // null = belum dimuat
+  const [showMemberSuggest, setShowMemberSuggest] = useState(false)
+  const memberBase = Math.max(0, (subtotal || 0) - (discountAmount || 0))
+  const memberEligible = !!member && !!promo?.memberDiscountActive && (promo?.memberDiscountValue || 0) > 0
+    && memberBase > 0 && memberBase >= (promo?.memberDiscountMin || 0)
+  let memberDiscountPreview = 0
+  // OTOMATIS: tanpa tombol di kasir. Member yang valid langsung dapat potongan
+  // selama promo aktif (diatur on/off dari halaman Voucher & Promo).
+  if (memberEligible) {
+    if (promo.memberDiscountType === 'NOMINAL') {
+      memberDiscountPreview = Math.min(promo.memberDiscountValue || 0, memberBase)
+    } else {
+      memberDiscountPreview = Math.round(memberBase * Math.min(100, promo.memberDiscountValue || 0) / 100)
+      if ((promo.memberDiscountMax || 0) > 0) memberDiscountPreview = Math.min(memberDiscountPreview, promo.memberDiscountMax)
+    }
+  }
+  const memberDiscount = memberEligible ? memberDiscountPreview : 0
+  const total = Math.max(0, subtotal - discountAmount - memberDiscount - (voucherDiscount || 0) + taxAmount)
   const [payMethod, setPayMethod] = useState('CASH')
   const [payment, setPayment] = useState('')
   const [payLater, setPayLater] = useState(false)
@@ -1492,27 +1513,35 @@ function CheckoutModal({ cart, total: totalProp, subtotal = totalProp, tax = 0, 
   const [tx, setTx] = useState(null)
   const [printing, setPrinting] = useState(false)
 
-  // ── Member ──
-  const [member, setMember] = useState(null)
-  const [memberList, setMemberList] = useState(null) // null = belum dimuat
-  const [showMemberSuggest, setShowMemberSuggest] = useState(false)
-
   // Daftar member aktif untuk autocomplete "Nama pelanggan"
+  // + pengaturan promo global (diskon member) untuk tombol otomatis.
   useEffect(() => {
     let alive = true
     api.get('/members?active=1')
       .then(r => { if (alive) setMemberList(r.data || []) })
       .catch(() => { if (alive) setMemberList([]) })
+    api.get('/admin/promo-settings')
+      .then(r => { if (alive) setPromo(r.data || null) })
+      .catch(() => { if (alive) setPromo(null) })
     return () => { alive = false }
   }, [])
 
-  // Setelah daftar termuat: pulihkan member pesanan open bill (bila ada)
+  // Setelah daftar termuat: pulihkan member pesanan open bill (bila ada).
+  // Bila nama pelanggan cocok dengan member (hasil kirim pesan WA dsb),
+  // otomatis pasangkan membernya agar tombol diskon muncul.
   useEffect(() => {
-    if (!member && originalMemberId && memberList) {
+    if (!memberList) return
+    if (!member && originalMemberId) {
       const m = memberList.find(x => x.id === originalMemberId)
+      if (m) { setMember(m); return }
+    }
+    if (!member && customerName.trim() && promo?.memberDiscountActive) {
+      const q = customerName.trim().toLowerCase()
+      const m = memberList.find(x => (x.name || '').toLowerCase() === q)
+        || memberList.find(x => (x.name || '').toLowerCase().includes(q) && q.length >= 3)
       if (m) setMember(m)
     }
-  }, [memberList]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [memberList, promo]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Voucher ──
   const [voucherCode, setVoucherCode] = useState('')
@@ -1564,6 +1593,10 @@ function CheckoutModal({ cart, total: totalProp, subtotal = totalProp, tax = 0, 
       servedAt: null, createdAt: new Date().toISOString(),
       customerName, note, memberId: member?.id || null,
       discount, tax, discountAmount, taxAmount,
+      memberDiscountType: promo?.memberDiscountType || 'PERCENT',
+      memberDiscountValue: promo?.memberDiscountValue || 0,
+      memberDiscountMax: promo?.memberDiscountMax || 0,
+      memberDiscount,
       voucherId: voucher?.id || null,
       voucherCode: voucher?.code || '',
       voucherDiscount: voucherDiscount || 0,
@@ -1613,7 +1646,7 @@ function CheckoutModal({ cart, total: totalProp, subtotal = totalProp, tax = 0, 
           voucherCode: voucher?.code || '',
           voucherDiscount: voucherDiscount || 0,
         })
-        setTx({ subtotal, discount, tax, discountAmount, taxAmount, voucherDiscount: voucherDiscount || 0, voucherCode: voucher?.code || '', ...res.data })
+        setTx({ subtotal, discount, tax, discountAmount, taxAmount, memberDiscount, memberDiscountType: promo?.memberDiscountType || 'PERCENT', memberDiscountValue: promo?.memberDiscountValue || 0, memberDiscountMax: promo?.memberDiscountMax || 0, voucherDiscount: voucherDiscount || 0, voucherCode: voucher?.code || '', ...res.data })
       }
     } catch (e) {
       setTx(null)
@@ -1778,6 +1811,17 @@ function CheckoutModal({ cart, total: totalProp, subtotal = totalProp, tax = 0, 
                     <span style={{ fontSize: '10px', color: '#8B7FD4', fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{member.phone}</span>
                     <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => { setMember(null); setCustomerName('') }}
                       style={{ background: 'none', border: 'none', color: '#7C3AED', cursor: 'pointer', fontSize: '13px', fontWeight: 800, padding: 0, lineHeight: 1 }} title="Lepas member">×</button>
+                  </div>
+                )}
+                {/* Diskon member OTOMATIS — tanpa tombol. Aktif/nonaktif hanya dari halaman Voucher & Promo. */}
+                {member && memberDiscount > 0 && (
+                  <div style={{ marginTop: '8px', width: '100%', padding: '10px 12px', borderRadius: '10px', fontFamily: 'inherit', fontSize: '13px', fontWeight: '800', border: '1.5px solid #7C3AED', background: '#7C3AED', color: '#fff', textAlign: 'center' }}>
+                    Diskon Member Otomatis — hemat Rp {fmt(memberDiscount)}
+                  </div>
+                )}
+                {member && !memberEligible && promo?.memberDiscountActive && (
+                  <div style={{ fontSize: '11px', color: 'var(--orange)', marginTop: '6px' }}>
+                    Belum memenuhi minimal belanja {promo?.memberDiscountMin ? `Rp ${fmt(promo.memberDiscountMin)}` : ''} — tambah item agar diskon member terhitung.
                   </div>
                 )}
               </div>

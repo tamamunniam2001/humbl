@@ -28,13 +28,63 @@ export default function VoucherSettingsPage() {
   const [form, setForm] = useState(EMPTY)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  // ── Diskon member global ──
+  const [promo, setPromo] = useState({ memberDiscountActive: false, memberDiscountType: 'PERCENT', memberDiscountValue: '', memberDiscountMax: '', memberDiscountMin: '' })
+  const [promoSaving, setPromoSaving] = useState(false)
+  const [promoMsg, setPromoMsg] = useState('')
 
   async function load() {
     setLoading(true)
     try {
-      const res = await api.get('/admin/vouchers')
-      setVouchers(res.data)
+      const [vRes, pRes] = await Promise.all([
+        api.get('/admin/vouchers'),
+        api.get('/admin/promo-settings').catch(() => null),
+      ])
+      setVouchers(vRes.data)
+      if (pRes?.data) {
+        setPromo({
+          memberDiscountActive: !!pRes.data.memberDiscountActive,
+          memberDiscountType: pRes.data.memberDiscountType === 'NOMINAL' ? 'NOMINAL' : 'PERCENT',
+          memberDiscountValue: pRes.data.memberDiscountValue != null ? String(pRes.data.memberDiscountValue) : '',
+          memberDiscountMax: pRes.data.memberDiscountMax ? String(pRes.data.memberDiscountMax) : '',
+          memberDiscountMin: pRes.data.memberDiscountMin ? String(pRes.data.memberDiscountMin) : '',
+        })
+      }
     } catch { } finally { setLoading(false) }
+  }
+
+  async function savePromo(e) {
+    e?.preventDefault?.()
+    setPromoMsg('')
+    const value = Number(promo.memberDiscountValue) || 0
+    if (promo.memberDiscountActive && !(value > 0)) {
+      setPromoMsg('Nilai diskon harus lebih dari 0 untuk mengaktifkan')
+      return
+    }
+    if (promo.memberDiscountType === 'PERCENT' && value > 100) {
+      setPromoMsg('Diskon persen maksimal 100')
+      return
+    }
+    setPromoSaving(true)
+    try {
+      const res = await api.put('/admin/promo-settings', {
+        memberDiscountActive: promo.memberDiscountActive,
+        memberDiscountType: promo.memberDiscountType,
+        memberDiscountValue: value,
+        memberDiscountMax: Number(promo.memberDiscountMax) || 0,
+        memberDiscountMin: Number(promo.memberDiscountMin) || 0,
+      })
+      setPromo({
+        memberDiscountActive: !!res.data.memberDiscountActive,
+        memberDiscountType: res.data.memberDiscountType === 'NOMINAL' ? 'NOMINAL' : 'PERCENT',
+        memberDiscountValue: res.data.memberDiscountValue != null ? String(res.data.memberDiscountValue) : '',
+        memberDiscountMax: res.data.memberDiscountMax ? String(res.data.memberDiscountMax) : '',
+        memberDiscountMin: res.data.memberDiscountMin ? String(res.data.memberDiscountMin) : '',
+      })
+      setPromoMsg('Pengaturan diskon member tersimpan')
+    } catch (err) {
+      setPromoMsg(err.response?.data?.message || 'Gagal menyimpan pengaturan')
+    } finally { setPromoSaving(false) }
   }
 
   useEffect(() => { load() }, [])
@@ -169,7 +219,60 @@ export default function VoucherSettingsPage() {
           </div>
 
           {/* ── Daftar Voucher ── */}
-          {loading ? (
+          {/* ── Diskon semua member ── */}
+      <form className="card" onSubmit={savePromo} style={{ padding: '18px 20px', marginBottom: '16px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap', marginBottom: '6px' }}>
+          <div>
+            <div style={{ fontSize: '15px', fontWeight: '800', color: 'var(--text)' }}>💜 Diskon Semua Member</div>
+            <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '2px', maxWidth: '640px' }}>
+              Berlaku otomatis untuk semua member aktif. Saat nama pelanggan di kasir memilih member,
+              tombol <b>Diskon Member</b> muncul — kasir tinggal menekan untuk memasang/mencopotnya.
+              Potongan dihitung dari subtotal setelah diskon manual.
+            </div>
+          </div>
+          <label className="vch-check" style={{ margin: 0, fontWeight: 700, whiteSpace: 'nowrap' }}>
+            <input type="checkbox" checked={promo.memberDiscountActive}
+              onChange={e => setPromo(p => ({ ...p, memberDiscountActive: e.target.checked }))} />
+            Aktif
+          </label>
+        </div>
+        <div className="vch-form-grid">
+          <div className="vch-field">
+            <label className="vch-label">Jenis Diskon</label>
+            <div className="vch-seg">
+              {[['PERCENT', 'Persen (%)'], ['NOMINAL', 'Nominal (Rp)']].map(([val, label]) => (
+                <button type="button" key={val} onClick={() => setPromo(p => ({ ...p, memberDiscountType: val }))}
+                  className={`vch-seg-btn ${promo.memberDiscountType === val ? 'active' : ''}`}>{label}</button>
+              ))}
+            </div>
+          </div>
+          <div className="vch-field">
+            <label className="vch-label">Nilai {promo.memberDiscountType === 'PERCENT' ? '(%, mis. 10)' : '(Rp, mis. 5000)'}</label>
+            <input className="input" type="number" min="0" max={promo.memberDiscountType === 'PERCENT' ? 100 : undefined}
+              value={promo.memberDiscountValue} onChange={e => setPromo(p => ({ ...p, memberDiscountValue: e.target.value }))} placeholder="0" />
+          </div>
+          <div className="vch-field">
+            <label className="vch-label">Minimal belanja (Rp, opsional)</label>
+            <input className="input" type="number" min="0" value={promo.memberDiscountMin}
+              onChange={e => setPromo(p => ({ ...p, memberDiscountMin: e.target.value }))} placeholder="0" />
+          </div>
+          {promo.memberDiscountType === 'PERCENT' && (
+            <div className="vch-field">
+              <label className="vch-label">Maksimal potongan (Rp, 0 = tanpa batas)</label>
+              <input className="input" type="number" min="0" value={promo.memberDiscountMax}
+                onChange={e => setPromo(p => ({ ...p, memberDiscountMax: e.target.value }))} placeholder="0" />
+            </div>
+          )}
+        </div>
+        {promoMsg && (
+          <div className={promoMsg.includes('tersimpan') ? 'vch-ok' : 'vch-error'} style={{ marginBottom: '12px' }}>{promoMsg}</div>
+        )}
+        <button className="btn btn-primary" type="submit" disabled={promoSaving} style={{ justifyContent: 'center' }}>
+          {promoSaving ? 'Menyimpan...' : '💾 Simpan Diskon Member'}
+        </button>
+      </form>
+
+      {loading ? (
             <div className="card" style={{ padding: '48px', textAlign: 'center', color: 'var(--muted)' }}>Memuat...</div>
           ) : vouchers.length === 0 ? (
             <div className="card" style={{ padding: '48px', textAlign: 'center', color: 'var(--muted)' }}>
@@ -358,6 +461,7 @@ export default function VoucherSettingsPage() {
         .vch-modal-close { background: none; border: none; cursor: pointer; font-size: 24px; color: var(--muted); line-height: 1; }
         .vch-modal-body { padding: 20px; }
         .vch-error { background: var(--red-light); border: 1px solid var(--red-border); color: var(--red); padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 14px; }
+        .vch-ok { background: #ECFDF5; border: 1px solid #A7F3D0; color: #0E7A55; padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 14px; }
         .vch-field { margin-bottom: 14px; }
         .vch-label { font-size: 12px; font-weight: 600; color: var(--text2); margin-bottom: 5px; display: block; }
         .vch-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }

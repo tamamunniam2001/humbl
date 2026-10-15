@@ -179,6 +179,22 @@ export async function PATCH(req, { params }) {
       return NextResponse.json({ message: 'Kasir hanya dapat mengedit pesanan hari ini' }, { status: 403 })
   }
   if ('servedAt' in body) data.servedAt = body.servedAt ? new Date(body.servedAt) : null
+  // Kartu member (member), diskon member + flag manual, voucher, dan pembayaran.
+  // server recalculates everything, so only commit the flag & member so the
+  // receipt + totals stay consistent.
+  // applyMemberDiscount: field lama diabaikan — diskon member kini full-otomatis
+  // bila memberId terisi & promo member aktif.
+  if ('memberId' in body) {
+    const requestedMemberId = body.memberId || null
+    if (requestedMemberId) {
+      const m = await prisma.member.findUnique({ where: { id: requestedMemberId } })
+      if (!m) return NextResponse.json({ message: 'Member tidak ditemukan' }, { status: 400 })
+      if (!m.isActive) return NextResponse.json({ message: 'Member sudah tidak aktif' }, { status: 400 })
+      data.memberId = m.id
+    } else {
+      data.memberId = null
+    }
+  }
   if ('payment' in body) {
     data.payment = body.payment
     data.change = body.payment - body.total

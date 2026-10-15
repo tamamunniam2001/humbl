@@ -139,6 +139,12 @@ model Transaction {
   voucher      Voucher?    @relation(fields: [voucherId], references: [id], onDelete: SetNull)
   voucherCode  String?     @default("")
   voucherDiscount Int      @default(0)  // nominal potongan dari voucher (rupiah)
+  // Diskon member (snapshot dari PromoSettings saat transaksi dibuat/dibayar).
+  // Tetap tersimpan walau pengaturan diubah kemudian — dipakai struk/history.
+  memberDiscountType  VoucherType? @default(PERCENT)
+  memberDiscountValue Int          @default(0)
+  memberDiscountMax   Int          @default(0)
+  memberDiscount      Int          @default(0) // nominal rupiah yang benar-benar dipotong
   // Member (opsional) — pembelian yang tercatat atas nama member.
   // onDelete: SetNull agar riwayat transaksi tetap aman bila member dihapus.
   memberId    String?
@@ -483,6 +489,20 @@ model OperationalSaldoLedger {
 
   @@index([roleKey])
   @@index([type])
+}
+
+// --- Pengaturan Promo Global (halaman Promo & Voucher) ---
+// Diskon otomatis untuk semua member aktif. Dipakai kasir saat nama
+// pelanggan terhubung ke member: tombol "Diskon Member" muncul dan bila
+// dipasang, potongan dihitung dari subtotal setelah diskon manual.
+model PromoSettings {
+  id                   String      @id @default("singleton")
+  memberDiscountActive Boolean     @default(false)
+  memberDiscountType   VoucherType @default(PERCENT)
+  memberDiscountValue  Int         @default(0)
+  memberDiscountMax    Int         @default(0)
+  memberDiscountMin    Int         @default(0)
+  updatedAt            DateTime    @updatedAt
 }
 
 // --- Voucher / Kode Promo ---
