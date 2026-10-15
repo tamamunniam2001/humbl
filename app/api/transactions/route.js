@@ -88,16 +88,6 @@ export async function POST(req) {
         qty: item.qty, price, subtotal: price * item.qty,
       }
     })
-    const subtotal = orderItems.reduce((s, i) => s + i.subtotal, 0)
-    const discAmount = Math.max(0, Math.round(Number(discountAmount) || 0))
-    const taxAmt = Math.max(0, Math.round(Number(taxAmount) || 0))
-    // Voucher yang sudah tidak valid diberi 0 agar total tetap konsisten.
-    // (validVoucherId = voucher yang lolos cek aktif/masa berlaku/kuota.)
-    let vDiscount = 0
-    if (validVoucherId) vDiscount = Math.max(0, Math.round(Number(voucherDiscount) || 0))
-    const actualPayment = payLater ? 0 : (payment || 0)
-    const invoiceNo = `BK-${Date.now()}`
-
     // Verifikasi voucher (jika dipakai) & naikkan pemakaiannya secara aman
     let validVoucherId = null
     if (voucherId) {
@@ -113,6 +103,16 @@ export async function POST(req) {
         }
       }
     }
+
+    const subtotal = orderItems.reduce((s, i) => s + i.subtotal, 0)
+    const discAmount = Math.max(0, Math.round(Number(discountAmount) || 0))
+    const taxAmt = Math.max(0, Math.round(Number(taxAmount) || 0))
+    // Voucher yang sudah tidak valid diberi 0 agar total tetap konsisten.
+    // (validVoucherId = voucher yang lolos cek aktif/masa berlaku/kuota.)
+    let vDiscount = 0
+    if (validVoucherId) vDiscount = Math.max(0, Math.round(Number(voucherDiscount) || 0))
+    const actualPayment = payLater ? 0 : (payment || 0)
+    const invoiceNo = `BK-${Date.now()}`
 
     // Member (opsional) — hanya member aktif yang tercatat; id tidak valid
     // diabaikan agar transaksi tetap tersimpan (nama pelanggan ikut snapshot).
