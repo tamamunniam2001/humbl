@@ -40,7 +40,7 @@ export async function POST(req) {
 
   try {
     const template = await prisma.messageTemplate.create({
-      data: { name: v.name, body: v.body, inputType: v.inputType },
+      data: { name: v.name, body: v.body, inputType: v.inputType, isWelcome: !!body.isWelcome },
     })
     return NextResponse.json(template, { status: 201 })
   } catch (e) {

@@ -554,6 +554,7 @@ model MessageTemplate {
   body      String        @db.Text
   inputType TemplateInput @default(NONE)
   isActive  Boolean       @default(true)
+  isWelcome Boolean       @default(false)
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 

@@ -31,6 +31,7 @@ export default function MembersPage() {
 
   const user = (() => { try { return JSON.parse(Cookies.get('user') || '{}') } catch { return {} } })()
   const isAdmin = user.role === 'ADMIN'
+  const canSendMsg = isAdmin || (Array.isArray(user.allowedPaths) && user.allowedPaths.includes('/members'))
 
   async function load() {
     setLoading(true)
@@ -230,7 +231,7 @@ export default function MembersPage() {
                         </td>
                         <td style={{ padding: '10px 14px', textAlign: 'right' }}>
                           <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                            {isAdmin && (
+                            {canSendMsg && (
                               <button className="btn" style={{ padding: '4px 12px', fontSize: '11px', background: '#ECFDF5', color: '#0EA472', border: '1px solid #A7DFC8' }}
                                 onClick={() => openWa(m)}>
                                 ✈️ Kirim Pesan

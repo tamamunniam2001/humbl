@@ -4,7 +4,7 @@ import Sidebar from '@/components/Sidebar'
 import Link from 'next/link'
 import api from '@/lib/api'
 
-const EMPTY = { name: '', body: '', inputType: 'NONE', isActive: true }
+const EMPTY = { name: '', body: '', inputType: 'NONE', isActive: true, isWelcome: false }
 
 // Template contoh bawaan saat admin pertama kali mengatur pesan WhatsApp.
 const SAMPLE_TEMPLATES = [
@@ -60,6 +60,7 @@ export default function WaMessageSettingsPage() {
       body: t.body || '',
       inputType: t.inputType || 'NONE',
       isActive: t.isActive !== false,
+      isWelcome: !!t.isWelcome,
     })
     setError('')
     setModalOpen(true)
@@ -80,6 +81,7 @@ export default function WaMessageSettingsPage() {
       body: form.body,
       inputType: form.inputType,
       isActive: form.isActive,
+      isWelcome: form.isWelcome && form.inputType === 'NONE',
     }
     setSaving(true)
     try {
@@ -181,6 +183,9 @@ export default function WaMessageSettingsPage() {
                       <span className={`tpl-badge ${t.isActive ? 'tpl-badge-green' : 'tpl-badge-gray'}`}>
                         {t.isActive ? 'Aktif' : 'Nonaktif'}
                       </span>
+                      {t.isWelcome && (
+                        <span className="tpl-badge tpl-badge-orange">👋 Welcome</span>
+                      )}
                       <span className="tpl-card-title" title={t.name}>{t.name}</span>
                     </div>
                     <span className={`tpl-badge ${t.inputType === 'VOUCHER_CODE' ? 'tpl-badge-purple' : 'tpl-badge-gray'}`}
@@ -265,6 +270,17 @@ export default function WaMessageSettingsPage() {
                 Template aktif (muncul di pilihan kirim pesan)
               </label>
 
+              {form.inputType === 'NONE' && (
+                <label className="tpl-check">
+                  <input type="checkbox" checked={form.isWelcome}
+                    onChange={e => setForm({ ...form, isWelcome: e.target.checked })} />
+                  <span>
+                    👋 Kirim otomatis ke member baru
+                    <span style={{ display: 'block', fontSize: '11px', color: 'var(--muted)', fontWeight: 400 }}>Pesan ini dikirim otomatis saat member baru didaftarkan</span>
+                  </span>
+                </label>
+              )}
+
               <div className="tpl-modal-actions">
                 <button type="button" className="btn" onClick={() => setModalOpen(false)}>Batal</button>
                 <button type="submit" className="btn btn-primary" disabled={saving}>
@@ -283,6 +299,7 @@ export default function WaMessageSettingsPage() {
         .tpl-badge-green { background: #ECFDF5; color: #0EA472; }
         .tpl-badge-gray { background: #F1F5F9; color: #64748B; }
         .tpl-badge-purple { background: #F3EEFF; color: #7C3AED; }
+        .tpl-badge-orange { background: #FFF7ED; color: #C2410C; }
 
         .tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
         .tpl-card { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }

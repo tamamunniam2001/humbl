@@ -28,6 +28,12 @@ export async function PATCH(req, { params }) {
   if (body.inputType !== undefined)
     data.inputType = body.inputType === 'VOUCHER_CODE' ? 'VOUCHER_CODE' : 'NONE'
   if (body.isActive !== undefined) data.isActive = !!body.isActive
+  if (body.isWelcome !== undefined) {
+    // Bila template ini dijadikan welcome, pastikan inputType NONE (tidak bisa pakai voucher)
+    if (body.isWelcome && (data.inputType === 'VOUCHER_CODE' || existing.inputType === 'VOUCHER_CODE'))
+      return NextResponse.json({ message: 'Template welcome tidak boleh bertipe Kode Voucher' }, { status: 400 })
+    data.isWelcome = !!body.isWelcome
+  }
 
   try {
     const template = await prisma.messageTemplate.update({ where: { id }, data })

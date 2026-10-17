@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { verifyAuth, adminOnly, canUseKasir } from '@/lib/auth'
+import { verifyAuth, adminOnly, canUseKasir, pageAccessOnly } from '@/lib/auth'
+import { sendFonnte } from '@/lib/fonnte'
+import { phoneCandidates } from '@/lib/wa-bot'
+import { renderTemplate } from '@/lib/wa-templates'
 
 // Normalisasi nomor telepon: buang spasi/tanda hubung agar konsisten.
 function normPhone(v) {
@@ -82,26 +85,43 @@ export async function GET(req) {
   }))
 }
 
-// POST /api/members — tambah member baru (admin atau kasir)
+// POST /api/members — tambah member baru (admin, kasir, atau custom role dengan akses /member-settings)
 export async function POST(req) {
   const { error, user } = verifyAuth(req)
   if (error) return error
-  if (user.role !== 'ADMIN' && !canUseKasir(user)) {
-    return NextResponse.json({ message: 'Akses ditolak' }, { status: 403 })
-  }
+  const canAdd = user.role === 'ADMIN' || canUseKasir(user) ||
+    (Array.isArray(user.allowedPaths) && user.allowedPaths.includes('/member-settings'))
+  if (!canAdd) return NextResponse.json({ message: 'Akses ditolak' }, { status: 403 })
 
   const body = await req.json()
   const v = validate(body.name, body.phone)
   if (v.message) return NextResponse.json({ message: v.message }, { status: 400 })
 
+  let member
   try {
-    const member = await prisma.member.create({
+    member = await prisma.member.create({
       data: { name: v.name, phone: v.phone, isActive: body.isActive !== false },
     })
-    return NextResponse.json(member, { status: 201 })
   } catch (e) {
     if (e.code === 'P2002')
       return NextResponse.json({ message: 'Nomor telepon sudah terdaftar' }, { status: 400 })
     return NextResponse.json({ message: 'Gagal menyimpan member' }, { status: 500 })
   }
+
+  // Kirim pesan selamat datang (fire-and-forget, tidak blokir response)
+  if (process.env.FONNTE_TOKEN && member.phone) {
+    prisma.messageTemplate.findFirst({
+      where: { isWelcome: true, isActive: true, inputType: 'NONE' },
+    }).then(async (tpl) => {
+      if (!tpl) return
+      const { phoneCandidates: pc } = await import('@/lib/wa-bot')
+      const target = pc(member.phone).find(c => c.startsWith('62'))
+      if (!target) return
+      const message = renderTemplate(tpl.body, { memberName: member.name })
+      if (!message) return
+      sendFonnte({ target, message }).catch(() => {})
+    }).catch(() => {})
+  }
+
+  return NextResponse.json(member, { status: 201 })
 }
