@@ -3,33 +3,59 @@ import { useEffect, useState } from 'react'
 import Sidebar from '@/components/Sidebar'
 import api from '@/lib/api'
 
-const ALL_PAGES = [
-  { path: '/dashboard', label: 'Dashboard' },
-  { path: '/kasir', label: 'Kasir' },
-  { path: '/kasir/laporan', label: 'Laporan Harian' },
-  { path: '/absensi', label: 'Absensi' },
-  { path: '/pengeluaran', label: 'Pengeluaran Toko' },
-  { path: '/belanja', label: 'Belanja Operasional' },
-  { path: '/saldo', label: 'Saldo Operasional' },
-  { path: '/print-resi', label: 'Print Resi' },
-  { path: '/products', label: 'Produk' },
-  { path: '/ingredients', label: 'Bahan Baku' },
-  { path: '/inventaris', label: 'Inventaris' },
-  { path: '/stock-opname', label: 'Stock Opname' },
-  { path: '/waste', label: 'Catatan Waste' },
-  { path: '/waste/rekap', label: 'Rekap Waste' },
-  { path: '/pantau-bahan', label: 'Pantau Bahan Baku' },
-  { path: '/transaction-history', label: 'History Transaksi' },
-  { path: '/rekap-produk', label: 'Rekap Produk Terjual' },
-  { path: '/rekap-bahan', label: 'Rekap Bahan' },
-  { path: '/rekap-absensi', label: 'Rekap Absensi' },
-  { path: '/rekap-pengeluaran', label: 'Rekap Pengeluaran' },
-  { path: '/absensi-settings', label: 'Pengaturan Absensi' },
-  { path: '/expense-settings', label: 'Item Pengeluaran' },
-  { path: '/receipt-settings', label: 'Pengaturan Struk' },
-  { path: '/users', label: 'Pengguna' },
-  { path: '/ai', label: 'AI Assistant' },
+const PAGE_GROUPS = [
+  {
+    group: 'Utama', icon: '🏠',
+    pages: [
+      { path: '/dashboard', label: 'Dashboard' },
+      { path: '/kasir', label: 'Kasir' },
+      { path: '/kasir/laporan', label: 'Laporan Harian' },
+      { path: '/print-resi', label: 'Print Resi' },
+    ]
+  },
+  {
+    group: 'SDM & Operasional', icon: '👥',
+    pages: [
+      { path: '/absensi', label: 'Absensi' },
+      { path: '/pengeluaran', label: 'Pengeluaran Toko' },
+      { path: '/belanja', label: 'Belanja Operasional' },
+      { path: '/saldo', label: 'Saldo Operasional' },
+    ]
+  },
+  {
+    group: 'Produk & Bahan', icon: '📦',
+    pages: [
+      { path: '/products', label: 'Produk' },
+      { path: '/ingredients', label: 'Bahan Baku' },
+      { path: '/inventaris', label: 'Inventaris' },
+      { path: '/stock-opname', label: 'Stock Opname' },
+      { path: '/waste', label: 'Catatan Waste' },
+      { path: '/waste/rekap', label: 'Rekap Waste' },
+      { path: '/pantau-bahan', label: 'Pantau Bahan Baku' },
+    ]
+  },
+  {
+    group: 'Laporan & Rekap', icon: '📊',
+    pages: [
+      { path: '/transaction-history', label: 'History Transaksi' },
+      { path: '/rekap-produk', label: 'Rekap Produk Terjual' },
+      { path: '/rekap-bahan', label: 'Rekap Bahan' },
+      { path: '/rekap-absensi', label: 'Rekap Absensi' },
+      { path: '/rekap-pengeluaran', label: 'Rekap Pengeluaran' },
+    ]
+  },
+  {
+    group: 'Pengaturan', icon: '⚙️',
+    pages: [
+      { path: '/absensi-settings', label: 'Pengaturan Absensi' },
+      { path: '/expense-settings', label: 'Item Pengeluaran' },
+      { path: '/receipt-settings', label: 'Pengaturan Struk' },
+      { path: '/users', label: 'Pengguna' },
+      { path: '/ai', label: 'AI Assistant' },
+    ]
+  },
 ]
+const ALL_PAGES = PAGE_GROUPS.flatMap(g => g.pages)
 
 const emptyUser = { name: '', email: '', password: '', role: 'CASHIER', customRoleId: '' }
 const emptyRole = { name: '', allowedPaths: [] }
@@ -92,6 +118,17 @@ export default function UsersPage() {
       allowedPaths: prev.allowedPaths.includes(path)
         ? prev.allowedPaths.filter(p => p !== path)
         : [...prev.allowedPaths, path],
+    }))
+  }
+
+  function toggleGroup(groupPages) {
+    const paths = groupPages.map(p => p.path)
+    const allChecked = paths.every(p => roleForm.allowedPaths.includes(p))
+    setRoleForm(prev => ({
+      ...prev,
+      allowedPaths: allChecked
+        ? prev.allowedPaths.filter(p => !paths.includes(p))
+        : [...new Set([...prev.allowedPaths, ...paths])],
     }))
   }
 
@@ -222,24 +259,54 @@ export default function UsersPage() {
                     <label className="label">Nama Role</label>
                     <input className="input" placeholder="Contoh: Supervisor, Barista..." value={roleForm.name}
                       onChange={e => setRoleForm({ ...roleForm, name: e.target.value })} required style={{ marginBottom: '16px' }} />
-                    <label className="label" style={{ marginBottom: '8px', display: 'block' }}>Halaman yang Dapat Diakses</label>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '380px', overflowY: 'auto', marginBottom: '16px' }}>
-                      {ALL_PAGES.map(page => {
-                        const checked = roleForm.allowedPaths.includes(page.path)
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <label className="label" style={{ margin: 0 }}>Halaman yang Dapat Diakses</label>
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button type="button" onClick={() => setRoleForm(prev => ({ ...prev, allowedPaths: ALL_PAGES.map(p => p.path) }))}
+                          style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '6px', border: '1px solid #C7D4F0', background: '#EFF4FF', color: 'var(--accent)', cursor: 'pointer', fontFamily: 'inherit', fontWeight: '600' }}>
+                          Pilih Semua
+                        </button>
+                        <button type="button" onClick={() => setRoleForm(prev => ({ ...prev, allowedPaths: [] }))}
+                          style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '6px', border: '1px solid var(--border)', background: 'var(--surface2)', color: 'var(--muted)', cursor: 'pointer', fontFamily: 'inherit', fontWeight: '600' }}>
+                          Hapus Semua
+                        </button>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '420px', overflowY: 'auto', marginBottom: '12px', paddingRight: '2px' }}>
+                      {PAGE_GROUPS.map(group => {
+                        const allChecked = group.pages.every(p => roleForm.allowedPaths.includes(p.path))
+                        const someChecked = group.pages.some(p => roleForm.allowedPaths.includes(p.path))
                         return (
-                          <label key={page.path} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', borderRadius: '8px', border: `1px solid ${checked ? '#C7D4F0' : 'var(--border)'}`, background: checked ? '#EFF4FF' : 'var(--surface2)', cursor: 'pointer', userSelect: 'none' }}>
-                            <input type="checkbox" checked={checked} onChange={() => togglePath(page.path)}
-                              style={{ width: '15px', height: '15px', accentColor: 'var(--accent)', cursor: 'pointer', flexShrink: 0 }} />
-                            <div>
-                              <div style={{ fontSize: '13px', fontWeight: checked ? '700' : '500', color: checked ? 'var(--accent)' : 'var(--text)' }}>{page.label}</div>
-                              <div style={{ fontSize: '10px', color: 'var(--muted)', fontFamily: 'monospace' }}>{page.path}</div>
+                          <div key={group.group}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '5px' }}>
+                              <button type="button" onClick={() => toggleGroup(group.pages)}
+                                style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}>
+                                <span style={{ fontSize: '13px' }}>{group.icon}</span>
+                                <span style={{ fontSize: '11px', fontWeight: '700', color: allChecked ? 'var(--accent)' : someChecked ? 'var(--orange)' : 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{group.group}</span>
+                                <span style={{ fontSize: '10px', color: 'var(--muted)' }}>({group.pages.filter(p => roleForm.allowedPaths.includes(p.path)).length}/{group.pages.length})</span>
+                              </button>
                             </div>
-                          </label>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingLeft: '4px' }}>
+                              {group.pages.map(page => {
+                                const checked = roleForm.allowedPaths.includes(page.path)
+                                return (
+                                  <label key={page.path} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '7px 10px', borderRadius: '8px', border: `1px solid ${checked ? '#C7D4F0' : 'var(--border)'}`, background: checked ? '#EFF4FF' : 'var(--surface2)', cursor: 'pointer', userSelect: 'none' }}>
+                                    <input type="checkbox" checked={checked} onChange={() => togglePath(page.path)}
+                                      style={{ width: '14px', height: '14px', accentColor: 'var(--accent)', cursor: 'pointer', flexShrink: 0 }} />
+                                    <div style={{ flex: 1 }}>
+                                      <div style={{ fontSize: '12px', fontWeight: checked ? '700' : '500', color: checked ? 'var(--accent)' : 'var(--text)' }}>{page.label}</div>
+                                      <div style={{ fontSize: '10px', color: 'var(--muted)', fontFamily: 'monospace' }}>{page.path}</div>
+                                    </div>
+                                  </label>
+                                )
+                              })}
+                            </div>
+                          </div>
                         )
                       })}
                     </div>
-                    <div style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '14px' }}>
-                      {roleForm.allowedPaths.length} halaman dipilih
+                    <div style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '14px', padding: '6px 10px', background: 'var(--surface2)', borderRadius: '6px', border: '1px solid var(--border)' }}>
+                      ✅ {roleForm.allowedPaths.length} dari {ALL_PAGES.length} halaman dipilih
                     </div>
                     <div style={{ display: 'flex', gap: '8px' }}>
                       <button type="submit" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }}>Simpan</button>
@@ -260,10 +327,17 @@ export default function UsersPage() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                     {customRoles.map(r => (
                       <div key={r.id} className="card fade-in" style={{ padding: '20px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                          <div>
-                            <div style={{ fontWeight: '700', fontSize: '15px', color: 'var(--text)' }}>{r.name}</div>
-                            <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '2px' }}>{r._count?.users || 0} pengguna · {(r.allowedPaths || []).length} halaman</div>
+                        {/* Header */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{ width: '42px', height: '42px', background: 'linear-gradient(135deg, #F59E0B, #FBBF24)', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', flexShrink: 0 }}>🔑</div>
+                            <div>
+                              <div style={{ fontWeight: '700', fontSize: '15px', color: 'var(--text)' }}>{r.name}</div>
+                              <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '2px' }}>
+                                <span style={{ marginRight: '10px' }}>👤 {r._count?.users || 0} pengguna</span>
+                                <span>📄 {(r.allowedPaths || []).length} halaman</span>
+                              </div>
+                            </div>
                           </div>
                           <div style={{ display: 'flex', gap: '6px' }}>
                             <button className="btn" style={{ background: '#EFF4FF', color: 'var(--accent)', border: '1px solid #C7D4F0', padding: '5px 12px', fontSize: '12px' }}
@@ -273,17 +347,53 @@ export default function UsersPage() {
                             <button className="btn btn-danger" style={{ padding: '5px 12px', fontSize: '12px' }} onClick={() => handleDeleteRole(r.id, r.name)}>Hapus</button>
                           </div>
                         </div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                          {(r.allowedPaths || []).map(path => {
-                            const page = ALL_PAGES.find(p => p.path === path)
-                            return (
-                              <span key={path} style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '6px', background: '#EFF4FF', color: 'var(--accent)', border: '1px solid #C7D4F0', fontWeight: '600' }}>
-                                {page?.label || path}
-                              </span>
-                            )
-                          })}
-                          {(r.allowedPaths || []).length === 0 && <span style={{ fontSize: '12px', color: 'var(--muted)', fontStyle: 'italic' }}>Tidak ada akses halaman</span>}
-                        </div>
+
+                        {/* Pengguna yang memakai role ini */}
+                        {(r._count?.users || 0) > 0 && (() => {
+                          const roleUsers = users.filter(u => u.customRoleId === r.id)
+                          return roleUsers.length > 0 ? (
+                            <div style={{ marginBottom: '12px', padding: '8px 12px', background: 'var(--surface2)', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                              <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Pengguna</div>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                {roleUsers.map(u => (
+                                  <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '3px 8px', borderRadius: '20px', background: u.isActive ? '#EFF4FF' : '#F1F5F9', border: `1px solid ${u.isActive ? '#C7D4F0' : 'var(--border)'}` }}>
+                                    <div style={{ width: '18px', height: '18px', borderRadius: '50%', background: 'linear-gradient(135deg, #2563EB, #60A5FA)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '9px', color: '#fff', fontWeight: '700', flexShrink: 0 }}>
+                                      {u.name.charAt(0).toUpperCase()}
+                                    </div>
+                                    <span style={{ fontSize: '11px', fontWeight: '600', color: u.isActive ? 'var(--accent)' : 'var(--muted)' }}>{u.name}</span>
+                                    {!u.isActive && <span style={{ fontSize: '9px', color: 'var(--muted)' }}>(nonaktif)</span>}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null
+                        })()}
+
+                        {/* Akses halaman per grup */}
+                        {(r.allowedPaths || []).length === 0 ? (
+                          <div style={{ fontSize: '12px', color: 'var(--muted)', fontStyle: 'italic', padding: '8px 0' }}>Tidak ada akses halaman</div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {PAGE_GROUPS.map(group => {
+                              const grantedPages = group.pages.filter(p => (r.allowedPaths || []).includes(p.path))
+                              if (grantedPages.length === 0) return null
+                              return (
+                                <div key={group.group}>
+                                  <div style={{ fontSize: '10px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '4px' }}>
+                                    {group.icon} {group.group} ({grantedPages.length}/{group.pages.length})
+                                  </div>
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+                                    {grantedPages.map(page => (
+                                      <span key={page.path} style={{ fontSize: '11px', padding: '3px 8px', borderRadius: '6px', background: '#EFF4FF', color: 'var(--accent)', border: '1px solid #C7D4F0', fontWeight: '600' }}>
+                                        {page.label}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
