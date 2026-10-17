@@ -13,7 +13,7 @@ const fmtDate = (d) => {
 }
 
 export default function RekapProdukPage() {
-  const [data, setData] = useState({ rows: [], total: 0, totalPages: 1 })
+  const [data, setData] = useState({ rows: [], total: 0, totalPages: 1, allRevenue: 0, allQty: 0 })
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [nullOnly, setNullOnly] = useState(false)
@@ -494,12 +494,20 @@ export default function RekapProdukPage() {
           {!loading && data.rows.length > 0 && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px', marginBottom: '20px' }}>
               <div className="card" style={{ padding: '16px 20px' }}>
-                <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '6px' }}>Total Item (halaman ini)</div>
-                <div style={{ fontSize: '22px', fontWeight: '800', color: 'var(--text)' }}>{totalQty.toLocaleString('id-ID')}</div>
+                <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '6px' }}>
+                  {activeKategori ? 'Total Item (semua halaman)' : 'Total Item (halaman ini)'}
+                </div>
+                <div style={{ fontSize: '22px', fontWeight: '800', color: 'var(--text)' }}>
+                  {(activeKategori ? data.allQty : totalQty).toLocaleString('id-ID')}
+                </div>
               </div>
               <div className="card" style={{ padding: '16px 20px' }}>
-                <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '6px' }}>Total Pendapatan (halaman ini)</div>
-                <div style={{ fontSize: '22px', fontWeight: '800', color: 'var(--accent)' }}>{fmt(totalRevenue)}</div>
+                <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '6px' }}>
+                  {activeKategori ? 'Total Pendapatan (semua halaman)' : 'Total Pendapatan (halaman ini)'}
+                </div>
+                <div style={{ fontSize: '22px', fontWeight: '800', color: 'var(--accent)' }}>
+                  {fmt(activeKategori ? data.allRevenue : totalRevenue)}
+                </div>
               </div>
               <div className="card" style={{ padding: '16px 20px' }}>
                 <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '6px' }}>Total Baris Data</div>

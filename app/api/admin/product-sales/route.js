@@ -99,13 +99,11 @@ export async function GET(req) {
     } : {}),
   }
 
-  const [rows, total] = await Promise.all([
+  const [rows, total, aggregate] = await Promise.all([
     prisma.orderItem.findMany({
       where: itemWhere,
       include: {
         product: { select: { code: true, name: true, category: { select: { name: true } } } },
-        // Sertakan transaction.total dan semua subtotal item di transaksi yang sama
-        // agar diskon bisa didistribusikan secara proporsional ke tiap item.
         transaction: { select: { createdAt: true, total: true, items: { select: { subtotal: true } } } },
       },
       orderBy: { transaction: { createdAt: 'desc' } },
@@ -113,14 +111,24 @@ export async function GET(req) {
       skip: (page - 1) * limit,
     }),
     prisma.orderItem.count({ where: itemWhere }),
+    prisma.orderItem.findMany({
+      where: itemWhere,
+      select: { subtotal: true, qty: true, transaction: { select: { total: true, items: { select: { subtotal: true } } } } },
+    }),
   ])
+
+  let allRevenue = 0, allQty = 0
+  for (const r of aggregate) {
+    const txSum = r.transaction.items.reduce((s, i) => s + i.subtotal, 0)
+    allRevenue += effectiveTotal(r.subtotal, r.transaction.total, txSum)
+    allQty += r.qty
+  }
 
   return NextResponse.json({
     rows: rows.map(r => {
       const isNameNull = !r.name || r.name === ''
       const txSubtotalSum = r.transaction.items.reduce((s, i) => s + i.subtotal, 0)
       const eff = effectiveTotal(r.subtotal, r.transaction.total, txSubtotalSum)
-      // hasDiscount = true jika transaksi ini ada diskon/pajak yang mengubah total
       const hasDiscount = txSubtotalSum !== r.transaction.total
       return {
         id: r.id,
@@ -132,12 +140,14 @@ export async function GET(req) {
         isNameNull,
         qty: r.qty,
         price: r.price,
-        subtotal: r.subtotal,       // harga asli sebelum diskon (price × qty)
-        total: eff,                 // harga efektif setelah diskon/pajak proporsional
-        hasDiscount,                // flag untuk frontend agar bisa tampilkan keterangan
+        subtotal: r.subtotal,
+        total: eff,
+        hasDiscount,
       }
     }),
     total,
+    allRevenue: Math.round(allRevenue),
+    allQty,
     page,
     totalPages: Math.ceil(total / limit),
   })
