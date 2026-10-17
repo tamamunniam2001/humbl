@@ -94,7 +94,7 @@ export async function GET(req) {
         ]
       : [
           { product: { category: { name: { equals: categoryFilter, mode: 'insensitive' } } } },
-          { productId: null, category: { equals: categoryFilter, mode: 'insensitive' } },
+          { category: { equals: categoryFilter, mode: 'insensitive' } },
         ]
     } : {}),
   }
