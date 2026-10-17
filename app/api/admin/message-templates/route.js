@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { verifyAuth, adminOnly } from '@/lib/auth'
+import { verifyAuth, adminOnly, pageAccessOnly } from '@/lib/auth'
 
 function validate(body) {
   const name = String(body.name || '').trim()
@@ -27,11 +27,11 @@ export async function GET(req) {
   return NextResponse.json(templates)
 }
 
-// POST /api/admin/message-templates — buat template baru (admin)
+// POST /api/admin/message-templates — buat template baru
 export async function POST(req) {
   const { error, user } = verifyAuth(req)
   if (error) return error
-  const denied = adminOnly(user)
+  const denied = pageAccessOnly(user, '/wa-message-settings')
   if (denied) return denied
 
   const body = await req.json().catch(() => ({}))

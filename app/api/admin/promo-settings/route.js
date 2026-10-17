@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { verifyAuth, adminOnly } from '@/lib/auth'
+import { verifyAuth, adminOnly, pageAccessOnly } from '@/lib/auth'
 
 const DEFAULTS = {
   memberDiscountActive: false,
@@ -23,11 +23,11 @@ export async function GET(req) {
   return NextResponse.json(settings)
 }
 
-// PUT /api/admin/promo-settings — hanya admin.
+// PUT /api/admin/promo-settings — hanya admin atau yang punya akses /member-settings.
 export async function PUT(req) {
   const { error, user } = verifyAuth(req)
   if (error) return error
-  const denied = adminOnly(user)
+  const denied = pageAccessOnly(user, '/member-settings')
   if (denied) return denied
 
   let body = {}

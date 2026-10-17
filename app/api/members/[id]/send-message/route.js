@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { verifyAuth, adminOnly } from '@/lib/auth'
+import { verifyAuth, pageAccessOnly } from '@/lib/auth'
 import { sendFonnte } from '@/lib/fonnte'
 import { phoneCandidates } from '@/lib/wa-bot'
 import { isVoucherAvailable, renderTemplate, templateNeedsVoucher } from '@/lib/wa-templates'
@@ -12,7 +12,7 @@ import { isVoucherAvailable, renderTemplate, templateNeedsVoucher } from '@/lib/
 export async function POST(req, { params }) {
   const { error, user } = verifyAuth(req)
   if (error) return error
-  const denied = adminOnly(user)
+  const denied = pageAccessOnly(user, '/members')
   if (denied) return denied
 
   const { id } = await params

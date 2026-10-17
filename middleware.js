@@ -16,7 +16,6 @@ const ADMIN_ONLY_PATHS = [
   '/rekap-pengeluaran',
   '/expense-settings',
   '/transactions/manual',
-  '/wa-message-settings',
 ]
 
 export async function middleware(req) {

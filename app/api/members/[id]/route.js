@@ -1,16 +1,16 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { verifyAuth, adminOnly } from '@/lib/auth'
+import { verifyAuth, pageAccessOnly } from '@/lib/auth'
 
 function normPhone(v) {
   return String(v || '').replace(/[\s\-().]/g, '')
 }
 
-// PATCH /api/members/[id] — ubah nama/telepon/status member (admin)
+// PATCH /api/members/[id] — ubah nama/telepon/status member
 export async function PATCH(req, { params }) {
   const { error, user } = verifyAuth(req)
   if (error) return error
-  const denied = adminOnly(user)
+  const denied = pageAccessOnly(user, '/members')
   if (denied) return denied
 
   const { id } = await params
@@ -43,13 +43,11 @@ export async function PATCH(req, { params }) {
   }
 }
 
-// DELETE /api/members/[id] — hapus member (admin).
-// Relasi Transaction.memberId memakai onDelete: SetNull, sehingga riwayat
-// transaksi (termasuk snapshot customerName) tetap aman.
+// DELETE /api/members/[id] — hapus member.
 export async function DELETE(req, { params }) {
   const { error, user } = verifyAuth(req)
   if (error) return error
-  const denied = adminOnly(user)
+  const denied = pageAccessOnly(user, '/members')
   if (denied) return denied
 
   const { id } = await params

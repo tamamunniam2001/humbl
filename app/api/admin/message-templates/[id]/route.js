@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
-import { verifyAuth, adminOnly } from '@/lib/auth'
+import { verifyAuth, adminOnly, pageAccessOnly } from '@/lib/auth'
 
-// PATCH /api/admin/message-templates/[id] — ubah template pesan (admin)
+// PATCH /api/admin/message-templates/[id] — ubah template pesan
 export async function PATCH(req, { params }) {
   const { error, user } = verifyAuth(req)
   if (error) return error
-  const denied = adminOnly(user)
+  const denied = pageAccessOnly(user, '/wa-message-settings')
   if (denied) return denied
 
   const { id } = await params
@@ -39,11 +39,11 @@ export async function PATCH(req, { params }) {
   }
 }
 
-// DELETE /api/admin/message-templates/[id] — hapus template pesan (admin)
+// DELETE /api/admin/message-templates/[id] — hapus template pesan
 export async function DELETE(req, { params }) {
   const { error, user } = verifyAuth(req)
   if (error) return error
-  const denied = adminOnly(user)
+  const denied = pageAccessOnly(user, '/wa-message-settings')
   if (denied) return denied
 
   const { id } = await params
