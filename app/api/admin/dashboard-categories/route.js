@@ -36,7 +36,7 @@ export async function GET(req) {
       where: { transaction: { status: 'COMPLETED', deletedAt: null, createdAt: { gte: rangeStart, lte: rangeEnd } } },
       select: {
         category: true, subtotal: true,
-        transaction: { select: { createdAt: true } },
+        transaction: { select: { createdAt: true, total: true, items: { select: { subtotal: true } } } },
         product: { select: { category: { select: { name: true } } } },
       },
     }),
@@ -69,19 +69,27 @@ export async function GET(req) {
     return Math.min(Math.ceil(d / 7), 4)
   }
 
+  function effectiveTotal(itemSubtotal, txTotal, txSubtotalSum) {
+    if (!txSubtotalSum || txSubtotalSum === 0) return itemSubtotal
+    if (txSubtotalSum === txTotal) return itemSubtotal
+    return itemSubtotal * txTotal / txSubtotalSum
+  }
+
   // Build tabel — key selalu number agar konsisten dengan frontend
   function buildTable(items, getCat) {
     const map = {}
     items.forEach(item => {
       const cat = getCat(item) || 'Lainnya'
-      const col = getColKey(item._date) // number
+      const col = getColKey(item._date)
       if (!map[cat]) map[cat] = {}
-      map[cat][col] = (map[cat][col] || 0) + item.subtotal
+      const txSubtotalSum = item.transaction?.items?.reduce((s, i) => s + i.subtotal, 0) ?? item.subtotal
+      const eff = item.transaction?.items ? effectiveTotal(item.subtotal, item.transaction.total, txSubtotalSum) : item.subtotal
+      map[cat][col] = (map[cat][col] || 0) + eff
     })
     return Object.entries(map)
       .map(([cat, colMap]) => ({
         cat,
-        cols: colMap, // key = number
+        cols: colMap,
         total: Object.values(colMap).reduce((s, v) => s + v, 0),
       }))
       .sort((a, b) => b.total - a.total)

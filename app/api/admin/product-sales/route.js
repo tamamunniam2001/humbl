@@ -43,7 +43,7 @@ export async function GET(req) {
     })
     const map = {}
     for (const item of items) {
-      const kat = item.product?.category?.name || item.category || '-'
+      const kat = item.product?.category?.name || item.category || 'Lainnya'
       const txSubtotalSum = item.transaction.items.reduce((s, i) => s + i.subtotal, 0)
       const eff = effectiveTotal(item.subtotal, item.transaction.total, txSubtotalSum)
       if (!map[kat]) map[kat] = { category: kat, total: 0, qty: 0 }
@@ -88,8 +88,8 @@ export async function GET(req) {
     transaction: txWhere,
     ...(nullOnly ? { OR: [{ name: null }, { name: '' }] } : {}),
     ...(categoryFilter ? { OR: [
-      { product: { category: { name: categoryFilter } } },
-      { category: categoryFilter },
+      { product: { category: { name: { equals: categoryFilter, mode: 'insensitive' } } } },
+      { category: { equals: categoryFilter, mode: 'insensitive' } },
     ] } : {}),
   }
 
@@ -121,7 +121,7 @@ export async function GET(req) {
         transactionId: r.transactionId,
         date: r.transaction.createdAt,
         code: r.product?.code || r.code || '-',
-        category: r.product?.category?.name || r.category || '-',
+        category: r.product?.category?.name || r.category || 'Lainnya',
         name: r.product?.name || r.name || 'Item Manual',
         isNameNull,
         qty: r.qty,
