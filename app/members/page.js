@@ -29,6 +29,17 @@ export default function MembersPage() {
   const [waError, setWaError] = useState('')
   const [waDone, setWaDone] = useState(null)         // hasil kirim terakhir
 
+  // Broadcast
+  const [bcOpen, setBcOpen] = useState(false)
+  const [bcTemplates, setBcTemplates] = useState([])
+  const [bcTemplateId, setBcTemplateId] = useState('')
+  const [bcVouchers, setBcVouchers] = useState(null)
+  const [bcVoucherId, setBcVoucherId] = useState('')
+  const [bcLoading, setBcLoading] = useState(false)
+  const [bcSending, setBcSending] = useState(false)
+  const [bcError, setBcError] = useState('')
+  const [bcDone, setBcDone] = useState(null)
+
   const user = (() => { try { return JSON.parse(Cookies.get('user') || '{}') } catch { return {} } })()
   const isAdmin = user.role === 'ADMIN'
   const canSendMsg = isAdmin || (Array.isArray(user.allowedPaths) && user.allowedPaths.includes('/members'))
@@ -117,6 +128,57 @@ export default function MembersPage() {
     } finally { setWaSending(false) }
   }
 
+  // ── Broadcast ──
+  async function openBroadcast() {
+    setBcOpen(true)
+    setBcTemplateId('')
+    setBcVouchers(null)
+    setBcVoucherId('')
+    setBcError('')
+    setBcDone(null)
+    setBcLoading(true)
+    try {
+      const res = await api.get('/admin/message-templates', { params: { active: '1' } })
+      setBcTemplates(res.data)
+      if (res.data.length === 1) setBcTemplateId(res.data[0].id)
+    } catch (err) {
+      setBcError(err.response?.data?.message || 'Gagal memuat template')
+    } finally { setBcLoading(false) }
+  }
+
+  async function bcPickTemplate(id) {
+    setBcTemplateId(id)
+    setBcVoucherId('')
+    setBcError('')
+    const t = bcTemplates.find(x => x.id === id)
+    if (t && templateNeedsVoucher(t) && !bcVouchers) {
+      setBcLoading(true)
+      try {
+        const res = await api.get('/admin/vouchers')
+        setBcVouchers(res.data)
+      } catch { } finally { setBcLoading(false) }
+    }
+  }
+
+  async function bcSend() {
+    const t = bcTemplates.find(x => x.id === bcTemplateId)
+    if (!t) { setBcError('Pilih template pesan terlebih dahulu'); return }
+    if (templateNeedsVoucher(t) && !bcVoucherId) { setBcError('Pilih kode voucher terlebih dahulu'); return }
+    const activeCount = members.filter(m => m.isActive).length
+    if (!confirm(`Kirim pesan "${t.name}" ke ${activeCount} member aktif? Proses ini tidak bisa dibatalkan.`)) return
+    setBcSending(true)
+    setBcError('')
+    try {
+      const res = await api.post('/members/broadcast', {
+        templateId: t.id,
+        ...(bcVoucherId ? { voucherId: bcVoucherId } : {}),
+      })
+      setBcDone(res.data)
+    } catch (err) {
+      setBcError(err.response?.data?.message || 'Gagal mengirim broadcast')
+    } finally { setBcSending(false) }
+  }
+
   // Turunan untuk popup kirim (preview, voucher tersedia, dsb.)
   const waTemplate = waTemplates.find(t => t.id === waTemplateId) || null
   const waVoucher = waVouchers ? waVouchers.find(v => v.id === waVoucherId) || null : null
@@ -151,6 +213,11 @@ export default function MembersPage() {
             <Link href="/member-settings" className="btn" style={{ textDecoration: 'none' }}>
               ⚙️ Kelola Member
             </Link>
+          )}
+          {canSendMsg && (
+            <button className="btn btn-primary" onClick={openBroadcast}>
+              📣 Broadcast
+            </button>
           )}
         </div>
 
@@ -449,6 +516,116 @@ export default function MembersPage() {
                         <button className="btn btn-primary" style={{ flex: 1, padding: '10px' }}
                           disabled={waSending || waLoading || !waTemplateId} onClick={waSend}>
                           {waSending ? 'Mengirim…' : '📤 Kirim Pesan'}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+          {/* ── Modal Broadcast ── */}
+          {bcOpen && (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(13,21,38,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, backdropFilter: 'blur(4px)', padding: '16px' }}
+              onClick={(e) => { if (e.target === e.currentTarget && !bcSending) { setBcOpen(false) } }}>
+              <div className="card fade-in" style={{ width: '520px', maxWidth: '96vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                {/* Header */}
+                <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+                  <div>
+                    <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text)' }}>📣 Broadcast Pesan</div>
+                    <div style={{ fontSize: '12px', color: 'var(--muted)', marginTop: '2px' }}>Kirim ke semua {members.filter(m => m.isActive).length} member aktif</div>
+                  </div>
+                  <button onClick={() => !bcSending && setBcOpen(false)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '22px', color: 'var(--muted)', lineHeight: 1 }}>×</button>
+                </div>
+
+                {/* Body */}
+                <div style={{ padding: '16px 20px', overflowY: 'auto' }}>
+                  {bcDone ? (
+                    <div style={{ textAlign: 'center', padding: '8px 0' }}>
+                      <div style={{ fontSize: '40px', marginBottom: '8px' }}>✅</div>
+                      <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--text)', marginBottom: '16px' }}>Broadcast selesai!</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '16px' }}>
+                        {[['Terkirim', bcDone.sent, '#2A9D6E', '#E8F7F1', '#A7DFC8'],
+                          ['Gagal', bcDone.failed, '#C95555', '#FEF2F2', '#FECACA'],
+                          ['Dilewati', bcDone.skipped, '#64748B', '#F1F5F9', '#D8E0EA']
+                        ].map(([label, val, color, bg, border]) => (
+                          <div key={label} style={{ background: bg, border: `1px solid ${border}`, borderRadius: '10px', padding: '10px' }}>
+                            <div style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '2px' }}>{label}</div>
+                            <div style={{ fontSize: '22px', fontWeight: 800, color }}>{val}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '16px' }}>Total {bcDone.total} member aktif diproses</div>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button className="btn" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setBcDone(null)}>Kirim Lagi</button>
+                        <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => setBcOpen(false)}>Selesai</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {bcError && (
+                        <div style={{ background: 'var(--red-light)', border: '1px solid var(--red-border)', color: 'var(--red)', padding: '10px 12px', borderRadius: '8px', fontSize: '13px', marginBottom: '12px' }}>
+                          {bcError}
+                        </div>
+                      )}
+
+                      {/* Info */}
+                      <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '8px', padding: '10px 12px', fontSize: '12.5px', color: 'var(--text2)', marginBottom: '14px', lineHeight: 1.6 }}>
+                        ⚠️ Pesan akan dikirim satu per satu ke semua member aktif. Proses mungkin memakan waktu beberapa menit tergantung jumlah member.
+                      </div>
+
+                      {/* Pilih template */}
+                      <div style={{ marginBottom: '12px' }}>
+                        <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text2)', display: 'block', marginBottom: '5px' }}>Template Pesan *</label>
+                        {bcLoading && bcTemplates.length === 0 ? (
+                          <div style={{ fontSize: '12.5px', color: 'var(--muted)' }}>Memuat…</div>
+                        ) : bcTemplates.length === 0 ? (
+                          <div style={{ fontSize: '12.5px', color: 'var(--muted)' }}>Belum ada template aktif. Atur di <Link href="/wa-message-settings" style={{ color: 'var(--accent)', fontWeight: 700 }}>Pengaturan Pesan WhatsApp</Link></div>
+                        ) : (
+                          <select className="input" value={bcTemplateId} onChange={e => bcPickTemplate(e.target.value)}>
+                            <option value="">— Pilih template pesan —</option>
+                            {bcTemplates.map(t => (
+                              <option key={t.id} value={t.id}>{t.name}{t.inputType === 'VOUCHER_CODE' ? ' 🎟️' : ''}</option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+
+                      {/* Pilih voucher bila perlu */}
+                      {bcTemplateId && templateNeedsVoucher(bcTemplates.find(t => t.id === bcTemplateId)) && (
+                        <div style={{ marginBottom: '12px' }}>
+                          <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text2)', display: 'block', marginBottom: '5px' }}>Kode Voucher *</label>
+                          {bcVouchers === null ? (
+                            <div style={{ fontSize: '12.5px', color: 'var(--muted)' }}>Memuat voucher…</div>
+                          ) : (
+                            <select className="input" value={bcVoucherId} onChange={e => { setBcVoucherId(e.target.value); setBcError('') }}>
+                              <option value="">— Pilih kode voucher —</option>
+                              {(bcVouchers || []).filter(v => isVoucherAvailable(v)).map(v => (
+                                <option key={v.id} value={v.id}>{v.code} — {voucherDetailText(v)}{v.quota > 0 ? ` · sisa ${v.quota - v.usedCount}` : ''}</option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Preview */}
+                      {bcTemplateId && !templateNeedsVoucher(bcTemplates.find(t => t.id === bcTemplateId)) && (() => {
+                        const t = bcTemplates.find(x => x.id === bcTemplateId)
+                        const preview = t ? renderTemplate(t.body, { memberName: 'Nama Member' }) : ''
+                        return preview ? (
+                          <div style={{ marginBottom: '12px' }}>
+                            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text2)', marginBottom: '5px' }}>Preview Pesan</div>
+                            <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '8px', padding: '10px 12px', fontSize: '12.5px', color: 'var(--text2)', lineHeight: 1.6, whiteSpace: 'pre-wrap', maxHeight: '160px', overflowY: 'auto' }}>{preview}</div>
+                          </div>
+                        ) : null
+                      })()}
+
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                        <button className="btn" style={{ flex: 1, justifyContent: 'center' }} disabled={bcSending} onClick={() => setBcOpen(false)}>Batal</button>
+                        <button className="btn btn-primary" style={{ flex: 1 }}
+                          disabled={bcSending || bcLoading || !bcTemplateId} onClick={bcSend}>
+                          {bcSending ? '⏳ Mengirim…' : '📤 Kirim Broadcast'}
                         </button>
                       </div>
                     </>
