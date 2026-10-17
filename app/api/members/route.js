@@ -112,10 +112,9 @@ export async function POST(req) {
   if (process.env.FONNTE_TOKEN && member.phone) {
     prisma.messageTemplate.findFirst({
       where: { isWelcome: true, isActive: true, inputType: 'NONE' },
-    }).then(async (tpl) => {
+    }).then((tpl) => {
       if (!tpl) return
-      const { phoneCandidates: pc } = await import('@/lib/wa-bot')
-      const target = pc(member.phone).find(c => c.startsWith('62'))
+      const target = phoneCandidates(member.phone).find(c => c.startsWith('62'))
       if (!target) return
       const message = renderTemplate(tpl.body, { memberName: member.name })
       if (!message) return
