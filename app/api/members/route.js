@@ -45,7 +45,7 @@ export async function GET(req) {
     where,
     orderBy: { name: 'asc' },
     select: {
-      id: true, name: true, phone: true, isActive: true, createdAt: true,
+      id: true, name: true, phone: true, isActive: true, createdAt: true, welcomeSentAt: true,
       // Jumlah transaksi lunas per member (Prisma hanya mendukung _count berfilter
       // di level relasi; total & terakhir belanja dihitung terpisah via groupBy).
       _count: {
@@ -81,6 +81,7 @@ export async function GET(req) {
       purchaseCount: m._count.transactions,
       totalSpent: a?._sum.total || 0,
       lastPurchase: a?._max.createdAt || null,
+      welcomeSentAt: m.welcomeSentAt || null,
     }
   }))
 }
@@ -108,18 +109,23 @@ export async function POST(req) {
     return NextResponse.json({ message: 'Gagal menyimpan member' }, { status: 500 })
   }
 
-  // Kirim pesan selamat datang (fire-and-forget, tidak blokir response)
+  // Kirim pesan selamat datang — di-await agar tidak dipotong serverless runtime
   if (process.env.FONNTE_TOKEN && member.phone) {
-    prisma.messageTemplate.findFirst({
-      where: { isWelcome: true, isActive: true, inputType: 'NONE' },
-    }).then((tpl) => {
-      if (!tpl) return
-      const target = phoneCandidates(member.phone).find(c => c.startsWith('62'))
-      if (!target) return
-      const message = renderTemplate(tpl.body, { memberName: member.name })
-      if (!message) return
-      sendFonnte({ target, message }).catch(() => {})
-    }).catch(() => {})
+    try {
+      const tpl = await prisma.messageTemplate.findFirst({
+        where: { isWelcome: true, isActive: true, inputType: 'NONE' },
+      })
+      if (tpl) {
+        const target = phoneCandidates(member.phone).find(c => c.startsWith('62'))
+        if (target) {
+          const message = renderTemplate(tpl.body, { memberName: member.name })
+          if (message) {
+            await sendFonnte({ target, message })
+            await prisma.member.update({ where: { id: member.id }, data: { welcomeSentAt: new Date() } })
+          }
+        }
+      }
+    } catch { /* gagal kirim WA tidak boleh blokir pendaftaran member */ }
   }
 
   return NextResponse.json(member, { status: 201 })

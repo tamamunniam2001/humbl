@@ -98,13 +98,14 @@ model ProductIngredient {
 }
 
 model Member {
-  id            String        @id @default(cuid())
-  name          String
-  phone         String        @unique
-  isActive      Boolean       @default(true)
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  transactions  Transaction[]
+  id              String        @id @default(cuid())
+  name            String
+  phone           String        @unique
+  isActive        Boolean       @default(true)
+  welcomeSentAt   DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  transactions    Transaction[]
 
   @@index([name])
 }

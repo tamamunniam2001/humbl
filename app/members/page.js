@@ -209,8 +209,8 @@ export default function MembersPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                   <thead>
                     <tr style={{ background: 'var(--surface2)', borderBottom: '1px solid var(--border)' }}>
-                      {['Nama', 'Nomor Telepon', 'Status', 'Pembelian', 'Total Belanja', 'Terakhir Beli', ''].map((h, i) => (
-                        <th key={i} style={{ padding: '10px 14px', textAlign: i >= 3 ? 'right' : 'left', fontSize: '11px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.4px' }}>{h}</th>
+                      {['Nama', 'Nomor Telepon', 'Status', 'Pesan Welcome', 'Pembelian', 'Total Belanja', 'Terakhir Beli', ''].map((h, i) => (
+                        <th key={i} style={{ padding: '10px 14px', textAlign: i >= 4 ? 'right' : 'left', fontSize: '11px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.4px' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -223,6 +223,16 @@ export default function MembersPage() {
                           <span className={`badge ${m.isActive ? 'badge-green' : 'badge-gray'}`}>
                             {m.isActive ? 'Aktif' : 'Nonaktif'}
                           </span>
+                        </td>
+                        <td style={{ padding: '10px 14px' }}>
+                          {m.welcomeSentAt ? (
+                            <span title={`Terkirim ${fmtDateTime(m.welcomeSentAt)}`}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: 700, color: '#0EA472', background: '#ECFDF5', border: '1px solid #A7DFC8', borderRadius: '20px', padding: '2px 8px' }}>
+                              ✅ Terkirim
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: '11px', color: 'var(--muted)' }}>—</span>
+                          )}
                         </td>
                         <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700 }}>{m.purchaseCount}×</td>
                         <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 800, color: '#2A9D6E' }}>{fmt(m.totalSpent)}</td>
