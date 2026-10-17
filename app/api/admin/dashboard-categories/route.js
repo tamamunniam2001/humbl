@@ -98,7 +98,7 @@ export async function GET(req) {
   const salesItems = salesRaw.map(i => ({ ...i, _date: i.transaction.createdAt }))
   const expItems = expRaw.map(i => ({ ...i, _date: i.expense.date }))
 
-  const salesTable = buildTable(salesItems, i => i.product?.category?.name || i.category)
+  const salesTable = buildTable(salesItems, i => i.product?.category?.name || (i.category && i.category.trim()) || 'Lainnya')
   const expTable = buildTable(expItems, i => i.expenseItem?.category || i.category)
 
   // Total per kolom — key tetap number

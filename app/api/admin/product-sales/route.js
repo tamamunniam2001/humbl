@@ -43,7 +43,7 @@ export async function GET(req) {
     })
     const map = {}
     for (const item of items) {
-      const kat = item.product?.category?.name || item.category || 'Lainnya'
+      const kat = item.product?.category?.name || (item.category && item.category.trim()) || 'Lainnya'
       const txSubtotalSum = item.transaction.items.reduce((s, i) => s + i.subtotal, 0)
       const eff = effectiveTotal(item.subtotal, item.transaction.total, txSubtotalSum)
       if (!map[kat]) map[kat] = { category: kat, total: 0, qty: 0 }
@@ -87,10 +87,16 @@ export async function GET(req) {
   const itemWhere = {
     transaction: txWhere,
     ...(nullOnly ? { OR: [{ name: null }, { name: '' }] } : {}),
-    ...(categoryFilter ? { OR: [
-      { product: { category: { name: { equals: categoryFilter, mode: 'insensitive' } } } },
-      { category: { equals: categoryFilter, mode: 'insensitive' } },
-    ] } : {}),
+    ...(categoryFilter ? { OR: categoryFilter === 'Lainnya'
+      ? [
+          { productId: null, OR: [{ category: null }, { category: '' }] },
+          { product: { categoryId: null } },
+        ]
+      : [
+          { product: { category: { name: { equals: categoryFilter, mode: 'insensitive' } } } },
+          { productId: null, category: { equals: categoryFilter, mode: 'insensitive' } },
+        ]
+    } : {}),
   }
 
   const [rows, total] = await Promise.all([
@@ -121,7 +127,7 @@ export async function GET(req) {
         transactionId: r.transactionId,
         date: r.transaction.createdAt,
         code: r.product?.code || r.code || '-',
-        category: r.product?.category?.name || r.category || 'Lainnya',
+        category: r.product?.category?.name || (r.category && r.category.trim()) || 'Lainnya',
         name: r.product?.name || r.name || 'Item Manual',
         isNameNull,
         qty: r.qty,
