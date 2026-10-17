@@ -16,6 +16,7 @@ const PAGE_GROUPS = [
   {
     group: 'SDM & Operasional', icon: '👥',
     pages: [
+      { path: '/members', label: 'Daftar Member' },
       { path: '/absensi', label: 'Absensi' },
       { path: '/pengeluaran', label: 'Pengeluaran Toko' },
       { path: '/belanja', label: 'Belanja Operasional' },
@@ -38,6 +39,7 @@ const PAGE_GROUPS = [
     group: 'Laporan & Rekap', icon: '📊',
     pages: [
       { path: '/transaction-history', label: 'History Transaksi' },
+      { path: '/transactions/manual', label: 'Input Transaksi Manual' },
       { path: '/rekap-produk', label: 'Rekap Produk Terjual' },
       { path: '/rekap-bahan', label: 'Rekap Bahan' },
       { path: '/rekap-absensi', label: 'Rekap Absensi' },
@@ -49,7 +51,10 @@ const PAGE_GROUPS = [
     pages: [
       { path: '/absensi-settings', label: 'Pengaturan Absensi' },
       { path: '/expense-settings', label: 'Item Pengeluaran' },
+      { path: '/voucher-settings', label: 'Voucher & Promo' },
+      { path: '/member-settings', label: 'Pengaturan Member' },
       { path: '/receipt-settings', label: 'Pengaturan Struk' },
+      { path: '/wa-message-settings', label: 'Pesan WhatsApp' },
       { path: '/users', label: 'Pengguna' },
       { path: '/ai', label: 'AI Assistant' },
     ]
