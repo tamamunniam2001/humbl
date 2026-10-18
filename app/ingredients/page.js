@@ -27,6 +27,8 @@ export default function IngredientsPage() {
   const [compSearch, setCompSearch] = useState('')
   const fileRef = useRef(null)
 
+  const [editModal, setEditModal] = useState(false)
+
   async function load() {
     const res = await api.get('/admin/ingredients')
     setItems(res.data)
@@ -49,7 +51,7 @@ export default function IngredientsPage() {
     if (form.isComposite) payload.packSize = form.yield ? Number(form.yield) : 1
     if (editId) await api.put(`/admin/ingredients/${editId}`, payload)
     else await api.post('/admin/ingredients', payload)
-    setForm(emptyForm); setEditId(null); setShowForm(false); setCompSearch(''); load()
+    setForm(emptyForm); setEditId(null); setShowForm(false); setEditModal(false); setCompSearch(''); load()
   }
 
   function startEdit(item) {
@@ -60,8 +62,7 @@ export default function IngredientsPage() {
       yield: item.isComposite ? (item.packSize ?? '') : '',
       components: (item.components || []).map(c => ({ ingredientId: c.ingredientId, qty: c.qty })),
     })
-    setEditId(item.id); setShowForm(true); setCompSearch('')
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    setEditId(item.id); setEditModal(true); setCompSearch('')
   }
 
   function toggleComponent(ing) {
@@ -386,6 +387,142 @@ export default function IngredientsPage() {
         </div>
       </main>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+
+      {/* Modal Edit */}
+      {editModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(30,42,59,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400, backdropFilter: 'blur(4px)', padding: '16px' }}
+          onClick={e => { if (e.target === e.currentTarget) { setEditModal(false); setEditId(null); setForm(emptyForm); setCompSearch('') } }}>
+          <div className="card fade-in" style={{ width: '520px', maxWidth: '96vw', maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(135deg, #D8E4F4, #E8EEF8)', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ width: '32px', height: '32px', background: form.isComposite ? 'linear-gradient(135deg,#10B981,#34D399)' : 'linear-gradient(135deg,#2563EB,#60A5FA)', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round"><path d="M9 3h6m-5 0v6l-4 9a1 1 0 0 0 .9 1.45h10.2A1 1 0 0 0 18 18l-4-9V3"/></svg>
+                </div>
+                <div style={{ fontSize: '14px', fontWeight: '800', color: 'var(--text)' }}>Edit Bahan Baku</div>
+              </div>
+              <button onClick={() => { setEditModal(false); setEditId(null); setForm(emptyForm); setCompSearch('') }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', fontSize: '20px', lineHeight: 1 }}>×</button>
+            </div>
+
+            <div style={{ overflowY: 'auto', padding: '20px', flex: 1 }}>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+                {[{ label: 'Bahan Baku Biasa', value: false }, { label: '🧪 Bahan Baku Jadi', value: true }].map(({ label, value }) => (
+                  <button key={String(value)} type="button"
+                    onClick={() => setForm(prev => ({ ...prev, isComposite: value, components: [], price: '', packSize: '' }))}
+                    style={{ padding: '7px 16px', borderRadius: '20px', border: `1.5px solid ${form.isComposite === value ? (value ? '#A7F3D0' : '#C7D4F0') : 'var(--border)'}`, background: form.isComposite === value ? (value ? '#ECFDF5' : '#EFF4FF') : '#fff', color: form.isComposite === value ? (value ? '#065F46' : 'var(--accent)') : 'var(--text2)', fontWeight: '700', fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit' }}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              <form id="edit-ingredient-form" onSubmit={handleSubmit}>
+                <div className="form-grid" style={{ marginBottom: '16px' }}>
+                  <div>
+                    <label className="label">Kode <span style={{ color: '#94A3B8', fontWeight: '400' }}>(opsional)</span></label>
+                    <input className="input" placeholder="BB-001" value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} />
+                  </div>
+                  <div>
+                    <label className="label">Satuan</label>
+                    <input className="input" placeholder="gram, ml, pcs" value={form.unit} onChange={e => setForm({ ...form, unit: e.target.value })} required />
+                  </div>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <label className="label">Nama Bahan Baku</label>
+                    <input className="input" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required />
+                  </div>
+                </div>
+
+                {!form.isComposite ? (
+                  <div style={{ background: 'var(--surface2)', borderRadius: '10px', padding: '16px', border: '1px solid var(--border)', marginBottom: '8px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px' }}>Harga Pembelian <span style={{ fontWeight: '400', textTransform: 'none' }}>(opsional)</span></div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                      <div>
+                        <label className="label">Harga Beli per Pack</label>
+                        <div style={{ position: 'relative' }}>
+                          <span style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', fontSize: '12px', color: 'var(--muted)', fontWeight: '600' }}>Rp</span>
+                          <input className="input" type="number" placeholder="0" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} style={{ paddingLeft: '36px' }} />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="label">Isi per Pack ({form.unit || 'satuan'})</label>
+                        <input className="input" type="number" placeholder="1000" value={form.packSize} onChange={e => setForm({ ...form, packSize: e.target.value })} />
+                      </div>
+                    </div>
+                    {pricePerUnit !== null && (
+                      <div style={{ marginTop: '12px', padding: '10px 14px', background: '#EFF4FF', borderRadius: '8px', border: '1px solid #C7D4F0', display: 'flex', justifyContent: 'space-between' }}>
+                        <span style={{ fontSize: '12px', color: 'var(--muted)' }}>Harga per {form.unit || 'satuan'}</span>
+                        <span style={{ fontSize: '14px', fontWeight: '800', color: 'var(--accent)' }}>Rp {pricePerUnit < 1 ? pricePerUnit.toFixed(4) : fmt(Math.round(pricePerUnit))}</span>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ background: '#F0FDF4', borderRadius: '10px', padding: '16px', border: '1px solid #A7F3D0', marginBottom: '8px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '700', color: '#065F46', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px' }}>
+                      Komponen Bahan Baku
+                      {form.components.length > 0 && <span style={{ marginLeft: '8px', background: '#10B981', color: '#fff', padding: '1px 7px', borderRadius: '10px', fontSize: '10px' }}>{form.components.length} dipilih</span>}
+                    </div>
+                    <div style={{ position: 'relative', marginBottom: '10px' }}>
+                      <svg style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                      <input className="input" style={{ paddingLeft: '30px', fontSize: '12px' }} placeholder="Cari bahan baku..." value={compSearch} onChange={e => setCompSearch(e.target.value)} />
+                    </div>
+                    <div style={{ border: '1px solid #A7F3D0', borderRadius: '8px', maxHeight: '160px', overflowY: 'auto', background: '#fff', marginBottom: '10px' }}>
+                      {availableForComp.length === 0
+                        ? <div style={{ padding: '16px', textAlign: 'center', fontSize: '12px', color: '#94A3B8' }}>Tidak ada bahan baku biasa tersedia</div>
+                        : availableForComp.map(ing => {
+                          const sel = form.components.find(c => c.ingredientId === ing.id)
+                          const perUnit = ing.price && ing.packSize ? ing.price / ing.packSize : null
+                          return (
+                            <div key={ing.id} onClick={() => toggleComponent(ing)}
+                              style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 12px', borderBottom: '1px solid #F0FDF4', background: sel ? '#ECFDF5' : 'transparent', cursor: 'pointer' }}>
+                              <div style={{ width: '16px', height: '16px', borderRadius: '4px', border: `2px solid ${sel ? '#10B981' : '#CBD5E1'}`, background: sel ? '#10B981' : 'transparent', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                {sel && <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke="white" strokeWidth="2" strokeLinecap="round"/></svg>}
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: '13px', fontWeight: sel ? '600' : '400' }}>{ing.name}</div>
+                                {perUnit && <div style={{ fontSize: '10px', color: '#94A3B8' }}>Rp {perUnit < 1 ? perUnit.toFixed(4) : fmt(Math.round(perUnit))}/{ing.unit}</div>}
+                              </div>
+                              <span style={{ fontSize: '11px', color: '#94A3B8', background: '#F1F5FB', padding: '2px 6px', borderRadius: '6px' }}>{ing.unit}</span>
+                              {sel && (
+                                <input type="number" step="0.01" min="0.01" placeholder="Qty"
+                                  value={sel.qty} onClick={e => e.stopPropagation()}
+                                  onChange={e => updateComponentQty(ing.id, e.target.value)}
+                                  style={{ width: '70px', padding: '4px 8px', border: '1.5px solid #10B981', borderRadius: '6px', fontSize: '12px', outline: 'none', fontFamily: 'inherit' }} />
+                              )}
+                            </div>
+                          )
+                        })}
+                    </div>
+                    <div>
+                      <label className="label">Hasil / Yield ({form.unit || 'satuan'}) <span style={{ color: '#94A3B8', fontWeight: '400' }}>(opsional)</span></label>
+                      <input className="input" type="number" placeholder={`misal: 500`} value={form.yield} onChange={e => setForm({ ...form, yield: e.target.value })} />
+                    </div>
+                    {compositePreviewPrice !== null && compositePreviewPrice > 0 && (
+                      <div style={{ marginTop: '10px', padding: '10px 14px', background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: '8px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ fontSize: '12px', color: '#065F46' }}>Total HPP Komponen</span>
+                          <span style={{ fontSize: '14px', fontWeight: '800', color: '#10B981' }}>Rp {fmt(Math.round(compositePreviewPrice))}</span>
+                        </div>
+                        {form.yield && Number(form.yield) > 0 && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px', paddingTop: '6px', borderTop: '1px solid #A7F3D0' }}>
+                            <span style={{ fontSize: '12px', color: '#065F46' }}>HPP per {form.unit || 'satuan'}</span>
+                            <span style={{ fontSize: '14px', fontWeight: '800', color: '#059669' }}>Rp {(compositePreviewPrice / Number(form.yield)) < 1 ? (compositePreviewPrice / Number(form.yield)).toFixed(4) : fmt(Math.round(compositePreviewPrice / Number(form.yield)))}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </form>
+            </div>
+
+            <div style={{ padding: '14px 20px', borderTop: '1px solid var(--border)', display: 'flex', gap: '8px', background: 'var(--surface2)', flexShrink: 0 }}>
+              <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={() => { setEditModal(false); setEditId(null); setForm(emptyForm); setCompSearch('') }}>Batal</button>
+              <button form="edit-ingredient-form" type="submit" className="btn btn-primary" style={{ flex: 2, justifyContent: 'center' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+                Simpan Perubahan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
