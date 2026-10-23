@@ -1763,6 +1763,7 @@ function CheckoutModal({ cart, total: totalProp, subtotal = totalProp, tax = 0, 
         </div>
       </div>
     </div>
+    
   )
 
   return (
