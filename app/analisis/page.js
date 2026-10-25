@@ -207,7 +207,7 @@ export default function AnalisisPage() {
     kasirPerformance, period } = data
 
   const prevMonthName = MONTHS[month === 0 ? 11 : month - 1]
-  const periodLabel = `20 ${prevMonthName} – 20 ${period.monthName} ${year}`
+  const periodLabel = `20 ${prevMonthName} – 19 ${period.monthName} ${year}`
 
   const TABS = [
     { key:'overview', label:'Overview' },

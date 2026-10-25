@@ -54,14 +54,14 @@ async function buildFullContext() {
   const thisPrevM = currCutoffMonth === 1 ? 12 : currCutoffMonth - 1
   const thisPrevY = currCutoffMonth === 1 ? currCutoffYear - 1 : currCutoffYear
   const monthStart = new Date(`${thisPrevY}-${pad(thisPrevM)}-20T00:00:00.000+07:00`)
-  const monthEnd = new Date(`${currCutoffYear}-${pad(currCutoffMonth)}-20T23:59:59.999+07:00`)
+  const monthEnd = new Date(`${currCutoffYear}-${pad(currCutoffMonth)}-19T23:59:59.999+07:00`)
 
   const lastEndM = thisPrevM
   const lastEndY = thisPrevY
   const lastStartM = lastEndM === 1 ? 12 : lastEndM - 1
   const lastStartY = lastEndM === 1 ? lastEndY - 1 : lastEndY
   const lastMonthStart = new Date(`${lastStartY}-${pad(lastStartM)}-20T00:00:00.000+07:00`)
-  const lastMonthEnd = new Date(`${lastEndY}-${pad(lastEndM)}-20T23:59:59.999+07:00`)
+  const lastMonthEnd = new Date(`${lastEndY}-${pad(lastEndM)}-19T23:59:59.999+07:00`)
 
   const yearStart = new Date(`${currCutoffYear - 1}-12-20T00:00:00.000+07:00`)
   const last7 = new Date(today); last7.setDate(today.getDate() - 6)

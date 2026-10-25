@@ -74,8 +74,8 @@ function RekapTable({ catData, filterMonth, filterMode, onChangeMonth, onChangeM
 
   const prevMonthIdx = filterMonth === 0 ? 11 : filterMonth - 1
   const periodLabel = filterMode === 'year'
-    ? `Tahun ${year} (Cut-Off 20 Des - 20 Des)`
-    : `${MONTHS[filterMonth]} ${year} (20 ${MONTHS[prevMonthIdx]} - 20 ${MONTHS[filterMonth]})`
+    ? `Tahun ${year} (Cut-Off 20 Des - 19 Des)`
+    : `${MONTHS[filterMonth]} ${year} (20 ${MONTHS[prevMonthIdx]} - 19 ${MONTHS[filterMonth]})`
 
   function downloadCSV() {
     const fmtNum = n => Number(n || 0)

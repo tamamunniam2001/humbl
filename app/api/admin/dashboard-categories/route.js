@@ -30,8 +30,8 @@ export async function GET(req) {
     : new Date(`${prevYear}-${pad(prevMonth)}-20T00:00:00+07:00`)
 
   const rangeEnd = mode === 'year'
-    ? new Date(`${year}-12-20T23:59:59.999+07:00`)
-    : new Date(`${year}-${pad(currMonth)}-20T23:59:59.999+07:00`)
+    ? new Date(`${year}-12-19T23:59:59.999+07:00`)
+    : new Date(`${year}-${pad(currMonth)}-19T23:59:59.999+07:00`)
 
   const [salesRaw, expRaw, kasData] = await Promise.all([
     prisma.orderItem.findMany({

@@ -38,7 +38,7 @@ export async function GET(req) {
   const thisPrevM = currCutoffMonth === 1 ? 12 : currCutoffMonth - 1
   const thisPrevY = currCutoffMonth === 1 ? currCutoffYear - 1 : currCutoffYear
   const thisMonthStart = new Date(`${thisPrevY}-${pad(thisPrevM)}-20T00:00:00.000+07:00`)
-  const thisMonthEnd = new Date(`${currCutoffYear}-${pad(currCutoffMonth)}-20T23:59:59.999+07:00`)
+  const thisMonthEnd = new Date(`${currCutoffYear}-${pad(currCutoffMonth)}-19T23:59:59.999+07:00`)
 
   // Bulan Lalu (Cut-off tgl 20 sebelumnya)
   const lastEndM = thisPrevM
@@ -46,11 +46,11 @@ export async function GET(req) {
   const lastStartM = lastEndM === 1 ? 12 : lastEndM - 1
   const lastStartY = lastEndM === 1 ? lastEndY - 1 : lastEndY
   const lastMonthStart = new Date(`${lastStartY}-${pad(lastStartM)}-20T00:00:00.000+07:00`)
-  const lastMonthEnd = new Date(`${lastEndY}-${pad(lastEndM)}-20T23:59:59.999+07:00`)
+  const lastMonthEnd = new Date(`${lastEndY}-${pad(lastEndM)}-19T23:59:59.999+07:00`)
 
   // Tahun cut-off: 20 Desember tahun lalu s/d 20 Desember tahun ini
   const yearStart = new Date(`${currCutoffYear - 1}-12-20T00:00:00.000+07:00`)
-  const yearEnd = new Date(`${currCutoffYear}-12-20T23:59:59.999+07:00`)
+  const yearEnd = new Date(`${currCutoffYear}-12-19T23:59:59.999+07:00`)
 
   const MONTHS = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des']
 
@@ -107,7 +107,7 @@ export async function GET(req) {
     const prevY = m === 0 ? currCutoffYear - 1 : currCutoffYear
     const currM = m + 1
     const startT = new Date(`${prevY}-${pad(prevM)}-20T00:00:00.000+07:00`).getTime()
-    const endT = new Date(`${currCutoffYear}-${pad(currM)}-20T23:59:59.999+07:00`).getTime()
+    const endT = new Date(`${currCutoffYear}-${pad(currM)}-19T23:59:59.999+07:00`).getTime()
 
     const rev = yearlyTxRaw.filter(t => {
       const time = new Date(t.transaction.createdAt).getTime()

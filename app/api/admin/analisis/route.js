@@ -11,7 +11,7 @@ function getCutoff(year, month) {
   const currMonth = month + 1
   return {
     start: new Date(`${prevYear}-${pad(prevMonth)}-20T00:00:00+07:00`),
-    end: new Date(`${year}-${pad(currMonth)}-20T23:59:59.999+07:00`),
+    end: new Date(`${year}-${pad(currMonth)}-19T23:59:59.999+07:00`),
   }
 }
 
@@ -42,7 +42,7 @@ export async function GET(req) {
   const { start: prevStart, end: prevEnd } = getCutoff(prevMonthYear, prevMonthIdx)
 
   const yearStart = new Date(`${reqYear - 1}-12-20T00:00:00+07:00`)
-  const yearEnd = new Date(`${reqYear}-12-20T23:59:59.999+07:00`)
+  const yearEnd = new Date(`${reqYear}-12-19T23:59:59.999+07:00`)
 
   const todayStr = `${wibYear}-${pad(wibMonth + 1)}-${pad(wibDay)}`
   const todayStart = new Date(`${todayStr}T00:00:00+07:00`)
