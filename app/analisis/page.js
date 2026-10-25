@@ -184,6 +184,9 @@ export default function AnalisisPage() {
       .finally(() => setLoading(false))
   }, [])
 
+  const curYear = new Date().getFullYear()
+  const yearOptions = [curYear - 2, curYear - 1, curYear]
+
   useEffect(() => {
     api.get('/admin/dashboard').then(r => {
       const m = r.data.currentMonthIndex
@@ -227,6 +230,14 @@ export default function AnalisisPage() {
             <div className="topbar-sub">{periodLabel}</div>
           </div>
           <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
+            <div style={{ display:'flex', gap:'4px', background:'#F1F5F9', borderRadius:'9px', padding:'3px' }}>
+              {yearOptions.map(y => (
+                <button key={y} onClick={() => { setYear(y); load(month, y) }}
+                  style={{ padding:'4px 12px', borderRadius:'7px', border:'none', background: year===y ? '#fff' : 'transparent', color: year===y ? '#6366F1' : '#8896B3', fontSize:'12px', fontWeight: year===y ? '700' : '500', cursor:'pointer', fontFamily:'inherit', boxShadow: year===y ? '0 1px 4px rgba(0,0,0,0.08)' : 'none', transition:'all 0.15s' }}>
+                  {y}
+                </button>
+              ))}
+            </div>
             <select value={month} onChange={e => { const m = Number(e.target.value); setMonth(m); load(m, year) }}
               style={{ padding:'6px 28px 6px 10px', borderRadius:'9px', border:'1.5px solid #E2E8F8', background:'#F8FAFF', color:'#374151', fontSize:'12px', fontWeight:'600', fontFamily:'inherit', cursor:'pointer', outline:'none', WebkitAppearance:'none', appearance:'none' }}>
               {MONTHS.map((m, i) => <option key={i} value={i}>{m} {year}</option>)}
