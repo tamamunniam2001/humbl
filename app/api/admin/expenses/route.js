@@ -50,7 +50,7 @@ export async function GET(req) {
   if (monthly) {
     const pad = n => String(n).padStart(2, '0')
     const rows = await prisma.expense.findMany({
-      where: { date: { gte: new Date(`${year - 1}-12-20T00:00:00+07:00`), lte: new Date(`${year}-12-20T23:59:59.999+07:00`) } },
+      where: { date: { gte: new Date(`${year - 1}-12-20T00:00:00+07:00`), lte: new Date(`${year}-12-19T23:59:59.999+07:00`) } },
       select: { date: true, total: true },
     })
     const months = Array.from({ length: 12 }, (_, m) => {
@@ -58,7 +58,7 @@ export async function GET(req) {
       const prevY = m === 0 ? year - 1 : year
       const currM = m + 1
       const startT = new Date(`${prevY}-${pad(prevM)}-20T00:00:00+07:00`).getTime()
-      const endT = new Date(`${year}-${pad(currM)}-20T23:59:59.999+07:00`).getTime()
+      const endT = new Date(`${year}-${pad(currM)}-19T23:59:59.999+07:00`).getTime()
       const total = rows.filter(r => {
         const t = new Date(r.date).getTime()
         return t >= startT && t <= endT

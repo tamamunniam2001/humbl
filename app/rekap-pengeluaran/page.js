@@ -107,7 +107,7 @@ export default function RekapPengeluaranPage() {
     const prevY = i === 0 ? year - 1 : year
     const currM = i + 1
     const f = `${prevY}-${pad(prevM)}-20`
-    const t = `${year}-${pad(currM)}-20`
+    const t = `${year}-${pad(currM)}-19`
     setFrom(f); setTo(t); setPage(1); setActiveKategori(''); setSelected(new Set())
     load(1, f, t, '')
     loadByKategori(f, t)  // pakai f,t langsung bukan state
@@ -256,7 +256,7 @@ export default function RekapPengeluaranPage() {
           <div className="card" style={{ padding: '20px 24px', marginBottom: '20px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text)' }}>
-                Rekap Pengeluaran Bulanan <span style={{ fontSize: '11px', fontWeight: '500', color: 'var(--muted)' }}>(Cut-Off Tanggal 20)</span>
+                Rekap Pengeluaran Bulanan <span style={{ fontSize: '11px', fontWeight: '500', color: 'var(--muted)' }}>(Cut-Off 20 s/d 19)</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <button onClick={() => { const y = year - 1; setYear(y); loadMonthly(y) }}
@@ -277,7 +277,7 @@ export default function RekapPengeluaranPage() {
                 const isCurrent = new Date().getFullYear() === year && (new Date().getDate() > 20 ? (new Date().getMonth() + 1) % 12 : new Date().getMonth()) === i
                 return (
                   <div key={i} onClick={() => handleClickMonth(i)}
-                    title={`Cut-Off: 20 ${MONTHS[i === 0 ? 11 : i - 1]} - 20 ${MONTHS[i]}`}
+                    title={`Cut-Off: 20 ${MONTHS[i === 0 ? 11 : i - 1]} - 19 ${MONTHS[i]}`}
                     style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
                     <div style={{ width: '100%', height: '60px', background: isActive ? '#FEE2E2' : 'var(--surface2)', borderRadius: '6px', overflow: 'hidden', display: 'flex', alignItems: 'flex-end', border: `1px solid ${isActive ? 'var(--red)' : 'var(--border)'}`, transition: 'border 0.15s' }}>
                       <div style={{ width: '100%', height: `${Math.max(pct, m.total > 0 ? 4 : 0)}%`, background: isActive ? 'var(--red)' : isCurrent ? 'var(--red)' : m.total > 0 ? '#FCA5A5' : 'transparent', borderRadius: '4px 4px 0 0', transition: 'height 0.4s ease' }} />

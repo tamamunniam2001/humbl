@@ -58,7 +58,7 @@ export async function GET(req) {
   if (searchParams.get('monthly') === '1') {
     const pad = n => String(n).padStart(2, '0')
     const start = new Date(`${year - 1}-12-20T00:00:00.000+07:00`)
-    const end = new Date(`${year}-12-20T23:59:59.999+07:00`)
+    const end = new Date(`${year}-12-19T23:59:59.999+07:00`)
     const items = await prisma.orderItem.findMany({
       where: { transaction: { status: 'COMPLETED', deletedAt: null, createdAt: { gte: start, lte: end } } },
       select: {
@@ -71,7 +71,7 @@ export async function GET(req) {
       const prevY = m === 0 ? year - 1 : year
       const currM = m + 1
       const startT = new Date(`${prevY}-${pad(prevM)}-20T00:00:00+07:00`).getTime()
-      const endT = new Date(`${year}-${pad(currM)}-20T23:59:59.999+07:00`).getTime()
+      const endT = new Date(`${year}-${pad(currM)}-19T23:59:59.999+07:00`).getTime()
 
       let total = 0
       let qty = 0
