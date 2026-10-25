@@ -65,6 +65,8 @@ export async function GET(req) {
     voucherMonth,
     memberTxMonth,
     kasirMonth,
+    ingredientPurchases,
+    ingredientUsageItems,
   ] = await Promise.all([
     prisma.transaction.aggregate({ where: { createdAt: { gte: monthStart, lte: monthEnd }, status: 'COMPLETED', deletedAt: null }, _sum: { total: true, discountAmount: true, voucherDiscount: true, memberDiscount: true }, _count: true }),
     prisma.transaction.aggregate({ where: { createdAt: { gte: prevStart, lte: prevEnd }, status: 'COMPLETED', deletedAt: null }, _sum: { total: true }, _count: true }),
@@ -104,6 +106,16 @@ export async function GET(req) {
     prisma.transaction.aggregate({ where: { createdAt: { gte: monthStart, lte: monthEnd }, status: 'COMPLETED', deletedAt: null, memberId: { not: null } }, _sum: { total: true }, _count: true }),
 
     prisma.transaction.groupBy({ by: ['cashierId'], where: { createdAt: { gte: monthStart, lte: monthEnd }, status: 'COMPLETED', deletedAt: null }, _sum: { total: true }, _count: true, orderBy: { _sum: { total: 'desc' } }, take: 5 }),
+
+    prisma.expenseDetail.findMany({
+      where: { expense: { date: { gte: monthStart, lte: monthEnd } }, expenseItem: { category: 'Persediaan' } },
+      select: { name: true, qty: true, isi: true, satuan: true, subtotal: true, expenseItem: { select: { name: true } } },
+    }),
+
+    prisma.orderItem.findMany({
+      where: { transaction: { createdAt: { gte: monthStart, lte: monthEnd }, status: 'COMPLETED', deletedAt: null } },
+      select: { qty: true, product: { select: { ingredients: { select: { qty: true, ingredient: { select: { name: true, unit: true, packSize: true, price: true } } } } } } },
+    }),
   ])
 
   const kasirIds = kasirMonth.map(k => k.cashierId)
@@ -159,6 +171,46 @@ export async function GET(req) {
     absensiSummary[name][a.type] = (absensiSummary[name][a.type] || 0) + 1
   })
 
+  // Agregasi bahan baku: pembelian
+  const buyMap = {}
+  for (const d of ingredientPurchases) {
+    const name = (d.expenseItem?.name || d.name || '').trim()
+    if (!name) continue
+    if (!buyMap[name]) buyMap[name] = { name, totalBought: 0, totalSpent: 0 }
+    const units = d.isi && d.isi > 0 ? d.qty * d.isi : d.qty
+    buyMap[name].totalBought += units
+    buyMap[name].totalSpent += d.subtotal
+  }
+
+  // Agregasi bahan baku: pemakaian
+  const useMap = {}
+  for (const oi of ingredientUsageItems) {
+    if (!oi.product?.ingredients?.length) continue
+    for (const pi of oi.product.ingredients) {
+      if (!pi.ingredient) continue
+      const name = pi.ingredient.name.trim()
+      if (!useMap[name]) useMap[name] = { name, unit: pi.ingredient.unit, packSize: pi.ingredient.packSize ?? 0, pricePerUnit: pi.ingredient.packSize > 0 ? (pi.ingredient.price || 0) / pi.ingredient.packSize : 0, totalUsed: 0 }
+      useMap[name].totalUsed += pi.qty * oi.qty
+    }
+  }
+
+  // Gabungkan
+  const allNames = new Set([...Object.keys(buyMap), ...Object.keys(useMap)])
+  const ingredientAnalysis = Array.from(allNames).map(name => {
+    const b = buyMap[name] || { totalBought: 0, totalSpent: 0 }
+    const u = useMap[name] || { unit: '', packSize: 0, pricePerUnit: 0, totalUsed: 0 }
+    const selisih = b.totalBought - u.totalUsed
+    return {
+      name,
+      unit: u.unit,
+      totalBought: b.totalBought,
+      totalSpent: b.totalSpent,
+      totalUsed: u.totalUsed,
+      selisih,
+      estimasiNilaiSelisih: selisih * u.pricePerUnit,
+    }
+  }).sort((a, b) => Math.abs(b.selisih) - Math.abs(a.selisih))
+
   return NextResponse.json({
     period: {
       month: reqMonth, year: reqYear, monthName: MONTHS[reqMonth],
@@ -196,6 +248,7 @@ export async function GET(req) {
     voucher: { discount: voucherMonth._sum.voucherDiscount || 0, count: voucherMonth._count },
     memberTx: { total: memberTxMonth._sum.total || 0, count: memberTxMonth._count },
     kasirPerformance: kasirMonth.map(k => ({ name: kasirUsers.find(u => u.id === k.cashierId)?.name || '-', total: k._sum.total || 0, count: k._count })),
+    ingredientAnalysis,
     months: MONTHS,
   })
 }

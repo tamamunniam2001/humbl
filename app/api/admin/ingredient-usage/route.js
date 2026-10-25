@@ -18,7 +18,9 @@ export async function GET(req) {
   })
   const usageMap = {}
   for (const oi of orderItems) {
+    if (!oi.product?.ingredients?.length) continue
     for (const pi of oi.product.ingredients) {
+      if (!pi.ingredient) continue
       if (!usageMap[pi.ingredientId]) usageMap[pi.ingredientId] = { ingredientId: pi.ingredientId, name: pi.ingredient.name, unit: pi.ingredient.unit, packSize: pi.ingredient.packSize ?? 0, totalUsed: 0 }
       usageMap[pi.ingredientId].totalUsed += pi.qty * oi.qty
     }

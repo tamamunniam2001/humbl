@@ -203,7 +203,7 @@ export default function AnalisisPage() {
   const { kpi, kas, dailyChart, monthlyChart, topProductsMonth, topProductsYear,
     expCatMonth, expCatYear, payMethodMonth, payMethodYear,
     salesCatMonth, salesCatYear, absensiSummary, waste, voucher, memberTx,
-    kasirPerformance, period } = data
+    kasirPerformance, ingredientAnalysis, period } = data
 
   const prevMonthName = MONTHS[month === 0 ? 11 : month - 1]
   const periodLabel = `20 ${prevMonthName} – 19 ${period.monthName} ${year}`
@@ -213,6 +213,7 @@ export default function AnalisisPage() {
     { key:'penjualan', label:'Penjualan' },
     { key:'pengeluaran', label:'Pengeluaran' },
     { key:'produk', label:'Produk' },
+    { key:'bahan', label:'Bahan Baku' },
     { key:'operasional', label:'Operasional' },
     { key:'ai', label:'✦ AI Analyst' },
   ]
@@ -615,6 +616,66 @@ export default function AnalisisPage() {
               </Card>
             </>
           )}
+
+          {tab === 'bahan' && (() => {
+            const totalBeli = ingredientAnalysis.reduce((s, r) => s + r.totalSpent, 0)
+            const totalSelisihNilai = ingredientAnalysis.reduce((s, r) => s + (r.estimasiNilaiSelisih > 0 ? r.estimasiNilaiSelisih : 0), 0)
+            const surplus = ingredientAnalysis.filter(r => r.selisih > 0).length
+            const defisit = ingredientAnalysis.filter(r => r.selisih < 0).length
+            return (
+              <>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'14px', marginBottom:'20px' }}>
+                  <KpiCard label="Total Pembelian Bahan" value={fmt(totalBeli)} sub={`${ingredientAnalysis.filter(r=>r.totalBought>0).length} jenis bahan dibeli`} color="#6366F1" />
+                  <KpiCard label="Total Bahan Dipakai" value={`${ingredientAnalysis.filter(r=>r.totalUsed>0).length} jenis`} sub="Dari resep produk terjual" color="#10B981" />
+                  <KpiCard label="Surplus (Sisa Stok)" value={`${surplus} bahan`} sub={fmt(totalSelisihNilai) + ' est. nilai'} color="#F59E0B" />
+                  <KpiCard label="Defisit (Kurang Beli)" value={`${defisit} bahan`} sub="Pemakaian melebihi pembelian" color="#EF4444" />
+                </div>
+                <Card title="Analisis Selisih Bahan Baku" sub={`Dibeli vs Dipakai — ${periodLabel}`}>
+                  <div style={{ overflowX:'auto' }}>
+                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
+                      <thead>
+                        <tr>
+                          {['Bahan Baku','Satuan','Dibeli','Dipakai','Selisih','Est. Nilai Selisih','Status'].map((h,i) => (
+                            <th key={i} style={{ padding:'8px 12px', textAlign: i>=2 ? 'right' : 'left', fontWeight:'700', color:'#8896B3', borderBottom:'1px solid #F1F5F9', fontSize:'11px', whiteSpace:'nowrap' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {ingredientAnalysis.map((r, i) => {
+                          const isDefisit = r.selisih < 0
+                          const isSurplus = r.selisih > 0
+                          return (
+                            <tr key={i} style={{ background: i%2===0 ? '#fff' : '#FAFBFF' }}>
+                              <td style={{ padding:'9px 12px', fontWeight:'600', color:'#0F1729' }}>{r.name}</td>
+                              <td style={{ padding:'9px 12px', color:'#8896B3' }}>{r.unit || '-'}</td>
+                              <td style={{ padding:'9px 12px', textAlign:'right', color:'#6366F1', fontWeight:'600' }}>{r.totalBought > 0 ? r.totalBought.toLocaleString('id-ID', { maximumFractionDigits:2 }) : '-'}</td>
+                              <td style={{ padding:'9px 12px', textAlign:'right', color:'#10B981', fontWeight:'600' }}>{r.totalUsed > 0 ? r.totalUsed.toLocaleString('id-ID', { maximumFractionDigits:2 }) : '-'}</td>
+                              <td style={{ padding:'9px 12px', textAlign:'right', fontWeight:'700', color: isDefisit ? '#EF4444' : isSurplus ? '#F59E0B' : '#8896B3' }}>
+                                {r.selisih > 0 ? '+' : ''}{r.selisih.toLocaleString('id-ID', { maximumFractionDigits:2 })}
+                              </td>
+                              <td style={{ padding:'9px 12px', textAlign:'right', color: isDefisit ? '#EF4444' : isSurplus ? '#F59E0B' : '#8896B3', fontSize:'11px' }}>
+                                {r.estimasiNilaiSelisih !== 0 ? fmt(Math.abs(r.estimasiNilaiSelisih)) : '-'}
+                              </td>
+                              <td style={{ padding:'9px 12px' }}>
+                                <span style={{ padding:'3px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:'700',
+                                  background: isDefisit ? '#FEF2F2' : isSurplus ? '#FFFBEB' : '#F1F5F9',
+                                  color: isDefisit ? '#EF4444' : isSurplus ? '#F59E0B' : '#8896B3' }}>
+                                  {isDefisit ? 'Defisit' : isSurplus ? 'Surplus' : 'Pas'}
+                                </span>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                        {ingredientAnalysis.length === 0 && (
+                          <tr><td colSpan={7} style={{ padding:'32px', textAlign:'center', color:'#CBD5E1' }}>Belum ada data bahan baku pada periode ini</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+              </>
+            )
+          })()}
 
           {tab === 'ai' && <AIPanel />}
 
