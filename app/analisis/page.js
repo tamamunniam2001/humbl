@@ -5,7 +5,7 @@ import Sidebar from '@/components/Sidebar'
 import api from '@/lib/api'
 
 const fmt = n => 'Rp ' + Number(n || 0).toLocaleString('id-ID')
-const fmtK = n => { const v = Number(n || 0); if (v >= 1000000) return 'Rp ' + (v/1000000).toFixed(1) + 'jt'; if (v >= 1000) return 'Rp ' + (v/1000).toFixed(0) + 'rb'; return fmt(v) }
+const fmtK = n => fmt(n)
 const pct = n => (n === null || n === undefined) ? null : Number(n).toFixed(1)
 const MONTHS = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des']
 const COLORS = ['#6366F1','#10B981','#F59E0B','#EF4444','#8B5CF6','#06B6D4','#F97316','#84CC16','#EC4899','#14B8A6']
@@ -20,15 +20,14 @@ function GrowthBadge({ value }) {
   )
 }
 
-function KpiCard({ label, value, sub, growth, color='#6366F1', bg='#EFF4FF', icon }) {
+function KpiCard({ label, value, sub, growth, color='#6366F1' }) {
   return (
     <div style={{ background:'#fff', borderRadius:'16px', padding:'20px', border:'1px solid #E2E8F8', boxShadow:'0 2px 12px rgba(15,23,41,0.05)', display:'flex', flexDirection:'column', gap:'8px' }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-        <div style={{ width:'36px', height:'36px', borderRadius:'10px', background:bg, color, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'16px' }}>{icon}</div>
+        <div style={{ fontSize:'11px', fontWeight:'600', color:'#8896B3', textTransform:'uppercase', letterSpacing:'0.4px' }}>{label}</div>
         <GrowthBadge value={growth} />
       </div>
-      <div style={{ fontSize:'22px', fontWeight:'800', color:'#0F1729', lineHeight:1.2 }}>{value}</div>
-      <div style={{ fontSize:'12px', fontWeight:'600', color:'#8896B3' }}>{label}</div>
+      <div style={{ fontSize:'20px', fontWeight:'800', color, lineHeight:1.2 }}>{value}</div>
       {sub && <div style={{ fontSize:'11px', color:'#B0BCCC' }}>{sub}</div>}
     </div>
   )
@@ -248,16 +247,16 @@ export default function AnalisisPage() {
           {tab === 'overview' && (
             <>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'14px', marginBottom:'20px' }}>
-                <KpiCard label="Total Penjualan" value={fmtK(kpi.revenue.month)} sub={`vs ${fmtK(kpi.revenue.prev)} bulan lalu`} growth={kpi.revenue.growth} color="#6366F1" bg="#EFF4FF" icon="💰" />
-                <KpiCard label="Total Pengeluaran" value={fmtK(kpi.expense.month)} sub={`vs ${fmtK(kpi.expense.prev)} bulan lalu`} growth={kpi.expense.growth} color="#EF4444" bg="#FEF2F2" icon="📤" />
-                <KpiCard label="Laba Bersih" value={fmtK(kpi.laba.month)} sub={`Net margin ${pct(kpi.netMarginMonth)}%`} growth={kpi.laba.growth} color={kpi.laba.month >= 0 ? '#10B981' : '#EF4444'} bg={kpi.laba.month >= 0 ? '#ECFDF5' : '#FEF2F2'} icon="📈" />
-                <KpiCard label="Total Transaksi" value={kpi.transactions.month.toLocaleString('id-ID')} sub={`Rata-rata ${fmtK(kpi.avgTxValue)}/transaksi`} growth={kpi.transactions.prev > 0 ? ((kpi.transactions.month - kpi.transactions.prev) / kpi.transactions.prev * 100) : null} color="#F59E0B" bg="#FFFBEB" icon="🧾" />
+                <KpiCard label="Total Penjualan" value={fmt(kpi.revenue.month)} sub={`vs ${fmt(kpi.revenue.prev)} bulan lalu`} growth={kpi.revenue.growth} color="#6366F1" />
+                <KpiCard label="Total Pengeluaran" value={fmt(kpi.expense.month)} sub={`vs ${fmt(kpi.expense.prev)} bulan lalu`} growth={kpi.expense.growth} color="#EF4444" />
+                <KpiCard label="Laba Bersih" value={fmt(kpi.laba.month)} sub={`Net margin ${pct(kpi.netMarginMonth)}%`} growth={kpi.laba.growth} color={kpi.laba.month >= 0 ? '#10B981' : '#EF4444'} />
+                <KpiCard label="Total Transaksi" value={kpi.transactions.month.toLocaleString('id-ID')} sub={`Rata-rata ${fmt(kpi.avgTxValue)}/transaksi`} growth={kpi.transactions.prev > 0 ? ((kpi.transactions.month - kpi.transactions.prev) / kpi.transactions.prev * 100) : null} color="#F59E0B" />
               </div>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'14px', marginBottom:'20px' }}>
-                <KpiCard label="Rata-rata/Hari" value={fmtK(kpi.avgDailySales)} sub={`${kpi.daysWithSales} hari aktif`} color="#8B5CF6" bg="#F5F3FF" icon="📅" />
-                <KpiCard label="Kas Akhir Bulan" value={fmtK(kas.kasAkhir)} sub={`Kas awal ${fmtK(kas.kasAwal)}`} color={kas.kasAkhir >= 0 ? '#10B981' : '#EF4444'} bg={kas.kasAkhir >= 0 ? '#ECFDF5' : '#FEF2F2'} icon="🏦" />
-                <KpiCard label="Transaksi Member" value={memberTx.count.toLocaleString('id-ID')} sub={fmtK(memberTx.total)} color="#06B6D4" bg="#ECFEFF" icon="👥" />
-                <KpiCard label="Waste Bulan Ini" value={fmtK(waste.total)} sub={`${waste.count} catatan`} color="#F97316" bg="#FFF7ED" icon="🗑️" />
+                <KpiCard label="Rata-rata/Hari" value={fmt(Math.round(kpi.avgDailySales))} sub={`${kpi.daysWithSales} hari aktif`} color="#8B5CF6" />
+                <KpiCard label="Kas Akhir Bulan" value={fmt(kas.kasAkhir)} sub={`Kas awal ${fmt(kas.kasAwal)}`} color={kas.kasAkhir >= 0 ? '#10B981' : '#EF4444'} />
+                <KpiCard label="Transaksi Member" value={memberTx.count.toLocaleString('id-ID')} sub={fmt(memberTx.total)} color="#06B6D4" />
+                <KpiCard label="Waste Bulan Ini" value={fmt(waste.total)} sub={`${waste.count} catatan`} color="#F97316" />
               </div>
               <Card title="Tren Penjualan Harian" sub={periodLabel}>
                 <ResponsiveContainer width="100%" height={220}>
@@ -330,9 +329,9 @@ export default function AnalisisPage() {
           {tab === 'penjualan' && (
             <>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'14px', marginBottom:'20px' }}>
-                <KpiCard label="Total Penjualan" value={fmt(kpi.revenue.month)} sub={`${kpi.transactions.month} transaksi`} growth={kpi.revenue.growth} color="#6366F1" bg="#EFF4FF" icon="💰" />
-                <KpiCard label="Rata-rata/Hari" value={fmt(Math.round(kpi.avgDailySales))} sub={`${kpi.daysWithSales} hari aktif`} color="#8B5CF6" bg="#F5F3FF" icon="📅" />
-                <KpiCard label="Rata-rata/Transaksi" value={fmt(Math.round(kpi.avgTxValue))} sub={`Net margin ${pct(kpi.netMarginMonth)}%`} color="#10B981" bg="#ECFDF5" icon="🧾" />
+                <KpiCard label="Total Penjualan" value={fmt(kpi.revenue.month)} sub={`${kpi.transactions.month} transaksi`} growth={kpi.revenue.growth} color="#6366F1" />
+                <KpiCard label="Rata-rata/Hari" value={fmt(Math.round(kpi.avgDailySales))} sub={`${kpi.daysWithSales} hari aktif`} color="#8B5CF6" />
+                <KpiCard label="Rata-rata/Transaksi" value={fmt(Math.round(kpi.avgTxValue))} sub={`Net margin ${pct(kpi.netMarginMonth)}%`} color="#10B981" />
               </div>
               <Card title="Tren Penjualan Harian" sub={periodLabel}>
                 <ResponsiveContainer width="100%" height={240}>
@@ -395,9 +394,9 @@ export default function AnalisisPage() {
                 </ResponsiveContainer>
               </Card>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'14px', marginBottom:'20px' }}>
-                <KpiCard label="Total Diskon" value={fmt(kpi.discountTotal)} sub="Diskon manual" color="#F59E0B" bg="#FFFBEB" icon="🏷️" />
-                <KpiCard label="Diskon Voucher" value={fmt(kpi.voucherDiscount)} sub={`${voucher.count} transaksi pakai voucher`} color="#8B5CF6" bg="#F5F3FF" icon="🎟️" />
-                <KpiCard label="Diskon Member" value={fmt(kpi.memberDiscount)} sub={`${memberTx.count} transaksi member`} color="#06B6D4" bg="#ECFEFF" icon="👥" />
+                <KpiCard label="Total Diskon" value={fmt(kpi.discountTotal)} sub="Diskon manual" color="#F59E0B" />
+                <KpiCard label="Diskon Voucher" value={fmt(kpi.voucherDiscount)} sub={`${voucher.count} transaksi pakai voucher`} color="#8B5CF6" />
+                <KpiCard label="Diskon Member" value={fmt(kpi.memberDiscount)} sub={`${memberTx.count} transaksi member`} color="#06B6D4" />
               </div>
             </>
           )}
@@ -405,9 +404,9 @@ export default function AnalisisPage() {
           {tab === 'pengeluaran' && (
             <>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'14px', marginBottom:'20px' }}>
-                <KpiCard label="Total Pengeluaran" value={fmt(kpi.expense.month)} growth={kpi.expense.growth} color="#EF4444" bg="#FEF2F2" icon="📤" />
-                <KpiCard label="Bulan Lalu" value={fmt(kpi.expense.prev)} color="#F97316" bg="#FFF7ED" icon="📊" />
-                <KpiCard label="Tahun Ini" value={fmtK(kpi.expense.year)} sub={`Net margin tahunan ${pct(kpi.netMarginYear)}%`} color="#8B5CF6" bg="#F5F3FF" icon="📆" />
+                <KpiCard label="Total Pengeluaran" value={fmt(kpi.expense.month)} growth={kpi.expense.growth} color="#EF4444" />
+                <KpiCard label="Bulan Lalu" value={fmt(kpi.expense.prev)} color="#F97316" />
+                <KpiCard label="Tahun Ini" value={fmt(kpi.expense.year)} sub={`Net margin tahunan ${pct(kpi.netMarginYear)}%`} color="#8B5CF6" />
               </div>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'20px', marginBottom:'20px' }}>
                 <Card title="Pengeluaran per Kategori" sub="Bulan ini">
@@ -540,9 +539,9 @@ export default function AnalisisPage() {
           {tab === 'operasional' && (
             <>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'14px', marginBottom:'20px' }}>
-                <KpiCard label="Waste Bulan Ini" value={fmt(waste.total)} sub={`${waste.count} catatan`} color="#F97316" bg="#FFF7ED" icon="🗑️" />
-                <KpiCard label="Transaksi Member" value={memberTx.count.toLocaleString('id-ID')} sub={fmt(memberTx.total)} color="#06B6D4" bg="#ECFEFF" icon="👥" />
-                <KpiCard label="Voucher Digunakan" value={voucher.count.toLocaleString('id-ID')} sub={`Hemat ${fmt(voucher.discount)}`} color="#8B5CF6" bg="#F5F3FF" icon="🎟️" />
+                <KpiCard label="Waste Bulan Ini" value={fmt(waste.total)} sub={`${waste.count} catatan`} color="#F97316" />
+                <KpiCard label="Transaksi Member" value={memberTx.count.toLocaleString('id-ID')} sub={fmt(memberTx.total)} color="#06B6D4" />
+                <KpiCard label="Voucher Digunakan" value={voucher.count.toLocaleString('id-ID')} sub={`Hemat ${fmt(voucher.discount)}`} color="#8B5CF6" />
               </div>
               <Card title="Performa Kasir" sub={`Bulan ini — ${periodLabel}`}>
                 <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
@@ -624,3 +623,4 @@ export default function AnalisisPage() {
     </div>
   )
 }
+
