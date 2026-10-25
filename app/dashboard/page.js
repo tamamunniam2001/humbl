@@ -72,7 +72,10 @@ function RekapTable({ catData, filterMonth, filterMode, onChangeMonth, onChangeM
     finally { setSavingKas(false) }
   }
 
-  const periodLabel = filterMode === 'year' ? `Tahun ${year}` : `${MONTHS[filterMonth]} ${year}`
+  const prevMonthIdx = filterMonth === 0 ? 11 : filterMonth - 1
+  const periodLabel = filterMode === 'year'
+    ? `Tahun ${year} (Cut-Off 20 Des - 20 Des)`
+    : `${MONTHS[filterMonth]} ${year} (20 ${MONTHS[prevMonthIdx]} - 20 ${MONTHS[filterMonth]})`
 
   function downloadCSV() {
     const fmtNum = n => Number(n || 0)
@@ -397,7 +400,7 @@ export default function DashboardPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
               <div>
                 <h2 style={{ fontSize: '15px', fontWeight: '700', color: '#0F1729' }}>Pendapatan vs Pengeluaran</h2>
-                <p style={{ fontSize: '12px', color: '#8896B3', marginTop: '3px' }}>Harian — {data.currentMonth} {year}</p>
+                <p style={{ fontSize: '12px', color: '#8896B3', marginTop: '3px' }}>Harian (Cut-Off 20) — {data.currentMonth} {year}</p>
               </div>
               <div style={{ display: 'flex', gap: '24px' }}>
                 {[

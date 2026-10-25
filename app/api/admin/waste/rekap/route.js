@@ -4,13 +4,10 @@ import { verifyAuth, canAccessPage } from '@/lib/auth'
 
 // ── Rekap Waste ──
 // Ringkasan & tren catatan waste untuk satu periode:
-//  - mode "bulan" → 12 bulan dalam satu tahun
-//  - mode "hari"  → seluruh tanggal dalam satu bulan
+//  - mode "bulan" → 12 bulan dalam satu tahun (Cut-off tgl 20)
+//  - mode "hari"  → seluruh tanggal dalam satu bulan cut-off (20 bulan lalu s/d 20 bulan ini)
 // Nilai dihitung dari snapshot harga yang tersimpan di WasteNote.total/item,
 // jadi angka historis tidak berubah walau harga Bahan Baku naik.
-//
-// Akses mengikuti halaman Catatan Waste: pemegang akses /waste otomatis boleh
-// membuka rekap ini (sama seperti aturan prefix di middleware.js & Sidebar).
 const PAGE_PATH = '/waste/rekap'
 
 const CATEGORIES = ['RND', 'BUSUK', 'TIDAK_TERPAKAI', 'DIPAKAI_SENDIRI', 'SALAH_BUAT', 'LAINNYA']
@@ -22,23 +19,24 @@ const bulat = (n) => Math.round((Number(n) || 0) * 100) / 100
 const pad = (n) => String(n).padStart(2, '0')
 const awalHariWIB = (ymd) => new Date(`${ymd}T00:00:00+07:00`)
 const akhirHariWIB = (ymd) => new Date(`${ymd}T23:59:59.999+07:00`)
-const jumlahHari = (year, month) => new Date(Date.UTC(year, month, 0)).getUTCDate()
 
 function clampInt(raw, min, max, fallback) {
-  // Parameter kosong ("", null) → pakai nilai default, bukan 0
   if (raw === null || raw === undefined || String(raw).trim() === '') return fallback
   const n = Math.trunc(Number(raw))
   if (!isFinite(n)) return fallback
   return Math.min(max, Math.max(min, n))
 }
 
-// Rentang tanggal (WIB) untuk mode & periode terpilih
+// Rentang tanggal (WIB) untuk mode & periode terpilih per tanggal 20
 function rangeOf(mode, year, month) {
   if (mode === 'hari') {
-    const akhir = jumlahHari(year, month)
-    return { from: `${year}-${pad(month)}-01`, to: `${year}-${pad(month)}-${pad(akhir)}` }
+    // Cut-off per tanggal 20: misal Okt (month=10) -> 20 Sep s/d 20 Okt
+    const prevM = month === 1 ? 12 : month - 1
+    const prevY = month === 1 ? year - 1 : year
+    return { from: `${prevY}-${pad(prevM)}-20`, to: `${year}-${pad(month)}-20` }
   }
-  return { from: `${year}-01-01`, to: `${year}-12-31` }
+  // mode === 'bulan': 12 bulan (20 Des tahun lalu s/d 20 Des tahun ini)
+  return { from: `${year - 1}-12-20`, to: `${year}-12-20` }
 }
 
 // Periode pembanding: tahun sebelumnya (mode bulan) / bulan sebelumnya (mode hari)
@@ -54,23 +52,79 @@ const whereTanggal = (range, category) => {
 }
 
 function labelPeriode(mode, year, month) {
-  return mode === 'hari' ? `${MONTHS[month - 1]} ${year}` : `Tahun ${year}`
+  if (mode === 'hari') {
+    const prevM = month === 1 ? 12 : month - 1
+    return `${MONTHS[month - 1]} ${year} (20 ${MONTHS[prevM - 1]} - 20 ${MONTHS[month - 1]})`
+  }
+  return `Tahun ${year} (Cut-Off 20 Des - 20 Des)`
 }
 
 // Deret per bucket (bulan/tanggal) + nilai per kategori untuk grafik bertumpuk
-function buildSeries(mode, year, month, notes) {
-  const total = mode === 'hari' ? jumlahHari(year, month) : 12
-  const buckets = Array.from({ length: total }, (_, i) => ({
-    nomor: i + 1,
-    total: 0,
-    count: 0,
-    kategori: Object.fromEntries(CATEGORIES.map(c => [c, 0])),
-  }))
+function buildSeries(mode, year, month, notes, range) {
+  if (mode === 'hari') {
+    // Generate setiap tanggal dari range.from s/d range.to
+    const startDate = new Date(`${range.from}T00:00:00+07:00`)
+    const endDate = new Date(`${range.to}T23:59:59.999+07:00`)
+    const days = []
+    const cur = new Date(startDate)
+    while (cur <= endDate) {
+      const wKey = new Date(cur.getTime() + TZ_OFFSET)
+      const dayStr = `${wKey.getUTCFullYear()}-${pad(wKey.getUTCMonth() + 1)}-${pad(wKey.getUTCDate())}`
+      days.push({
+        dateStr: dayStr,
+        label: `${pad(wKey.getUTCDate())}/${pad(wKey.getUTCMonth() + 1)}`,
+        d: wKey.getUTCDate(),
+      })
+      cur.setTime(cur.getTime() + 24 * 60 * 60 * 1000)
+    }
+
+    const buckets = days.map((dObj, idx) => ({
+      nomor: idx + 1,
+      label: dObj.label,
+      key: dObj.dateStr,
+      total: 0,
+      count: 0,
+      kategori: Object.fromEntries(CATEGORIES.map(c => [c, 0])),
+    }))
+
+    notes.forEach(n => {
+      const w = toWIB(n.tanggal)
+      const nStr = `${w.getUTCFullYear()}-${pad(w.getUTCMonth() + 1)}-${pad(w.getUTCDate())}`
+      const b = buckets.find(item => item.key === nStr)
+      if (!b) return
+      const nilai = Number(n.total) || 0
+      b.total += nilai
+      b.count += 1
+      if (b.kategori[n.category] !== undefined) b.kategori[n.category] += nilai
+    })
+
+    return buckets.map(b => ({
+      ...b,
+      total: bulat(b.total),
+      ...Object.fromEntries(CATEGORIES.map(c => [c, bulat(b.kategori[c])])),
+    }))
+  }
+
+  // mode === 'bulan': 12 bulan (Jan..Des)
+  const buckets = Array.from({ length: 12 }, (_, m) => {
+    const prevM = m === 0 ? 12 : m
+    const prevY = m === 0 ? year - 1 : year
+    const currM = m + 1
+    return {
+      nomor: m + 1,
+      label: MONTHS[m],
+      key: `${year}-${pad(currM)}`,
+      startTime: new Date(`${prevY}-${pad(prevM)}-20T00:00:00+07:00`).getTime(),
+      endTime: new Date(`${year}-${pad(currM)}-20T23:59:59.999+07:00`).getTime(),
+      total: 0,
+      count: 0,
+      kategori: Object.fromEntries(CATEGORIES.map(c => [c, 0])),
+    }
+  })
 
   notes.forEach(n => {
-    const w = toWIB(n.tanggal)
-    const nomor = mode === 'hari' ? w.getUTCDate() : w.getUTCMonth() + 1
-    const b = buckets[nomor - 1]
+    const t = new Date(n.tanggal).getTime()
+    const b = buckets.find(item => t >= item.startTime && t <= item.endTime)
     if (!b) return
     const nilai = Number(n.total) || 0
     b.total += nilai
@@ -79,14 +133,13 @@ function buildSeries(mode, year, month, notes) {
   })
 
   return buckets.map(b => ({
-    label: mode === 'hari' ? pad(b.nomor) : MONTHS[b.nomor - 1],
-    key: mode === 'hari' ? `${year}-${pad(month)}-${pad(b.nomor)}` : `${year}-${pad(b.nomor)}`,
+    label: b.label,
+    key: b.key,
     total: bulat(b.total),
     count: b.count,
     ...Object.fromEntries(CATEGORIES.map(c => [c, bulat(b.kategori[c])])),
   }))
 }
-
 
 // GET /admin/waste/rekap?mode=bulan|hari&year=&month=&category=
 export async function GET(req) {
@@ -98,7 +151,9 @@ export async function GET(req) {
   const { searchParams } = new URL(req.url)
   const nowWIB = toWIB(new Date())
   const tahunIni = nowWIB.getUTCFullYear()
-  const bulanIni = nowWIB.getUTCMonth() + 1
+  const wDay = nowWIB.getUTCDate()
+  const wMonth = nowWIB.getUTCMonth() + 1
+  const bulanIni = wDay > 20 ? (wMonth === 12 ? 1 : wMonth + 1) : wMonth
 
   const mode = searchParams.get('mode') === 'hari' ? 'hari' : 'bulan'
   const year = clampInt(searchParams.get('year'), 2000, 2100, tahunIni)
@@ -139,8 +194,7 @@ export async function GET(req) {
   const count = notes.length
   const prevTotal = bulat(prevAgg._sum.total)
 
-  // Rekap per kategori (semua kategori selalu disertakan agar halaman bisa
-  // menampilkan baris kosong meski belum ada catatan)
+  // Rekap per kategori
   const perKategori = Object.fromEntries(CATEGORIES.map(c => [c, { total: 0, count: 0 }]))
   notes.forEach(n => {
     const k = perKategori[n.category]
@@ -159,7 +213,7 @@ export async function GET(req) {
 
   const byUserSorted = byUser
     .map(u => ({
-      name: u.createdByName || '(Tanpa nama)',
+      name: u.createdByName || 'Tanpa Nama',
       total: bulat(u._sum.total),
       count: u._count._all,
       pct: total > 0 ? Math.round(((Number(u._sum.total) || 0) / total) * 1000) / 10 : 0,
@@ -175,7 +229,7 @@ export async function GET(req) {
     pct: total > 0 ? Math.round(((Number(i._sum.subtotal) || 0) / total) * 1000) / 10 : 0,
   }))
 
-  const series = buildSeries(mode, year, month, notes)
+  const series = buildSeries(mode, year, month, notes, range)
 
   return NextResponse.json({
     mode,
@@ -193,17 +247,13 @@ export async function GET(req) {
       count,
       itemCount,
       itemCountPrev,
-      avgPerNote: count > 0 ? bulat(total / count) : 0,
-      avgPerBucket: bulat(total / series.length),
-      bucketAdaCatatan: series.filter(s => s.count > 0).length,
-      prevTotal,
-      prevCount: prevAgg._count._all,
-      diff: bulat(total - prevTotal),
+      diffTotal: bulat(total - prevTotal),
       diffPct: prevTotal > 0 ? Math.round(((total - prevTotal) / prevTotal) * 1000) / 10 : null,
+      topCategory: byCategory[0] || null,
     },
-    series,
     byCategory,
-    topIngredients,
     byUser: byUserSorted,
+    topIngredients,
+    series,
   })
 }

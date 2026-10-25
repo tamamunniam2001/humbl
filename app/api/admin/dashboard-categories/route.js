@@ -12,24 +12,26 @@ export async function GET(req) {
   const mode = searchParams.get('mode') || 'month'
   const year = searchParams.get('year') ? Number(searchParams.get('year')) : now.getFullYear()
 
-  // Untuk bulan: jika tidak ada parameter, default ke bulan sekarang WIB
+  // Untuk bulan: jika tidak ada parameter, default ke bulan sekarang WIB sesuai cut-off tgl 20
   const wibNow = new Date(now.getTime() + 7 * 60 * 60 * 1000)
-  const defaultMonth = wibNow.getUTCMonth()
+  const defaultMonth = wibNow.getUTCDate() > 20 ? (wibNow.getUTCMonth() + 1) % 12 : wibNow.getUTCMonth()
   const month = searchParams.get('month') !== null && searchParams.get('month') !== ''
     ? Number(searchParams.get('month'))
     : defaultMonth
 
-  // Range dalam WIB menggunakan ISO string +07:00 — tidak ada ambiguitas timezone
+  // Cut-off bulanan per tanggal 20: misal Oktober (month = 9) -> 20 September s/d 20 Oktober
   const pad = n => String(n).padStart(2, '0')
-  const lastDayOfMonth = new Date(year, month + 1, 0).getDate()
+  const prevMonth = month === 0 ? 12 : month
+  const prevYear = month === 0 ? year - 1 : year
+  const currMonth = month + 1
 
   const rangeStart = mode === 'year'
-    ? new Date(`${year}-01-01T00:00:00+07:00`)
-    : new Date(`${year}-${pad(month + 1)}-01T00:00:00+07:00`)
+    ? new Date(`${year - 1}-12-20T00:00:00+07:00`)
+    : new Date(`${prevYear}-${pad(prevMonth)}-20T00:00:00+07:00`)
 
   const rangeEnd = mode === 'year'
-    ? new Date(`${year}-12-31T23:59:59.999+07:00`)
-    : new Date(`${year}-${pad(month + 1)}-${pad(lastDayOfMonth)}T23:59:59.999+07:00`)
+    ? new Date(`${year}-12-20T23:59:59.999+07:00`)
+    : new Date(`${year}-${pad(currMonth)}-20T23:59:59.999+07:00`)
 
   const [salesRaw, expRaw, kasData] = await Promise.all([
     prisma.orderItem.findMany({
@@ -54,7 +56,7 @@ export async function GET(req) {
   // Konversi UTC ke WIB — kembalikan month (0-11) dan date (1-31)
   function toWIB(d) {
     const wib = new Date(new Date(d).getTime() + 7 * 60 * 60 * 1000)
-    return { month: wib.getUTCMonth(), date: wib.getUTCDate() }
+    return { month: wib.getUTCMonth(), date: wib.getUTCDate(), time: wib.getTime(), fullYear: wib.getUTCFullYear() }
   }
 
   // Kolom: untuk year = bulan (key: 0-11), untuk month = minggu (key: 1-4)
@@ -64,9 +66,17 @@ export async function GET(req) {
     : [{ key: 1, label: 'Mg1' }, { key: 2, label: 'Mg2' }, { key: 3, label: 'Mg3' }, { key: 4, label: 'Mg4' }]
 
   function getColKey(rawDate) {
-    const { month: m, date: d } = toWIB(rawDate)
-    if (mode === 'year') return m
-    return Math.min(Math.ceil(d / 7), 4)
+    if (mode === 'year') {
+      const { month: m, date: d } = toWIB(rawDate)
+      return d >= 20 ? (m + 1) % 12 : m
+    }
+    // mode === 'month': periode 20 bulan lalu s/d 20 bulan ini (~30-31 hari) dibagi 4 minggu
+    const t = new Date(rawDate).getTime()
+    const diffDays = Math.floor((t - rangeStart.getTime()) / (24 * 60 * 60 * 1000))
+    if (diffDays < 7) return 1
+    if (diffDays < 14) return 2
+    if (diffDays < 21) return 3
+    return 4
   }
 
   function effectiveTotal(itemSubtotal, txTotal, txSubtotalSum) {
@@ -127,5 +137,9 @@ export async function GET(req) {
     mode,
     month,
     year,
+    cutoff: {
+      from: rangeStart.toISOString().slice(0, 10),
+      to: rangeEnd.toISOString().slice(0, 10),
+    },
   })
 }

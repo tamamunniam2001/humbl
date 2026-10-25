@@ -32,11 +32,38 @@ async function buildFullContext() {
 
   const today = new Date(now); today.setHours(0, 0, 0, 0)
   const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1)
-  const monthStart = new Date(year, month, 1)
-  const monthEnd = new Date(year, month + 1, 0, 23, 59, 59)
-  const lastMonthStart = new Date(year, month - 1, 1)
-  const lastMonthEnd = new Date(year, month, 0, 23, 59, 59)
-  const yearStart = new Date(year, 0, 1)
+  const pad = n => String(n).padStart(2, '0')
+
+  // Cut-off bulanan per tanggal 20: mis. Okt -> 20 Sep s/d 20 Okt
+  const wibNow = new Date(now.getTime() + 7 * 60 * 60 * 1000)
+  const wibDay = wibNow.getUTCDate()
+  const wibMonth = wibNow.getUTCMonth() + 1
+  const wibYear = wibNow.getUTCFullYear()
+
+  let currCutoffMonth = wibMonth
+  let currCutoffYear = wibYear
+  if (wibDay > 20) {
+    if (wibMonth === 12) {
+      currCutoffMonth = 1
+      currCutoffYear += 1
+    } else {
+      currCutoffMonth += 1
+    }
+  }
+
+  const thisPrevM = currCutoffMonth === 1 ? 12 : currCutoffMonth - 1
+  const thisPrevY = currCutoffMonth === 1 ? currCutoffYear - 1 : currCutoffYear
+  const monthStart = new Date(`${thisPrevY}-${pad(thisPrevM)}-20T00:00:00.000+07:00`)
+  const monthEnd = new Date(`${currCutoffYear}-${pad(currCutoffMonth)}-20T23:59:59.999+07:00`)
+
+  const lastEndM = thisPrevM
+  const lastEndY = thisPrevY
+  const lastStartM = lastEndM === 1 ? 12 : lastEndM - 1
+  const lastStartY = lastEndM === 1 ? lastEndY - 1 : lastEndY
+  const lastMonthStart = new Date(`${lastStartY}-${pad(lastStartM)}-20T00:00:00.000+07:00`)
+  const lastMonthEnd = new Date(`${lastEndY}-${pad(lastEndM)}-20T23:59:59.999+07:00`)
+
+  const yearStart = new Date(`${currCutoffYear - 1}-12-20T00:00:00.000+07:00`)
   const last7 = new Date(today); last7.setDate(today.getDate() - 6)
   const last30 = new Date(today); last30.setDate(today.getDate() - 29)
 

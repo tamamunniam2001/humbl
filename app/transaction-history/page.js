@@ -15,22 +15,25 @@ const methodColor = {
   NONTUNAI: { bg: '#FFF7ED', color: '#C2410C', border: '#FED7AA' },
 }
 
+const MONTHS = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des']
+
 export default function TransactionHistoryPage() {
   const [data, setData] = useState({ days: [], totalDays: 0, totalPages: 1 })
   const [page, setPage] = useState(1)
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
+  const [filterYear, setFilterYear] = useState(new Date().getFullYear())
   const [loading, setLoading] = useState(true)
   const [expandedDays, setExpandedDays] = useState({})
   const [selectedTx, setSelectedTx] = useState(null)
   const [printingId, setPrintingId] = useState(null)
 
-  async function load(p = page) {
+  async function load(p = page, overrideFrom = from, overrideTo = to) {
     setLoading(true)
     try {
       const params = new URLSearchParams({ page: p })
-      if (from) params.append('from', from)
-      if (to) params.append('to', to)
+      if (overrideFrom) params.append('from', overrideFrom)
+      if (overrideTo) params.append('to', overrideTo)
       const res = await api.get(`/admin/transaction-history?${params}`)
       setData(res.data)
       // Auto-expand hari pertama
@@ -39,6 +42,20 @@ export default function TransactionHistoryPage() {
       }
     } catch { }
     setLoading(false)
+  }
+
+  function handleClickMonth(i) {
+    // Cut-off bulanan per tanggal 20: mis. Okt (i=9) -> 20 Sep s/d 20 Okt
+    const pad = n => String(n).padStart(2, '0')
+    const prevM = i === 0 ? 12 : i
+    const prevY = i === 0 ? filterYear - 1 : filterYear
+    const currM = i + 1
+    const f = `${prevY}-${pad(prevM)}-20`
+    const t = `${filterYear}-${pad(currM)}-20`
+    setFrom(f)
+    setTo(t)
+    setPage(1)
+    load(1, f, t)
   }
 
   useEffect(() => { load() }, [page])
@@ -67,6 +84,51 @@ export default function TransactionHistoryPage() {
         </div>
 
         <div className="content">
+          {/* Quick Month Filter Cut-Off Tanggal 20 */}
+          <div className="card" style={{ padding: '14px 20px', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
+              <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text)' }}>
+                Filter Bulan <span style={{ fontSize: '11px', fontWeight: '500', color: 'var(--muted)' }}>(Cut-Off Tanggal 20: mis. Okt = 20 Sep s/d 20 Okt)</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <button type="button" onClick={() => setFilterYear(y => y - 1)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer', padding: '2px 8px', fontSize: '12px', color: 'var(--text2)' }}>‹</button>
+                <span style={{ fontSize: '13px', fontWeight: '700', minWidth: '40px', textAlign: 'center' }}>{filterYear}</span>
+                <button type="button" onClick={() => setFilterYear(y => y + 1)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer', padding: '2px 8px', fontSize: '12px', color: 'var(--text2)' }}>›</button>
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: '6px' }}>
+              {MONTHS.map((m, i) => {
+                const pad = n => String(n).padStart(2, '0')
+                const prevM = i === 0 ? 12 : i
+                const prevY = i === 0 ? filterYear - 1 : filterYear
+                const expectedFrom = `${prevY}-${pad(prevM)}-20`
+                const isActive = from === expectedFrom
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => handleClickMonth(i)}
+                    title={`Cut-Off: 20 ${MONTHS[i === 0 ? 11 : i - 1]} - 20 ${m}`}
+                    style={{
+                      padding: '7px 2px',
+                      borderRadius: '8px',
+                      border: `1.5px solid ${isActive ? 'var(--accent)' : 'var(--border)'}`,
+                      background: isActive ? 'var(--accent)' : 'var(--surface2)',
+                      color: isActive ? '#fff' : 'var(--text2)',
+                      fontSize: '11px',
+                      fontWeight: isActive ? '800' : '600',
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    {m}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
           {/* Filter */}
           <div className="card" style={{ padding: '16px 20px', marginBottom: '16px', display: 'flex', gap: '12px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
             <div>

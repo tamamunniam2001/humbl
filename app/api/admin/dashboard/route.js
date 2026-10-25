@@ -9,21 +9,48 @@ export async function GET(req) {
   const now = new Date()
   const TZ_OFFSET = 7 * 60 * 60 * 1000 // WIB UTC+7
   const toWIB = (d) => new Date(new Date(d).getTime() + TZ_OFFSET)
+  const pad = (n) => String(n).padStart(2, '0')
 
-  // Semua range pakai UTC tapi geser -7 jam agar mencakup data WIB penuh
-  const today = new Date(now); today.setHours(0, 0, 0, 0)
-  today.setTime(today.getTime() - TZ_OFFSET)
-  const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1)
-  const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-  thisMonthStart.setTime(thisMonthStart.getTime() - TZ_OFFSET)
-  const thisMonthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999)
-  thisMonthEnd.setTime(thisMonthEnd.getTime() - TZ_OFFSET)
-  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-  lastMonth.setTime(lastMonth.getTime() - TZ_OFFSET)
-  const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999)
-  lastMonthEnd.setTime(lastMonthEnd.getTime() - TZ_OFFSET)
-  const yearStart = new Date(now.getFullYear(), 0, 1)
-  yearStart.setTime(yearStart.getTime() - TZ_OFFSET)
+  // Hari ini WIB
+  const wibNow = toWIB(now)
+  const wibDay = wibNow.getUTCDate()
+  const wibMonth = wibNow.getUTCMonth() + 1 // 1..12
+  const wibYear = wibNow.getUTCFullYear()
+
+  const todayKey = `${wibYear}-${pad(wibMonth)}-${pad(wibDay)}`
+  const today = new Date(`${todayKey}T00:00:00.000+07:00`)
+  const tomorrow = new Date(`${todayKey}T23:59:59.999+07:00`)
+
+  // Cut-off bulanan per tanggal 20: misal Oktober -> 20 September s/d 20 Oktober
+  // Jika tanggal hari ini > 20, periode aktif adalah bulan berikutnya
+  let currCutoffMonth = wibMonth
+  let currCutoffYear = wibYear
+  if (wibDay > 20) {
+    if (wibMonth === 12) {
+      currCutoffMonth = 1
+      currCutoffYear = wibYear + 1
+    } else {
+      currCutoffMonth = wibMonth + 1
+    }
+  }
+
+  // Bulan Ini (Cut-off tgl 20)
+  const thisPrevM = currCutoffMonth === 1 ? 12 : currCutoffMonth - 1
+  const thisPrevY = currCutoffMonth === 1 ? currCutoffYear - 1 : currCutoffYear
+  const thisMonthStart = new Date(`${thisPrevY}-${pad(thisPrevM)}-20T00:00:00.000+07:00`)
+  const thisMonthEnd = new Date(`${currCutoffYear}-${pad(currCutoffMonth)}-20T23:59:59.999+07:00`)
+
+  // Bulan Lalu (Cut-off tgl 20 sebelumnya)
+  const lastEndM = thisPrevM
+  const lastEndY = thisPrevY
+  const lastStartM = lastEndM === 1 ? 12 : lastEndM - 1
+  const lastStartY = lastEndM === 1 ? lastEndY - 1 : lastEndY
+  const lastMonthStart = new Date(`${lastStartY}-${pad(lastStartM)}-20T00:00:00.000+07:00`)
+  const lastMonthEnd = new Date(`${lastEndY}-${pad(lastEndM)}-20T23:59:59.999+07:00`)
+
+  // Tahun cut-off: 20 Desember tahun lalu s/d 20 Desember tahun ini
+  const yearStart = new Date(`${currCutoffYear - 1}-12-20T00:00:00.000+07:00`)
+  const yearEnd = new Date(`${currCutoffYear}-12-20T23:59:59.999+07:00`)
 
   const MONTHS = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des']
 
@@ -35,32 +62,63 @@ export async function GET(req) {
     monthlyTxRaw, monthlyExpRaw,
     yearlyTxRaw, yearlyExpRaw,
   ] = await Promise.all([
-    prisma.orderItem.aggregate({ where: { transaction: { createdAt: { gte: today, lt: tomorrow }, status: 'COMPLETED', deletedAt: null } }, _sum: { subtotal: true }, _count: true }),
-    prisma.orderItem.aggregate({ where: { transaction: { createdAt: { gte: thisMonthStart }, status: 'COMPLETED', deletedAt: null } }, _sum: { subtotal: true }, _count: true }),
-    prisma.orderItem.aggregate({ where: { transaction: { createdAt: { gte: lastMonth, lte: lastMonthEnd }, status: 'COMPLETED', deletedAt: null } }, _sum: { subtotal: true }, _count: true }),
+    prisma.orderItem.aggregate({ where: { transaction: { createdAt: { gte: today, lte: tomorrow }, status: 'COMPLETED', deletedAt: null } }, _sum: { subtotal: true }, _count: true }),
+    prisma.orderItem.aggregate({ where: { transaction: { createdAt: { gte: thisMonthStart, lte: thisMonthEnd }, status: 'COMPLETED', deletedAt: null } }, _sum: { subtotal: true }, _count: true }),
+    prisma.orderItem.aggregate({ where: { transaction: { createdAt: { gte: lastMonthStart, lte: lastMonthEnd }, status: 'COMPLETED', deletedAt: null } }, _sum: { subtotal: true }, _count: true }),
     prisma.product.count({ where: { isActive: true } }),
     prisma.employee.count({ where: { isActive: true } }),
     prisma.transaction.findMany({ where: { status: 'COMPLETED', deletedAt: null }, take: 5, orderBy: { createdAt: 'desc' }, include: { cashier: { select: { name: true } } } }),
     prisma.orderItem.groupBy({ by: ['productId'], where: { transaction: { status: 'COMPLETED', deletedAt: null } }, _sum: { qty: true, subtotal: true }, orderBy: { _sum: { subtotal: 'desc' } }, take: 5 }),
-    prisma.transaction.groupBy({ by: ['payMethod'], where: { createdAt: { gte: today, lt: tomorrow }, status: 'COMPLETED', deletedAt: null }, _sum: { total: true }, _count: true }),
-    prisma.attendance.findMany({ where: { date: { gte: today, lt: tomorrow } }, include: { employee: { select: { name: true } } }, orderBy: { date: 'desc' } }),
+    prisma.transaction.groupBy({ by: ['payMethod'], where: { createdAt: { gte: today, lte: tomorrow }, status: 'COMPLETED', deletedAt: null }, _sum: { total: true }, _count: true }),
+    prisma.attendance.findMany({ where: { date: { gte: today, lte: tomorrow } }, include: { employee: { select: { name: true } } }, orderBy: { date: 'desc' } }),
     prisma.orderItem.findMany({ where: { transaction: { createdAt: { gte: thisMonthStart, lte: thisMonthEnd }, status: 'COMPLETED', deletedAt: null } }, select: { subtotal: true, transaction: { select: { createdAt: true } } } }),
     prisma.expense.findMany({ where: { date: { gte: thisMonthStart, lte: thisMonthEnd } }, select: { total: true, date: true } }),
-    prisma.orderItem.findMany({ where: { transaction: { createdAt: { gte: yearStart }, status: 'COMPLETED', deletedAt: null } }, select: { subtotal: true, transaction: { select: { createdAt: true } } } }),
-    prisma.expense.findMany({ where: { date: { gte: yearStart } }, select: { total: true, date: true } }),
+    prisma.orderItem.findMany({ where: { transaction: { createdAt: { gte: yearStart, lte: yearEnd }, status: 'COMPLETED', deletedAt: null } }, select: { subtotal: true, transaction: { select: { createdAt: true } } } }),
+    prisma.expense.findMany({ where: { date: { gte: yearStart, lte: yearEnd } }, select: { total: true, date: true } }),
   ])
 
-  const daysInMonth = thisMonthEnd.getDate()
-  const dailyChart = Array.from({ length: daysInMonth }, (_, i) => {
-    const d = i + 1
-    const rev = monthlyTxRaw.filter(t => toWIB(t.transaction.createdAt).getUTCDate() === d).reduce((s, t) => s + t.subtotal, 0)
-    const exp = monthlyExpRaw.filter(e => toWIB(e.date).getUTCDate() === d).reduce((s, e) => s + e.total, 0)
-    return { label: `${d}`, revenue: rev, expense: exp }
+  // Bangun dailyChart dari thisMonthStart (tgl 20 bulan lalu) s/d thisMonthEnd (tgl 20 bulan ini)
+  const daysList = []
+  const curDay = new Date(thisMonthStart)
+  while (curDay <= thisMonthEnd) {
+    const w = toWIB(curDay)
+    const key = `${w.getUTCFullYear()}-${pad(w.getUTCMonth() + 1)}-${pad(w.getUTCDate())}`
+    daysList.push({ key, label: `${w.getUTCDate()}/${w.getUTCMonth() + 1}`, d: w.getUTCDate() })
+    curDay.setTime(curDay.getTime() + 24 * 60 * 60 * 1000)
+  }
+
+  const dailyChart = daysList.map(({ key, label }) => {
+    const rev = monthlyTxRaw.filter(t => {
+      const w = toWIB(t.transaction.createdAt)
+      return `${w.getUTCFullYear()}-${pad(w.getUTCMonth() + 1)}-${pad(w.getUTCDate())}` === key
+    }).reduce((s, t) => s + t.subtotal, 0)
+
+    const exp = monthlyExpRaw.filter(e => {
+      const w = toWIB(e.date)
+      return `${w.getUTCFullYear()}-${pad(w.getUTCMonth() + 1)}-${pad(w.getUTCDate())}` === key
+    }).reduce((s, e) => s + e.total, 0)
+
+    return { label, revenue: rev, expense: exp }
   })
 
+  // Bangun monthlyChart (12 bulan cut-off: Jan s/d Des)
   const monthlyChart = Array.from({ length: 12 }, (_, m) => {
-    const rev = yearlyTxRaw.filter(t => toWIB(t.transaction.createdAt).getUTCMonth() === m).reduce((s, t) => s + t.subtotal, 0)
-    const exp = yearlyExpRaw.filter(e => toWIB(e.date).getUTCMonth() === m).reduce((s, e) => s + e.total, 0)
+    const prevM = m === 0 ? 12 : m
+    const prevY = m === 0 ? currCutoffYear - 1 : currCutoffYear
+    const currM = m + 1
+    const startT = new Date(`${prevY}-${pad(prevM)}-20T00:00:00.000+07:00`).getTime()
+    const endT = new Date(`${currCutoffYear}-${pad(currM)}-20T23:59:59.999+07:00`).getTime()
+
+    const rev = yearlyTxRaw.filter(t => {
+      const time = new Date(t.transaction.createdAt).getTime()
+      return time >= startT && time <= endT
+    }).reduce((s, t) => s + t.subtotal, 0)
+
+    const exp = yearlyExpRaw.filter(e => {
+      const time = new Date(e.date).getTime()
+      return time >= startT && time <= endT
+    }).reduce((s, e) => s + e.total, 0)
+
     return { month: MONTHS[m], revenue: rev, expense: exp }
   })
 
@@ -85,9 +143,13 @@ export async function GET(req) {
     absensiToday: absensiToday.map(a => ({ id: a.id, type: a.type, name: a.employee?.name || '-', kasAwal: a.kasAwal, time: a.date })),
     dailyChart,
     monthlyChart,
-    currentMonthIndex: now.getMonth(),
-    currentMonth: MONTHS[now.getMonth()],
-    currentYear: now.getFullYear(),
+    currentMonthIndex: currCutoffMonth - 1,
+    currentMonth: MONTHS[currCutoffMonth - 1],
+    currentYear: currCutoffYear,
     months: MONTHS,
+    cutoff: {
+      from: `${thisPrevY}-${pad(thisPrevM)}-20`,
+      to: `${currCutoffYear}-${pad(currCutoffMonth)}-20`,
+    },
   })
 }

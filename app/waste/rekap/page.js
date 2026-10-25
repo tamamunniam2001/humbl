@@ -178,7 +178,9 @@ function BucketTooltip({ active, payload, label }) {
 
 const TODAY = todayWIB()
 const TAHUN_INI = Number(TODAY.slice(0, 4))
-const BULAN_INI = Number(TODAY.slice(5, 7))
+const BULAN_NUM = Number(TODAY.slice(5, 7))
+const HARI_INI = Number(TODAY.slice(8, 10))
+const BULAN_INI = HARI_INI > 20 ? (BULAN_NUM === 12 ? 1 : BULAN_NUM + 1) : BULAN_NUM
 
 export default function RekapWastePage() {
   const [mode, setMode] = useState('bulan')       // bulan = 12 bulan, hari = tanggal dalam sebulan
@@ -296,7 +298,7 @@ export default function RekapWastePage() {
 
             {mode === 'hari' && (
               <select className="input" style={{ width: '132px' }} value={month} onChange={e => setMonth(Number(e.target.value))}>
-                {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m} {year}</option>)}
+                {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m} {year} (20 {MONTHS[i === 0 ? 11 : i - 1]} - 20 {m})</option>)}
               </select>
             )}
 
