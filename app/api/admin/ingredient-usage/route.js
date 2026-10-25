@@ -11,7 +11,7 @@ export async function GET(req) {
   const from = searchParams.get('from')
   const to = searchParams.get('to')
   const transactionWhere = { status: 'COMPLETED' }
-  if (from && to) transactionWhere.createdAt = { gte: new Date(from), lte: new Date(new Date(to).setHours(23, 59, 59, 999)) }
+  if (from && to) transactionWhere.createdAt = { gte: new Date(`${from}T00:00:00.000+07:00`), lte: new Date(`${to}T23:59:59.999+07:00`) }
   const orderItems = await prisma.orderItem.findMany({
     where: { transaction: transactionWhere },
     include: { product: { include: { ingredients: { include: { ingredient: true } } } } },

@@ -11,6 +11,7 @@ export default function RekapBahanPage() {
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [filterYear, setFilterYear] = useState(new Date().getFullYear())
+  const [filterMode, setFilterMode] = useState('month') // 'month' | 'year'
 
   async function load(overrideFrom, overrideTo) {
     setLoading(true)
@@ -31,6 +32,17 @@ export default function RekapBahanPage() {
     const currM = i + 1
     const f = `${prevY}-${pad(prevM)}-20`
     const t = `${filterYear}-${pad(currM)}-19`
+    setFilterMode('month')
+    setFrom(f)
+    setTo(t)
+    load(f, t)
+  }
+
+  function handleFilterYear(y) {
+    const f = `${y - 1}-12-20`
+    const t = `${y}-12-19`
+    setFilterMode('year')
+    setFilterYear(y)
     setFrom(f)
     setTo(t)
     load(f, t)
@@ -41,9 +53,11 @@ export default function RekapBahanPage() {
   useEffect(() => { load() }, [])
   useEffect(() => {
     if (!isMounted.current) { isMounted.current = true; return }
-    setFrom('')
-    setTo('')
-    load('', '')
+    if (filterMode === 'month') {
+      setFrom('')
+      setTo('')
+      load('', '')
+    }
   }, [filterYear])
 
   const totalItems = rows.length
@@ -63,7 +77,7 @@ export default function RekapBahanPage() {
         </div>
 
         <div className="content">
-          {/* Quick Month Filter Cut-Off Tanggal 20 */}
+          {/* Quick Month Filter */}
           <div className="card" style={{ padding: '14px 20px', marginBottom: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
               <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text)' }}>
@@ -104,6 +118,30 @@ export default function RekapBahanPage() {
                   >
                     {m}
                   </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Filter Tahunan */}
+          <div className="card" style={{ padding: '14px 20px', marginBottom: '16px' }}>
+            <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text)', marginBottom: '10px' }}>
+              Filter Tahunan <span style={{ fontSize: '11px', fontWeight: '500', color: 'var(--muted)' }}>(20 Des tahun lalu s/d 19 Des tahun ini)</span>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {[new Date().getFullYear() - 2, new Date().getFullYear() - 1, new Date().getFullYear()].map(y => {
+                const isActive = filterMode === 'year' && from === `${y - 1}-12-20` && to === `${y}-12-19`
+                return (
+                  <button key={y} type="button" onClick={() => handleFilterYear(y)}
+                    style={{
+                      padding: '7px 18px', borderRadius: '8px',
+                      border: `1.5px solid ${isActive ? 'var(--accent)' : 'var(--border)'}`,
+                      background: isActive ? 'var(--accent)' : 'var(--surface2)',
+                      color: isActive ? '#fff' : 'var(--text2)',
+                      fontSize: '12px', fontWeight: isActive ? '800' : '600',
+                      cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s',
+                    }}
+                  >{y}</button>
                 )
               })}
             </div>
