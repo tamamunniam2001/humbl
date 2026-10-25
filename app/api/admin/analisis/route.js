@@ -113,7 +113,7 @@ export async function GET(req) {
     }),
 
     prisma.orderItem.findMany({
-      where: { transaction: { createdAt: { gte: monthStart, lte: monthEnd }, status: 'COMPLETED', deletedAt: null } },
+      where: { transaction: { createdAt: { gte: monthStart, lte: monthEnd }, status: 'COMPLETED', deletedAt: null }, productId: { not: null } },
       select: { qty: true, product: { select: { ingredients: { select: { qty: true, ingredient: { select: { name: true, unit: true, packSize: true, price: true } } } } } } },
     }),
   ])
@@ -189,7 +189,9 @@ export async function GET(req) {
     for (const pi of oi.product.ingredients) {
       if (!pi.ingredient) continue
       const name = pi.ingredient.name.trim()
-      if (!useMap[name]) useMap[name] = { name, unit: pi.ingredient.unit, packSize: pi.ingredient.packSize ?? 0, pricePerUnit: pi.ingredient.packSize > 0 ? (pi.ingredient.price || 0) / pi.ingredient.packSize : 0, totalUsed: 0 }
+      const pricePerUnit = (pi.ingredient.packSize > 0 && pi.ingredient.price)
+        ? pi.ingredient.price / pi.ingredient.packSize : 0
+      if (!useMap[name]) useMap[name] = { name, unit: pi.ingredient.unit, pricePerUnit, totalUsed: 0 }
       useMap[name].totalUsed += pi.qty * oi.qty
     }
   }
