@@ -25,13 +25,13 @@ export default function RekapBahanPage() {
   }
 
   function handleClickMonth(i) {
-    // Cut-off bulanan per tanggal 20: mis. Okt (i=9) -> 20 Sep s/d 20 Okt
+    // Cut-off bulanan per tanggal 20: mis. Okt (i=9) -> 20 Sep s/d 19 Okt
     const pad = n => String(n).padStart(2, '0')
     const prevM = i === 0 ? 12 : i
     const prevY = i === 0 ? filterYear - 1 : filterYear
     const currM = i + 1
     const f = `${prevY}-${pad(prevM)}-20`
-    const t = `${filterYear}-${pad(currM)}-20`
+    const t = `${filterYear}-${pad(currM)}-19`
     setFrom(f)
     setTo(t)
     load(f, t)
@@ -60,7 +60,7 @@ export default function RekapBahanPage() {
           <div className="card" style={{ padding: '14px 20px', marginBottom: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
               <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--text)' }}>
-                Filter Bulan <span style={{ fontSize: '11px', fontWeight: '500', color: 'var(--muted)' }}>(Cut-Off Tanggal 20: mis. Okt = 20 Sep s/d 20 Okt)</span>
+                Filter Bulan <span style={{ fontSize: '11px', fontWeight: '500', color: 'var(--muted)' }}>(Cut-Off 20 s/d 19)</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <button type="button" onClick={() => setFilterYear(y => y - 1)} style={{ background: 'none', border: '1px solid var(--border)', borderRadius: '6px', cursor: 'pointer', padding: '2px 8px', fontSize: '12px', color: 'var(--text2)' }}>‹</button>
@@ -80,7 +80,7 @@ export default function RekapBahanPage() {
                     key={m}
                     type="button"
                     onClick={() => handleClickMonth(i)}
-                    title={`Cut-Off: 20 ${MONTHS[i === 0 ? 11 : i - 1]} - 20 ${m}`}
+                    title={`Cut-Off: 20 ${MONTHS[i === 0 ? 11 : i - 1]} - 19 ${m}`}
                     style={{
                       padding: '7px 2px',
                       borderRadius: '8px',

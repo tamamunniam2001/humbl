@@ -19,9 +19,9 @@ export async function GET(req) {
   const usageMap = {}
   for (const oi of orderItems) {
     for (const pi of oi.product.ingredients) {
-      if (!usageMap[pi.ingredientId]) usageMap[pi.ingredientId] = { ingredientId: pi.ingredientId, name: pi.ingredient.name, unit: pi.ingredient.unit, totalQty: 0 }
-      usageMap[pi.ingredientId].totalQty += pi.qty * oi.qty
+      if (!usageMap[pi.ingredientId]) usageMap[pi.ingredientId] = { ingredientId: pi.ingredientId, name: pi.ingredient.name, unit: pi.ingredient.unit, packSize: pi.ingredient.packSize ?? 0, totalUsed: 0 }
+      usageMap[pi.ingredientId].totalUsed += pi.qty * oi.qty
     }
   }
-  return NextResponse.json(Object.values(usageMap).sort((a, b) => b.totalQty - a.totalQty))
+  return NextResponse.json(Object.values(usageMap).sort((a, b) => b.totalUsed - a.totalUsed))
 }
