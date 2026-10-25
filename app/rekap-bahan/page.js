@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Sidebar from '@/components/Sidebar'
 import api from '@/lib/api'
 
@@ -25,7 +25,6 @@ export default function RekapBahanPage() {
   }
 
   function handleClickMonth(i) {
-    // Cut-off bulanan per tanggal 20: mis. Okt (i=9) -> 20 Sep s/d 19 Okt
     const pad = n => String(n).padStart(2, '0')
     const prevM = i === 0 ? 12 : i
     const prevY = i === 0 ? filterYear - 1 : filterYear
@@ -37,7 +36,15 @@ export default function RekapBahanPage() {
     load(f, t)
   }
 
+  const isMounted = useRef(false)
+
   useEffect(() => { load() }, [])
+  useEffect(() => {
+    if (!isMounted.current) { isMounted.current = true; return }
+    setFrom('')
+    setTo('')
+    load('', '')
+  }, [filterYear])
 
   const totalItems = rows.length
 
@@ -74,7 +81,8 @@ export default function RekapBahanPage() {
                 const prevM = i === 0 ? 12 : i
                 const prevY = i === 0 ? filterYear - 1 : filterYear
                 const expectedFrom = `${prevY}-${pad(prevM)}-20`
-                const isActive = from === expectedFrom
+                const expectedTo = `${filterYear}-${pad(i + 1)}-19`
+                const isActive = from === expectedFrom && to === expectedTo
                 return (
                   <button
                     key={m}
