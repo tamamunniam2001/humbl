@@ -106,6 +106,12 @@ model Member {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   transactions    Transaction[]
+  // Diskon khusus per-member (override PromoSettings global jika diisi)
+  // useCustomDiscount = true → pakai nilai di bawah, abaikan PromoSettings
+  useCustomDiscount   Boolean      @default(false)
+  customDiscountType  VoucherType  @default(PERCENT)
+  customDiscountValue Int          @default(0)
+  customDiscountMax   Int          @default(0)
 
   @@index([name])
 }

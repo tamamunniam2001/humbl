@@ -6,7 +6,7 @@ import api from '@/lib/api'
 const fmtDate = (d) => new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
 const normPhone = (v) => String(v || '').replace(/[\s\-().]/g, '')
 
-const EMPTY_FORM = { name: '', phone: '' }
+const EMPTY_FORM = { name: '', phone: '', useCustomDiscount: false, customDiscountType: 'PERCENT', customDiscountValue: '', customDiscountMax: '' }
 
 export default function MemberSettingsPage() {
   const [members, setMembers] = useState([])
@@ -35,7 +35,14 @@ export default function MemberSettingsPage() {
 
   function startEdit(m) {
     setEditingId(m.id)
-    setForm({ name: m.name, phone: m.phone })
+    setForm({
+      name: m.name,
+      phone: m.phone,
+      useCustomDiscount: !!m.useCustomDiscount,
+      customDiscountType: m.customDiscountType || 'PERCENT',
+      customDiscountValue: m.customDiscountValue ? String(m.customDiscountValue) : '',
+      customDiscountMax: m.customDiscountMax ? String(m.customDiscountMax) : '',
+    })
     setError('')
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -50,8 +57,16 @@ export default function MemberSettingsPage() {
 
     setSaving(true)
     try {
+      const payload = {
+        name,
+        phone,
+        useCustomDiscount: !!form.useCustomDiscount,
+        customDiscountType: form.customDiscountType || 'PERCENT',
+        customDiscountValue: Number(form.customDiscountValue) || 0,
+        customDiscountMax: Number(form.customDiscountMax) || 0,
+      }
       if (editingId) {
-        await api.patch(`/members/${editingId}`, { name, phone })
+        await api.patch(`/members/${editingId}`, payload)
       } else {
         await api.post('/members', { name, phone })
       }
@@ -116,17 +131,71 @@ export default function MemberSettingsPage() {
             <div className="section-label" style={{ marginBottom: '12px' }}>
               {editingId ? 'Edit Member' : 'Tambah Member Baru'}
             </div>
-            <form onSubmit={handleSubmit} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', alignItems: 'end' }}>
-              <div>
-                <label className="label">Nama Member</label>
-                <input className="input" placeholder="mis. Budi Santoso" value={form.name}
-                  onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', alignItems: 'end' }}>
+                <div>
+                  <label className="label">Nama Member</label>
+                  <input className="input" placeholder="mis. Budi Santoso" value={form.name}
+                    onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="label">Nomor Telepon</label>
+                  <input className="input" placeholder="mis. 081234567890" inputMode="tel" value={form.phone}
+                    onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
+                </div>
               </div>
-              <div>
-                <label className="label">Nomor Telepon</label>
-                <input className="input" placeholder="mis. 081234567890" inputMode="tel" value={form.phone}
-                  onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
-              </div>
+
+              {/* Diskon khusus — hanya tampil saat edit */}
+              {editingId && (
+                <div style={{ background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '10px', padding: '14px 16px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginBottom: form.useCustomDiscount ? '14px' : '0', fontSize: '13px', fontWeight: 700, color: 'var(--text)' }}>
+                    <input type="checkbox" checked={form.useCustomDiscount}
+                      onChange={e => setForm(f => ({ ...f, useCustomDiscount: e.target.checked }))}
+                      style={{ width: '16px', height: '16px' }} />
+                    Gunakan diskon khusus untuk member ini
+                    <span style={{ fontSize: '11px', fontWeight: 400, color: 'var(--muted)' }}>(override pengaturan global)</span>
+                  </label>
+                  {form.useCustomDiscount && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px' }}>
+                      <div>
+                        <label className="label">Jenis Diskon</label>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          {[['PERCENT', 'Persen (%)'], ['NOMINAL', 'Nominal (Rp)']].map(([val, lbl]) => (
+                            <button key={val} type="button"
+                              onClick={() => setForm(f => ({ ...f, customDiscountType: val }))}
+                              style={{
+                                flex: 1, padding: '8px 6px', borderRadius: '8px', border: '1.5px solid',
+                                borderColor: form.customDiscountType === val ? 'var(--accent)' : 'var(--border)',
+                                background: form.customDiscountType === val ? 'var(--accent)' : 'var(--surface)',
+                                color: form.customDiscountType === val ? '#fff' : 'var(--text2)',
+                                fontWeight: 700, fontSize: '12px', cursor: 'pointer', fontFamily: 'inherit',
+                              }}>
+                              {lbl}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="label">Nilai {form.customDiscountType === 'PERCENT' ? '(%, mis. 15)' : '(Rp, mis. 10000)'}</label>
+                        <input type="number" className="input" min="0"
+                          max={form.customDiscountType === 'PERCENT' ? 100 : undefined}
+                          placeholder={form.customDiscountType === 'PERCENT' ? '10' : '5000'}
+                          value={form.customDiscountValue}
+                          onChange={e => setForm(f => ({ ...f, customDiscountValue: e.target.value }))} />
+                      </div>
+                      {form.customDiscountType === 'PERCENT' && (
+                        <div>
+                          <label className="label">Maks. Potongan (Rp, 0 = tanpa batas)</label>
+                          <input type="number" className="input" min="0" placeholder="0"
+                            value={form.customDiscountMax}
+                            onChange={e => setForm(f => ({ ...f, customDiscountMax: e.target.value }))} />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button type="submit" className="btn btn-primary" disabled={saving} style={{ flex: 1 }}>
                   {saving ? 'Menyimpan…' : editingId ? 'Simpan Perubahan' : 'Tambah Member'}
@@ -165,7 +234,7 @@ export default function MemberSettingsPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                   <thead>
                     <tr style={{ background: 'var(--surface2)', borderBottom: '1px solid var(--border)' }}>
-                      {['Nama', 'Nomor Telepon', 'Status', 'Terdaftar', 'Aksi'].map(h => (
+                      {['Nama', 'Nomor Telepon', 'Diskon', 'Status', 'Terdaftar', 'Aksi'].map(h => (
                         <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: '11px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.4px' }}>{h}</th>
                       ))}
                     </tr>
@@ -175,6 +244,20 @@ export default function MemberSettingsPage() {
                       <tr key={m.id} style={{ borderBottom: '1px solid var(--border)', background: editingId === m.id ? 'rgba(74,124,199,0.06)' : undefined }}>
                         <td style={{ padding: '10px 14px', fontWeight: 700, color: 'var(--text)' }}>{m.name}</td>
                         <td style={{ padding: '10px 14px', fontFamily: 'monospace', color: 'var(--text2)' }}>{m.phone}</td>
+                        <td style={{ padding: '10px 14px' }}>
+                          {m.useCustomDiscount && m.customDiscountValue > 0 ? (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
+                              <span className="badge badge-orange" style={{ fontSize: '11px' }}>
+                                {m.customDiscountType === 'PERCENT'
+                                  ? `${m.customDiscountValue}%${m.customDiscountMax > 0 ? ` (maks Rp ${Number(m.customDiscountMax).toLocaleString('id-ID')})` : ''}`
+                                  : `Rp ${Number(m.customDiscountValue).toLocaleString('id-ID')}`}
+                              </span>
+                              <span style={{ fontSize: '10px', color: 'var(--accent)', fontWeight: 700 }}>Khusus</span>
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: '12px', color: 'var(--muted)' }}>Global</span>
+                          )}
+                        </td>
                         <td style={{ padding: '10px 14px' }}>
                           <span className={`badge ${m.isActive ? 'badge-green' : 'badge-gray'}`}>
                             {m.isActive ? 'Aktif' : 'Nonaktif'}

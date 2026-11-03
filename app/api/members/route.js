@@ -46,6 +46,7 @@ export async function GET(req) {
     orderBy: { name: 'asc' },
     select: {
       id: true, name: true, phone: true, isActive: true, createdAt: true, welcomeSentAt: true,
+      useCustomDiscount: true, customDiscountType: true, customDiscountValue: true, customDiscountMax: true,
       // Jumlah transaksi lunas per member (Prisma hanya mendukung _count berfilter
       // di level relasi; total & terakhir belanja dihitung terpisah via groupBy).
       _count: {
@@ -82,6 +83,10 @@ export async function GET(req) {
       totalSpent: a?._sum.total || 0,
       lastPurchase: a?._max.createdAt || null,
       welcomeSentAt: m.welcomeSentAt || null,
+      useCustomDiscount: m.useCustomDiscount,
+      customDiscountType: m.customDiscountType,
+      customDiscountValue: m.customDiscountValue,
+      customDiscountMax: m.customDiscountMax,
     }
   }))
 }

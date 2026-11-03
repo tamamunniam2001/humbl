@@ -32,6 +32,10 @@ export async function PATCH(req, { params }) {
     data.phone = phone
   }
   if ('isActive' in body) data.isActive = body.isActive !== false
+  if ('useCustomDiscount' in body) data.useCustomDiscount = !!body.useCustomDiscount
+  if ('customDiscountType' in body) data.customDiscountType = body.customDiscountType === 'NOMINAL' ? 'NOMINAL' : 'PERCENT'
+  if ('customDiscountValue' in body) data.customDiscountValue = Math.max(0, Math.round(Number(body.customDiscountValue) || 0))
+  if ('customDiscountMax' in body) data.customDiscountMax = Math.max(0, Math.round(Number(body.customDiscountMax) || 0))
 
   try {
     const updated = await prisma.member.update({ where: { id }, data })

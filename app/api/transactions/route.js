@@ -122,19 +122,30 @@ export async function POST(req) {
       const m = await prisma.member.findUnique({ where: { id: memberId } })
       if (m && m.isActive) validMemberId = m.id
     }
-    // Diskon member — OTOMATIS penuh dari server (tanpa tombol di kasir).
-    // Dihitung ulang dari PromoSettings agar tidak bisa dimanipulasi browser.
-    // Berlaku hanya bila: ada member valid & aktif, pengaturan promo aktif, dan
-    // subtotal (setelah diskon manual) mencapai minimal belanja.
+    // Diskon member — cek diskon khusus per-member dulu, fallback ke PromoSettings global.
+    // Jika voucher valid dipakai, diskon member TIDAK berlaku (cegah double diskon).
     // Urutan potong: diskon manual -> diskon member -> voucher -> + pajak.
-    // Cukup atur on/off + nilai dari halaman Voucher & Promo.
     let mType = 'PERCENT'
     let mValue = 0
     let mMax = 0
     let mDiscount = 0
-    if (validMemberId) {
+    if (validMemberId && !validVoucherId) {
+      const memberData = await prisma.member.findUnique({ where: { id: validMemberId } })
       let promo = null
-      try { promo = await prisma.promoSettings.findUnique({ where: { id: 'singleton' } }) } catch { promo = null }
+      // Tentukan sumber diskon: custom per-member atau global PromoSettings
+      if (memberData?.useCustomDiscount && (memberData.customDiscountValue || 0) > 0) {
+        // Pakai diskon khusus member ini
+        promo = {
+          memberDiscountActive: true,
+          memberDiscountType: memberData.customDiscountType,
+          memberDiscountValue: memberData.customDiscountValue,
+          memberDiscountMax: memberData.customDiscountMax || 0,
+          memberDiscountMin: 0,
+        }
+      } else {
+        // Fallback ke pengaturan global
+        try { promo = await prisma.promoSettings.findUnique({ where: { id: 'singleton' } }) } catch { promo = null }
+      }
       if (promo?.memberDiscountActive && (promo.memberDiscountValue || 0) > 0) {
         mType = promo.memberDiscountType === 'NOMINAL' ? 'NOMINAL' : 'PERCENT'
         mValue = Math.max(0, Math.round(promo.memberDiscountValue || 0))
