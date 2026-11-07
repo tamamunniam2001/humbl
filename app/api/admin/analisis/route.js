@@ -5,7 +5,6 @@ import { verifyAuth } from '@/lib/auth'
 const pad = n => String(n).padStart(2, '0')
 
 function getCutoff(year, month) {
-  // month = 0-11; periode: 20 bulan sebelumnya s/d 20 bulan ini
   const prevMonth = month === 0 ? 12 : month
   const prevYear = month === 0 ? year - 1 : year
   const currMonth = month + 1
@@ -56,6 +55,7 @@ export async function GET(req) {
     topProductsMonth, topProductsYear,
     allTxMonth,
     expCatMonth, expCatYear,
+    expDetailMonth,
     payMethodMonth, payMethodYear,
     salesCatMonth, salesCatYear,
     allTxYear, allExpYear,
@@ -85,6 +85,8 @@ export async function GET(req) {
 
     prisma.expenseDetail.groupBy({ by: ['category'], where: { expense: { date: { gte: monthStart, lte: monthEnd } } }, _sum: { subtotal: true }, orderBy: { _sum: { subtotal: 'desc' } } }),
     prisma.expenseDetail.groupBy({ by: ['category'], where: { expense: { date: { gte: yearStart, lte: yearEnd } } }, _sum: { subtotal: true }, orderBy: { _sum: { subtotal: 'desc' } } }),
+
+    prisma.expenseDetail.findMany({ where: { expense: { date: { gte: monthStart, lte: monthEnd } } }, select: { name: true, qty: true, satuan: true, subtotal: true, category: true, expense: { select: { date: true } } }, orderBy: { expense: { date: 'asc' } } }),
 
     prisma.transaction.groupBy({ by: ['payMethod'], where: { createdAt: { gte: monthStart, lte: monthEnd }, status: 'COMPLETED', deletedAt: null }, _sum: { total: true }, _count: true }),
     prisma.transaction.groupBy({ by: ['payMethod'], where: { createdAt: { gte: yearStart, lte: yearEnd }, status: 'COMPLETED', deletedAt: null }, _sum: { total: true }, _count: true }),
@@ -213,6 +215,40 @@ export async function GET(req) {
     }
   }).sort((a, b) => Math.abs(b.selisih) - Math.abs(a.selisih))
 
+  // Merge kategori null → 'Lainnya'
+  const mergeCat = (arr) => Object.values(
+    arr.reduce((acc, c) => {
+      const k = c.category || 'Lainnya'
+      acc[k] = { category: k, total: (acc[k]?.total || 0) + (c._sum.subtotal || 0) }
+      return acc
+    }, {})
+  ).sort((a, b) => b.total - a.total)
+
+  // Detail pengeluaran: untuk Persediaan, ringkas per nama item
+  const detailRaw = expDetailMonth.map(d => ({
+    name: d.name,
+    qty: d.qty,
+    satuan: d.satuan,
+    subtotal: d.subtotal,
+    category: d.category || 'Lainnya',
+    date: d.expense.date,
+  }))
+
+  const persediaanMap = {}
+  const nonPersediaan = []
+  for (const d of detailRaw) {
+    if (d.category === 'Persediaan') {
+      const key = d.name?.trim() || '-'
+      if (!persediaanMap[key]) persediaanMap[key] = { name: key, qty: 0, satuan: d.satuan, subtotal: 0, category: 'Persediaan', count: 0 }
+      persediaanMap[key].qty += d.qty || 0
+      persediaanMap[key].subtotal += d.subtotal || 0
+      persediaanMap[key].count += 1
+    } else {
+      nonPersediaan.push(d)
+    }
+  }
+  const persediaanList = Object.values(persediaanMap).sort((a, b) => b.subtotal - a.subtotal)
+
   return NextResponse.json({
     period: {
       month: reqMonth, year: reqYear, monthName: MONTHS[reqMonth],
@@ -239,8 +275,9 @@ export async function GET(req) {
     monthlyChart,
     topProductsMonth: topProductsMonth.map(p => ({ name: p.name, qty: p._sum.qty || 0, revenue: p._sum.subtotal || 0 })),
     topProductsYear: topProductsYear.map(p => ({ name: p.name, qty: p._sum.qty || 0, revenue: p._sum.subtotal || 0 })),
-    expCatMonth: expCatMonth.map(c => ({ category: c.category || 'Lainnya', total: c._sum.subtotal || 0 })),
-    expCatYear: expCatYear.map(c => ({ category: c.category || 'Lainnya', total: c._sum.subtotal || 0 })),
+    expCatMonth: mergeCat(expCatMonth),
+    expCatYear: mergeCat(expCatYear),
+    expenseDetails: { persediaan: persediaanList, lainnya: nonPersediaan },
     payMethodMonth: payMethodMonth.map(p => ({ method: p.payMethod, total: p._sum.total || 0, count: p._count })),
     payMethodYear: payMethodYear.map(p => ({ method: p.payMethod, total: p._sum.total || 0, count: p._count })),
     salesCatMonth: salesCatMonth.map(c => ({ category: c.category || 'Lainnya', total: c._sum.subtotal || 0, qty: c._sum.qty || 0 })),

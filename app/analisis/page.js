@@ -178,6 +178,7 @@ export default function AnalisisPage() {
   const [year, setYear] = useState(null)
   const [tab, setTab] = useState('overview')
   const [sortBy, setSortBy] = useState('revenue')
+  const [expCatFilter, setExpCatFilter] = useState(null)
 
   const load = useCallback((m, y) => {
     setLoading(true)
@@ -209,7 +210,7 @@ export default function AnalisisPage() {
   const { kpi, kas, dailyChart, monthlyChart, topProductsMonth, topProductsYear,
     expCatMonth, expCatYear, payMethodMonth, payMethodYear,
     salesCatMonth, salesCatYear, absensiSummary, waste, voucher, memberTx,
-    kasirPerformance, ingredientAnalysis, period } = data
+    kasirPerformance, ingredientAnalysis, expenseDetails, period } = data
 
   const prevMonthName = MONTHS[month === 0 ? 11 : month - 1]
   const periodLabel = `20 ${prevMonthName} – 19 ${period.monthName} ${year}`
@@ -464,68 +465,117 @@ export default function AnalisisPage() {
             </>
           )}
 
-          {tab === 'pengeluaran' && (
-            <>
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'14px', marginBottom:'20px' }}>
-                <KpiCard label="Total Pengeluaran" value={fmt(kpi.expense.month)} growth={kpi.expense.growth} color="#EF4444" />
-                <KpiCard label="Bulan Lalu" value={fmt(kpi.expense.prev)} color="#F97316" />
-                <KpiCard label="Tahun Ini" value={fmt(kpi.expense.year)} sub={`Net margin tahunan ${pct(kpi.netMarginYear)}%`} color="#8B5CF6" />
-              </div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'20px', marginBottom:'20px' }}>
-                <Card title="Pengeluaran per Kategori" sub="Bulan ini">
-                  <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
-                    {expCatMonth.map((c, i) => {
-                      const v = kpi.expense.month > 0 ? (c.total / kpi.expense.month * 100) : 0
-                      return (
-                        <div key={i}>
-                          <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px' }}>
-                            <span style={{ fontSize:'12px', fontWeight:'600', color:'#374151' }}>{c.category || 'Lainnya'}</span>
-                            <span style={{ fontSize:'12px', color:'#8896B3' }}>{fmt(c.total)} ({v.toFixed(1)}%)</span>
+          {tab === 'pengeluaran' && (() => {
+            const cats = expCatMonth.map(c => c.category)
+            const activeFilter = expCatFilter && cats.includes(expCatFilter) ? expCatFilter : null
+            const detailRows = activeFilter === 'Persediaan'
+              ? expenseDetails.persediaan
+              : activeFilter
+                ? expenseDetails.lainnya.filter(d => d.category === activeFilter)
+                : [...expenseDetails.persediaan, ...expenseDetails.lainnya]
+            return (
+              <>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'14px', marginBottom:'20px' }}>
+                  <KpiCard label="Total Pengeluaran" value={fmt(kpi.expense.month)} growth={kpi.expense.growth} color="#EF4444" />
+                  <KpiCard label="Bulan Lalu" value={fmt(kpi.expense.prev)} color="#F97316" />
+                  <KpiCard label="Tahun Ini" value={fmt(kpi.expense.year)} sub={`Net margin tahunan ${pct(kpi.netMarginYear)}%`} color="#8B5CF6" />
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'20px', marginBottom:'20px' }}>
+                  <Card title="Pengeluaran per Kategori" sub="Bulan ini">
+                    <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+                      {expCatMonth.map((c, i) => {
+                        const v = kpi.expense.month > 0 ? (c.total / kpi.expense.month * 100) : 0
+                        return (
+                          <div key={i}>
+                            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'4px' }}>
+                              <span style={{ fontSize:'12px', fontWeight:'600', color:'#374151' }}>{c.category || 'Lainnya'}</span>
+                              <span style={{ fontSize:'12px', color:'#8896B3' }}>{fmt(c.total)} ({v.toFixed(1)}%)</span>
+                            </div>
+                            <div style={{ height:'6px', borderRadius:'3px', background:'#F1F5F9' }}>
+                              <div style={{ height:'100%', width:`${v}%`, background: COLORS[i % COLORS.length], borderRadius:'3px' }} />
+                            </div>
                           </div>
-                          <div style={{ height:'6px', borderRadius:'3px', background:'#F1F5F9' }}>
-                            <div style={{ height:'100%', width:`${v}%`, background: COLORS[i % COLORS.length], borderRadius:'3px' }} />
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </Card>
-                <Card title="Distribusi Pengeluaran" sub="Bulan ini">
+                        )
+                      })}
+                    </div>
+                  </Card>
+                  <Card title="Distribusi Pengeluaran" sub="Bulan ini">
+                    <ResponsiveContainer width="100%" height={200}>
+                      <PieChart>
+                        <Pie data={expCatMonth} dataKey="total" nameKey="category" cx="50%" cy="50%" outerRadius={75} label={({ percent }) => percent > 0.05 ? `${(percent*100).toFixed(0)}%` : ''} labelLine={false} fontSize={10}>
+                          {expCatMonth.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                        </Pie>
+                        <Tooltip formatter={v => fmt(v)} />
+                        <Legend wrapperStyle={{ fontSize:'11px' }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </Card>
+                </div>
+                <Card title="Perbandingan Pengeluaran Bulanan" sub={`Tahun ${year}`}>
                   <ResponsiveContainer width="100%" height={200}>
-                    <PieChart>
-                      <Pie data={expCatMonth} dataKey="total" nameKey="category" cx="50%" cy="50%" outerRadius={75} label={({ percent }) => percent > 0.05 ? `${(percent*100).toFixed(0)}%` : ''} labelLine={false} fontSize={10}>
-                        {expCatMonth.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                      </Pie>
-                      <Tooltip formatter={v => fmt(v)} />
-                      <Legend wrapperStyle={{ fontSize:'11px' }} />
-                    </PieChart>
+                    <BarChart data={monthlyChart} margin={{ top:5, right:5, bottom:0, left:10 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#F0F4FF" vertical={false} />
+                      <XAxis dataKey="month" tick={{ fontSize:10, fill:'#8896B3' }} axisLine={false} tickLine={false} />
+                      <YAxis tickFormatter={fmtK} tick={{ fontSize:10, fill:'#8896B3' }} axisLine={false} tickLine={false} width={80} />
+                      <Tooltip content={<Tip />} />
+                      <Bar dataKey="expense" name="Pengeluaran" fill="#F97316" radius={[5,5,0,0]} maxBarSize={28} />
+                    </BarChart>
                   </ResponsiveContainer>
                 </Card>
-              </div>
-              <Card title="Pengeluaran per Kategori — Tahun Ini" sub={`${year}`}>
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={expCatYear.slice(0,10)} layout="vertical" margin={{ top:0, right:20, bottom:0, left:100 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#F0F4FF" horizontal={false} />
-                    <XAxis type="number" tickFormatter={fmtK} tick={{ fontSize:10, fill:'#8896B3' }} axisLine={false} tickLine={false} />
-                    <YAxis type="category" dataKey="category" tick={{ fontSize:11, fill:'#374151' }} axisLine={false} tickLine={false} width={95} />
-                    <Tooltip formatter={v => fmt(v)} />
-                    <Bar dataKey="total" name="Total" fill="#EF4444" radius={[0,5,5,0]} maxBarSize={18} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </Card>
-              <Card title="Perbandingan Pengeluaran Bulanan" sub={`Tahun ${year}`}>
-                <ResponsiveContainer width="100%" height={200}>
-                  <BarChart data={monthlyChart} margin={{ top:5, right:5, bottom:0, left:10 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#F0F4FF" vertical={false} />
-                    <XAxis dataKey="month" tick={{ fontSize:10, fill:'#8896B3' }} axisLine={false} tickLine={false} />
-                    <YAxis tickFormatter={fmtK} tick={{ fontSize:10, fill:'#8896B3' }} axisLine={false} tickLine={false} width={80} />
-                    <Tooltip content={<Tip />} />
-                    <Bar dataKey="expense" name="Pengeluaran" fill="#F97316" radius={[5,5,0,0]} maxBarSize={28} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </Card>
-            </>
-          )}
+                <Card title="Detail Pengeluaran" sub={`Filter per kategori — ${periodLabel}`}>
+                  <div style={{ display:'flex', gap:'6px', marginBottom:'14px', flexWrap:'wrap' }}>
+                    <button onClick={() => setExpCatFilter(null)}
+                      style={{ padding:'4px 12px', borderRadius:'7px', border:`1.5px solid ${!activeFilter ? '#6366F1' : '#E2E8F8'}`, background: !activeFilter ? '#6366F1' : '#F8FAFF', color: !activeFilter ? '#fff' : '#8896B3', fontSize:'11px', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>
+                      Semua
+                    </button>
+                    {cats.map((cat, i) => (
+                      <button key={i} onClick={() => setExpCatFilter(cat === activeFilter ? null : cat)}
+                        style={{ padding:'4px 12px', borderRadius:'7px', border:`1.5px solid ${activeFilter===cat ? COLORS[i%COLORS.length] : '#E2E8F8'}`, background: activeFilter===cat ? COLORS[i%COLORS.length] : '#F8FAFF', color: activeFilter===cat ? '#fff' : '#8896B3', fontSize:'11px', fontWeight:'700', cursor:'pointer', fontFamily:'inherit' }}>
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ overflowX:'auto' }}>
+                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
+                      <thead>
+                        <tr>
+                          {['Item', activeFilter==='Persediaan' || !activeFilter ? 'Qty / Frekuensi' : 'Qty', 'Satuan', 'Kategori', 'Total'].map((h, i) => (
+                            <th key={i} style={{ padding:'8px 12px', textAlign: i===4 ? 'right' : 'left', fontWeight:'700', color:'#8896B3', borderBottom:'1px solid #F1F5F9', fontSize:'11px', whiteSpace:'nowrap' }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {detailRows.map((d, i) => (
+                          <tr key={i} style={{ background: i%2===0 ? '#fff' : '#FAFBFF', borderBottom:'1px solid #F8FAFF' }}>
+                            <td style={{ padding:'9px 12px', fontWeight:'600', color:'#0F1729' }}>{d.name || '-'}</td>
+                            <td style={{ padding:'9px 12px', color:'#374151' }}>
+                              {d.count > 1 ? `${d.qty.toLocaleString('id-ID')} (${d.count}x)` : (d.qty || '-')}
+                            </td>
+                            <td style={{ padding:'9px 12px', color:'#8896B3' }}>{d.satuan || '-'}</td>
+                            <td style={{ padding:'9px 12px' }}>
+                              <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:'700', background: d.category==='Persediaan' ? '#EFF4FF' : '#F1F5F9', color: d.category==='Persediaan' ? '#6366F1' : '#8896B3' }}>{d.category}</span>
+                            </td>
+                            <td style={{ padding:'9px 12px', textAlign:'right', fontWeight:'700', color:'#EF4444' }}>{fmt(d.subtotal)}</td>
+                          </tr>
+                        ))}
+                        {detailRows.length === 0 && (
+                          <tr><td colSpan={5} style={{ padding:'32px', textAlign:'center', color:'#CBD5E1' }}>Tidak ada data pengeluaran</td></tr>
+                        )}
+                      </tbody>
+                      {detailRows.length > 0 && (
+                        <tfoot>
+                          <tr style={{ borderTop:'2px solid #E2E8F8' }}>
+                            <td colSpan={4} style={{ padding:'9px 12px', fontWeight:'700', color:'#374151', fontSize:'12px' }}>Total</td>
+                            <td style={{ padding:'9px 12px', textAlign:'right', fontWeight:'800', color:'#EF4444', fontSize:'13px' }}>{fmt(detailRows.reduce((s, d) => s + (d.subtotal || 0), 0))}</td>
+                          </tr>
+                        </tfoot>
+                      )}
+                    </table>
+                  </div>
+                </Card>
+              </>
+            )
+          })()}
 
           {tab === 'produk' && (
             <>
