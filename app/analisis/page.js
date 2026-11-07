@@ -177,6 +177,7 @@ export default function AnalisisPage() {
   const [month, setMonth] = useState(null)
   const [year, setYear] = useState(null)
   const [tab, setTab] = useState('overview')
+  const [sortBy, setSortBy] = useState('revenue')
 
   const load = useCallback((m, y) => {
     setLoading(true)
@@ -212,6 +213,7 @@ export default function AnalisisPage() {
 
   const prevMonthName = MONTHS[month === 0 ? 11 : month - 1]
   const periodLabel = `20 ${prevMonthName} – 19 ${period.monthName} ${year}`
+  const sortedProducts = [...topProductsMonth].sort((a, b) => sortBy === 'qty' ? b.qty - a.qty : b.revenue - a.revenue)
 
   const TABS = [
     { key:'overview', label:'Overview' },
@@ -413,18 +415,27 @@ export default function AnalisisPage() {
                 <KpiCard label="Diskon Member" value={fmt(kpi.memberDiscount)} sub={`${memberTx.count} transaksi member`} color="#06B6D4" />
               </div>
               <Card title="Ranking Produk" sub={`Semua produk terjual — ${periodLabel}`}>
+                <div style={{ display:'flex', gap:'6px', marginBottom:'14px' }}>
+                  <span style={{ fontSize:'11px', color:'#8896B3', alignSelf:'center', marginRight:'4px' }}>Urutkan:</span>
+                  {[{key:'revenue',label:'Nominal'},{key:'qty',label:'Qty'}].map(opt => (
+                    <button key={opt.key} onClick={() => setSortBy(opt.key)}
+                      style={{ padding:'4px 12px', borderRadius:'7px', border:`1.5px solid ${sortBy===opt.key ? '#6366F1' : '#E2E8F8'}`, background: sortBy===opt.key ? '#6366F1' : '#F8FAFF', color: sortBy===opt.key ? '#fff' : '#8896B3', fontSize:'11px', fontWeight:'700', cursor:'pointer', fontFamily:'inherit', transition:'all 0.15s' }}>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
                 <div style={{ overflowX:'auto' }}>
                   <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
                     <thead>
                       <tr>
                         {['#','Produk','Qty Terjual','Pendapatan','Kontribusi',''].map((h, i) => (
-                          <th key={i} style={{ padding:'8px 12px', textAlign: i >= 2 && i < 5 ? 'right' : i === 5 ? 'left' : 'left', fontWeight:'700', color:'#8896B3', borderBottom:'1px solid #F1F5F9', fontSize:'11px', whiteSpace:'nowrap' }}>{h}</th>
+                          <th key={i} style={{ padding:'8px 12px', textAlign: i >= 2 && i < 5 ? 'right' : 'left', fontWeight:'700', color:'#8896B3', borderBottom:'1px solid #F1F5F9', fontSize:'11px', whiteSpace:'nowrap' }}>{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {topProductsMonth.map((p, i) => {
-                        const pct = kpi.revenue.month > 0 ? (p.revenue / kpi.revenue.month * 100) : 0
+                      {sortedProducts.map((p, i) => {
+                        const contrib = kpi.revenue.month > 0 ? (p.revenue / kpi.revenue.month * 100) : 0
                         const rankColor = i === 0 ? '#F59E0B' : i === 1 ? '#94A3B8' : i === 2 ? '#CD7F32' : '#CBD5E1'
                         return (
                           <tr key={i} style={{ background: i % 2 === 0 ? '#fff' : '#FAFBFF', borderBottom:'1px solid #F8FAFF' }}>
@@ -432,18 +443,18 @@ export default function AnalisisPage() {
                               <span style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:'22px', height:'22px', borderRadius:'6px', background: i < 3 ? rankColor + '22' : '#F1F5F9', color: i < 3 ? rankColor : '#94A3B8', fontSize:'11px', fontWeight:'800' }}>{i + 1}</span>
                             </td>
                             <td style={{ padding:'9px 12px', fontWeight:'600', color:'#0F1729', maxWidth:'200px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.name}</td>
-                            <td style={{ padding:'9px 12px', textAlign:'right', color:'#374151', fontWeight:'600' }}>{p.qty.toLocaleString('id-ID')}</td>
-                            <td style={{ padding:'9px 12px', textAlign:'right', fontWeight:'700', color:'#6366F1' }}>{fmt(p.revenue)}</td>
-                            <td style={{ padding:'9px 12px', textAlign:'right', color:'#8896B3', fontSize:'11px', whiteSpace:'nowrap' }}>{pct.toFixed(1)}%</td>
+                            <td style={{ padding:'9px 12px', textAlign:'right', color: sortBy==='qty' ? '#6366F1' : '#374151', fontWeight: sortBy==='qty' ? '700' : '600' }}>{p.qty.toLocaleString('id-ID')}</td>
+                            <td style={{ padding:'9px 12px', textAlign:'right', fontWeight: sortBy==='revenue' ? '700' : '600', color: sortBy==='revenue' ? '#6366F1' : '#374151' }}>{fmt(p.revenue)}</td>
+                            <td style={{ padding:'9px 12px', textAlign:'right', color:'#8896B3', fontSize:'11px', whiteSpace:'nowrap' }}>{contrib.toFixed(1)}%</td>
                             <td style={{ padding:'9px 12px', width:'120px' }}>
                               <div style={{ height:'5px', borderRadius:'3px', background:'#F1F5F9' }}>
-                                <div style={{ height:'100%', width:`${pct}%`, background: i < 3 ? rankColor : '#6366F1', borderRadius:'3px', transition:'width 0.3s' }} />
+                                <div style={{ height:'100%', width:`${sortBy==='qty' ? (sortedProducts[0]?.qty > 0 ? p.qty/sortedProducts[0].qty*100 : 0) : contrib}%`, background: i < 3 ? rankColor : '#6366F1', borderRadius:'3px', transition:'width 0.3s' }} />
                               </div>
                             </td>
                           </tr>
                         )
                       })}
-                      {topProductsMonth.length === 0 && (
+                      {sortedProducts.length === 0 && (
                         <tr><td colSpan={6} style={{ padding:'32px', textAlign:'center', color:'#CBD5E1' }}>Belum ada data penjualan produk</td></tr>
                       )}
                     </tbody>
