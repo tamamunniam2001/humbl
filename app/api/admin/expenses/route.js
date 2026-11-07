@@ -25,8 +25,8 @@ export async function GET(req) {
   const where = {}
   if (from || to) {
     where.date = {}
-    if (from) where.date.gte = new Date(`${from}T00:00:00`)
-    if (to) where.date.lte = new Date(`${to}T23:59:59`)
+    if (from) where.date.gte = new Date(`${from}T00:00:00+07:00`)
+    if (to) where.date.lte = new Date(`${to}T23:59:59.999+07:00`)
   }
 
   // Pencarian kata kunci (q): catatan, kasir, nama/keterangan/kategori item, kode & nama bahan
@@ -71,13 +71,12 @@ export async function GET(req) {
   if (searchParams.get('bykategori')) {
     const details = await prisma.expenseDetail.findMany({
       where: { expense: { ...(Object.keys(where).length ? where : {}) } },
-      select: { category: true, subtotal: true, expenseItem: { select: { category: true } } },
+      select: { category: true, subtotal: true },
     })
     const map = {}
     details.forEach(d => {
-      const cat = d.category || d.expenseItem?.category || ''
-      const key = cat || '(Tanpa Kategori)'
-      map[key] = (map[key] || 0) + d.subtotal
+      const cat = (d.category && d.category.trim()) ? d.category.trim() : '(Tanpa Kategori)'
+      map[cat] = (map[cat] || 0) + d.subtotal
     })
     const byKategori = Object.entries(map)
       .map(([category, total]) => ({ category, total }))

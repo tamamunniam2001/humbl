@@ -86,7 +86,7 @@ export async function GET(req) {
     prisma.expenseDetail.groupBy({ by: ['category'], where: { expense: { date: { gte: monthStart, lte: monthEnd } } }, _sum: { subtotal: true }, orderBy: { _sum: { subtotal: 'desc' } } }),
     prisma.expenseDetail.groupBy({ by: ['category'], where: { expense: { date: { gte: yearStart, lte: yearEnd } } }, _sum: { subtotal: true }, orderBy: { _sum: { subtotal: 'desc' } } }),
 
-    prisma.expenseDetail.findMany({ where: { expense: { date: { gte: monthStart, lte: monthEnd } } }, select: { name: true, qty: true, satuan: true, subtotal: true, category: true, expense: { select: { date: true } } }, orderBy: { expense: { date: 'asc' } } }),
+    prisma.expenseDetail.findMany({ where: { expense: { date: { gte: monthStart, lte: monthEnd } } }, select: { name: true, qty: true, satuan: true, subtotal: true, category: true, expenseItem: { select: { category: true } }, expense: { select: { date: true } } }, orderBy: { expense: { date: 'asc' } } }),
 
     prisma.transaction.groupBy({ by: ['payMethod'], where: { createdAt: { gte: monthStart, lte: monthEnd }, status: 'COMPLETED', deletedAt: null }, _sum: { total: true }, _count: true }),
     prisma.transaction.groupBy({ by: ['payMethod'], where: { createdAt: { gte: yearStart, lte: yearEnd }, status: 'COMPLETED', deletedAt: null }, _sum: { total: true }, _count: true }),
@@ -110,8 +110,14 @@ export async function GET(req) {
     prisma.transaction.groupBy({ by: ['cashierId'], where: { createdAt: { gte: monthStart, lte: monthEnd }, status: 'COMPLETED', deletedAt: null }, _sum: { total: true }, _count: true, orderBy: { _sum: { total: 'desc' } }, take: 5 }),
 
     prisma.expenseDetail.findMany({
-      where: { expense: { date: { gte: monthStart, lte: monthEnd } }, category: 'Persediaan' },
-      select: { name: true, qty: true, isi: true, satuan: true, subtotal: true },
+      where: {
+        expense: { date: { gte: monthStart, lte: monthEnd } },
+        OR: [
+          { category: 'Persediaan' },
+          { category: '', expenseItem: { category: 'Persediaan' } },
+        ],
+      },
+      select: { name: true, qty: true, isi: true, satuan: true, subtotal: true, expenseItem: { select: { name: true } } },
     }),
 
     prisma.orderItem.findMany({
@@ -176,7 +182,7 @@ export async function GET(req) {
   // Agregasi bahan baku: pembelian
   const buyMap = {}
   for (const d of ingredientPurchases) {
-    const name = (d.name || '').trim()
+    const name = ((d.category === 'Persediaan' ? d.name : d.expenseItem?.name || d.name) || '').trim()
     if (!name) continue
     if (!buyMap[name]) buyMap[name] = { name, totalBought: 0, totalSpent: 0 }
     const units = d.isi && d.isi > 0 ? d.qty * d.isi : d.qty
@@ -225,14 +231,12 @@ export async function GET(req) {
   ).sort((a, b) => b.total - a.total)
 
   // Detail pengeluaran: untuk Persediaan, ringkas per nama item
-  const detailRaw = expDetailMonth.map(d => ({
-    name: d.name,
-    qty: d.qty,
-    satuan: d.satuan,
-    subtotal: d.subtotal,
-    category: (d.category && d.category.trim()) ? d.category.trim() : 'Lainnya',
-    date: d.expense.date,
-  }))
+  const detailRaw = expDetailMonth.map(d => {
+    const cat = (d.category && d.category.trim()) ? d.category.trim()
+      : (d.expenseItem?.category && d.expenseItem.category.trim()) ? d.expenseItem.category.trim()
+      : 'Lainnya'
+    return { name: d.name, qty: d.qty, satuan: d.satuan, subtotal: d.subtotal, category: cat, date: d.expense.date }
+  })
 
   const persediaanMap = {}
   const nonPersediaan = []
