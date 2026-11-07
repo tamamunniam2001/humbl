@@ -549,7 +549,7 @@ export default function AnalisisPage() {
                           <tr key={i} style={{ background: i%2===0 ? '#fff' : '#FAFBFF', borderBottom:'1px solid #F8FAFF' }}>
                             <td style={{ padding:'9px 12px', fontWeight:'600', color:'#0F1729' }}>{d.name || '-'}</td>
                             <td style={{ padding:'9px 12px', color:'#374151' }}>
-                              {d.count > 1 ? `${d.qty.toLocaleString('id-ID')} (${d.count}x)` : (d.qty || '-')}
+                              {d.count > 1 ? `${d.qty?.toLocaleString('id-ID') ?? '-'} (${d.count}x)` : (d.qty?.toLocaleString('id-ID') ?? '-')}
                             </td>
                             <td style={{ padding:'9px 12px', color:'#8896B3' }}>{d.satuan || '-'}</td>
                             <td style={{ padding:'9px 12px' }}>

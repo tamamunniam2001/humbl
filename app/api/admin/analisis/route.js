@@ -110,8 +110,8 @@ export async function GET(req) {
     prisma.transaction.groupBy({ by: ['cashierId'], where: { createdAt: { gte: monthStart, lte: monthEnd }, status: 'COMPLETED', deletedAt: null }, _sum: { total: true }, _count: true, orderBy: { _sum: { total: 'desc' } }, take: 5 }),
 
     prisma.expenseDetail.findMany({
-      where: { expense: { date: { gte: monthStart, lte: monthEnd } }, expenseItem: { category: 'Persediaan' } },
-      select: { name: true, qty: true, isi: true, satuan: true, subtotal: true, expenseItem: { select: { name: true } } },
+      where: { expense: { date: { gte: monthStart, lte: monthEnd } }, category: 'Persediaan' },
+      select: { name: true, qty: true, isi: true, satuan: true, subtotal: true },
     }),
 
     prisma.orderItem.findMany({
@@ -176,7 +176,7 @@ export async function GET(req) {
   // Agregasi bahan baku: pembelian
   const buyMap = {}
   for (const d of ingredientPurchases) {
-    const name = (d.expenseItem?.name || d.name || '').trim()
+    const name = (d.name || '').trim()
     if (!name) continue
     if (!buyMap[name]) buyMap[name] = { name, totalBought: 0, totalSpent: 0 }
     const units = d.isi && d.isi > 0 ? d.qty * d.isi : d.qty
@@ -218,7 +218,7 @@ export async function GET(req) {
   // Merge kategori null → 'Lainnya'
   const mergeCat = (arr) => Object.values(
     arr.reduce((acc, c) => {
-      const k = c.category || 'Lainnya'
+      const k = (c.category && c.category.trim()) ? c.category.trim() : 'Lainnya'
       acc[k] = { category: k, total: (acc[k]?.total || 0) + (c._sum.subtotal || 0) }
       return acc
     }, {})
@@ -230,7 +230,7 @@ export async function GET(req) {
     qty: d.qty,
     satuan: d.satuan,
     subtotal: d.subtotal,
-    category: d.category || 'Lainnya',
+    category: (d.category && d.category.trim()) ? d.category.trim() : 'Lainnya',
     date: d.expense.date,
   }))
 

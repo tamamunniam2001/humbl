@@ -169,6 +169,8 @@ export default function RekapPengeluaranPage() {
 
   async function handleSaveEdit() {
     if (!editForm.items.length) return alert('Minimal 1 item')
+    const invalid = editForm.items.find(i => !i.name?.trim() || !(Number(i.harga) > 0) || !(Number(i.qty) > 0))
+    if (invalid) return alert(`Item "${invalid.name || '(kosong)'}" — pastikan nama, harga, dan qty terisi`)
     setSaving(true)
     try {
       await api.patch(`/admin/expenses/${editModal.id}`, {
@@ -176,14 +178,19 @@ export default function RekapPengeluaranPage() {
         catatan: editForm.catatan,
         items: editForm.items.map(i => ({
           expenseItemId: i.expenseItemId || null,
-          name: i.name, category: i.category || '',
-          keterangan: i.keterangan || '', satuan: i.satuan || '',
-          harga: Number(i.harga), 
+          name: i.name.trim(),
+          category: i.category || '',
+          keterangan: i.keterangan || '',
+          satuan: i.satuan || '',
+          harga: Number(i.harga),
           isi: Number(i.isi) > 0 ? Number(i.isi) : null,
-          qty: Number(i.qty) || 1,
+          qty: Number(i.qty),
         })),
       })
-      setEditModal(null); load(page); loadMonthly()
+      setEditModal(null)
+      load(page, from, to, activeKategori)
+      loadMonthly()
+      loadByKategori(from, to)
     } catch (e) { alert(e.response?.data?.message || 'Gagal menyimpan') }
     finally { setSaving(false) }
   }
