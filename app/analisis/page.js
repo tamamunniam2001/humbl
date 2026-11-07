@@ -99,6 +99,8 @@ function AIPanel() {
     return <div style={{ fontSize:'13px', lineHeight:'1.75', color:'#374151' }} dangerouslySetInnerHTML={{ __html: html }} />
   }
 
+  const handleSugg = useCallback((s) => () => send(s), [loading, input])
+
   return (
     <div style={{ background:'#fff', borderRadius:'20px', border:'1px solid #E2E8F8', overflow:'hidden', display:'flex', flexDirection:'column', height:'520px' }}>
       <div style={{ padding:'16px 20px', borderBottom:'1px solid #F1F5F9', display:'flex', alignItems:'center', gap:'10px', flexShrink:0 }}>
@@ -123,7 +125,7 @@ function AIPanel() {
           <div style={{ display:'flex', flexDirection:'column', gap:'8px', paddingTop:'8px' }}>
             <div style={{ fontSize:'12px', color:'#8896B3', marginBottom:'4px', fontWeight:'600' }}>Pertanyaan cepat:</div>
             {SUGG.map((s, i) => (
-              <button key={i} onClick={() => send(s)} style={{ padding:'9px 13px', borderRadius:'9px', border:'1px solid #E2E8F8', background:'#F8FAFF', color:'#374151', fontSize:'12px', cursor:'pointer', fontFamily:'inherit', textAlign:'left' }}>{s}</button>
+              <button key={i} onClick={handleSugg(s)} style={{ padding:'9px 13px', borderRadius:'9px', border:'1px solid #E2E8F8', background:'#F8FAFF', color:'#374151', fontSize:'12px', cursor:'pointer', fontFamily:'inherit', textAlign:'left' }}>{s}</button>
             ))}
           </div>
         )}
@@ -410,6 +412,44 @@ export default function AnalisisPage() {
                 <KpiCard label="Diskon Voucher" value={fmt(kpi.voucherDiscount)} sub={`${voucher.count} transaksi pakai voucher`} color="#8B5CF6" />
                 <KpiCard label="Diskon Member" value={fmt(kpi.memberDiscount)} sub={`${memberTx.count} transaksi member`} color="#06B6D4" />
               </div>
+              <Card title="Ranking Produk" sub={`Semua produk terjual — ${periodLabel}`}>
+                <div style={{ overflowX:'auto' }}>
+                  <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
+                    <thead>
+                      <tr>
+                        {['#','Produk','Qty Terjual','Pendapatan','Kontribusi',''].map((h, i) => (
+                          <th key={i} style={{ padding:'8px 12px', textAlign: i >= 2 && i < 5 ? 'right' : i === 5 ? 'left' : 'left', fontWeight:'700', color:'#8896B3', borderBottom:'1px solid #F1F5F9', fontSize:'11px', whiteSpace:'nowrap' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {topProductsMonth.map((p, i) => {
+                        const pct = kpi.revenue.month > 0 ? (p.revenue / kpi.revenue.month * 100) : 0
+                        const rankColor = i === 0 ? '#F59E0B' : i === 1 ? '#94A3B8' : i === 2 ? '#CD7F32' : '#CBD5E1'
+                        return (
+                          <tr key={i} style={{ background: i % 2 === 0 ? '#fff' : '#FAFBFF', borderBottom:'1px solid #F8FAFF' }}>
+                            <td style={{ padding:'9px 12px', width:'36px' }}>
+                              <span style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:'22px', height:'22px', borderRadius:'6px', background: i < 3 ? rankColor + '22' : '#F1F5F9', color: i < 3 ? rankColor : '#94A3B8', fontSize:'11px', fontWeight:'800' }}>{i + 1}</span>
+                            </td>
+                            <td style={{ padding:'9px 12px', fontWeight:'600', color:'#0F1729', maxWidth:'200px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.name}</td>
+                            <td style={{ padding:'9px 12px', textAlign:'right', color:'#374151', fontWeight:'600' }}>{p.qty.toLocaleString('id-ID')}</td>
+                            <td style={{ padding:'9px 12px', textAlign:'right', fontWeight:'700', color:'#6366F1' }}>{fmt(p.revenue)}</td>
+                            <td style={{ padding:'9px 12px', textAlign:'right', color:'#8896B3', fontSize:'11px', whiteSpace:'nowrap' }}>{pct.toFixed(1)}%</td>
+                            <td style={{ padding:'9px 12px', width:'120px' }}>
+                              <div style={{ height:'5px', borderRadius:'3px', background:'#F1F5F9' }}>
+                                <div style={{ height:'100%', width:`${pct}%`, background: i < 3 ? rankColor : '#6366F1', borderRadius:'3px', transition:'width 0.3s' }} />
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                      {topProductsMonth.length === 0 && (
+                        <tr><td colSpan={6} style={{ padding:'32px', textAlign:'center', color:'#CBD5E1' }}>Belum ada data penjualan produk</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
             </>
           )}
 
