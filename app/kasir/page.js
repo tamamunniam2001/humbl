@@ -1555,16 +1555,33 @@ function CheckoutModal({ cart, total: totalProp, subtotal = totalProp, tax = 0, 
   const [voucherCode, setVoucherCode] = useState('')
   const [voucherLoading, setVoucherLoading] = useState(false)
   const [voucherError, setVoucherError] = useState('')
+  const [activeVouchers, setActiveVouchers] = useState([])
 
-  async function applyVoucher() {
+  useEffect(() => {
+    const now = new Date()
+    api.get('/admin/vouchers')
+      .then(r => {
+        const list = (r.data || []).filter(v =>
+          v.isActive &&
+          (!v.startDate || new Date(v.startDate) <= now) &&
+          (!v.endDate || new Date(v.endDate) >= now) &&
+          (v.quota === 0 || v.usedCount < v.quota)
+        )
+        setActiveVouchers(list)
+      })
+      .catch(() => {})
+  }, [])
+
+  async function applyVoucher(directCode) {
     setVoucherError('')
-    const code = voucherCode.trim()
+    const code = (directCode || voucherCode).trim()
     if (!code) { setVoucherError('Masukkan kode voucher'); return }
     setVoucherLoading(true)
     try {
       const res = await api.post('/vouchers/validate', { code, subtotal })
       const v = res.data.voucher
       onVoucherChange?.({ id: v.id, code: v.code, discount: res.data.discount, type: v.type, value: v.value })
+      setVoucherCode('')
     } catch (e) {
       onVoucherChange?.(null)
       setVoucherError(e.response?.data?.message || 'Kode voucher tidak valid')
@@ -1887,6 +1904,23 @@ function CheckoutModal({ cart, total: totalProp, subtotal = totalProp, tax = 0, 
                     </button>
                   </div>
                   {voucherError && <div style={{ fontSize: '12px', color: 'var(--red)', marginTop: '5px' }}>{voucherError}</div>}
+                  {activeVouchers.length > 0 && (
+                    <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {activeVouchers.map(v => {
+                        const eligible = subtotal >= (v.minSpend || 0)
+                        const label = v.type === 'PERCENT'
+                          ? `${v.code} −${v.value}%`
+                          : `${v.code} −Rp ${fmt(v.value)}`
+                        return (
+                          <button key={v.id} onClick={() => eligible && applyVoucher(v.code)}
+                            title={!eligible ? `Min. belanja Rp ${fmt(v.minSpend)}` : (v.description || label)}
+                            style={{ padding: '4px 10px', borderRadius: '20px', border: `1.5px solid ${eligible ? '#A7F3D0' : '#E2E8F0'}`, background: eligible ? '#ECFDF5' : '#F8FAFC', color: eligible ? '#065F46' : '#94A3B8', fontSize: '11px', fontWeight: '700', cursor: eligible ? 'pointer' : 'not-allowed', fontFamily: 'monospace', opacity: eligible ? 1 : 0.6 }}>
+                            {label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
                 </>
               )}
             </div>
