@@ -1496,7 +1496,7 @@ function CheckoutModal({ cart, total: totalProp, subtotal = totalProp, tax = 0, 
   const [showMemberSuggest, setShowMemberSuggest] = useState(false)
   const memberBase = Math.max(0, (subtotal || 0) - (discountAmount || 0))
   const memberEligible = !!member && !!promo?.memberDiscountActive && (promo?.memberDiscountValue || 0) > 0
-    && memberBase > 0 && memberBase >= (promo?.memberDiscountMin || 0)
+    && memberBase > 0 && memberBase >= (promo?.memberDiscountMin || 0) && !voucher
   let memberDiscountPreview = 0
   // OTOMATIS: tanpa tombol di kasir. Member yang valid langsung dapat potongan
   // selama promo aktif (diatur on/off dari halaman Voucher & Promo).
