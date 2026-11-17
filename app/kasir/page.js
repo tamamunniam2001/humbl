@@ -1669,6 +1669,7 @@ function CheckoutModal({ cart, total: totalProp, subtotal = totalProp, tax = 0, 
           voucherId: voucher?.id || null,
           voucherCode: voucher?.code || '',
           voucherDiscount: voucherDiscount || 0,
+          memberDiscountDisabled: !memberDiscountEnabled,
         })
         setTx({ subtotal, discount, tax, discountAmount, taxAmount, memberDiscount, memberDiscountType: promo?.memberDiscountType || 'PERCENT', memberDiscountValue: promo?.memberDiscountValue || 0, memberDiscountMax: promo?.memberDiscountMax || 0, voucherDiscount: voucherDiscount || 0, voucherCode: voucher?.code || '', ...res.data })
       }

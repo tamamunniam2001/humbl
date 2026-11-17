@@ -72,7 +72,7 @@ export async function POST(req) {
   const { error, user } = verifyAuth(req)
   if (error) return error
   try {
-    const { items, payment, payMethod, payLater, customerName, note, discount = 0, tax = 0, discountAmount = 0, taxAmount = 0, voucherId = null, voucherCode = '', voucherDiscount = 0, memberId = null } = await req.json()
+    const { items, payment, payMethod, payLater, customerName, note, discount = 0, tax = 0, discountAmount = 0, taxAmount = 0, voucherId = null, voucherCode = '', voucherDiscount = 0, memberId = null, memberDiscountDisabled = false } = await req.json()
     if (!items?.length) return NextResponse.json({ message: 'Items tidak boleh kosong' }, { status: 400 })
     if (!payMethod) return NextResponse.json({ message: 'payMethod wajib diisi' }, { status: 400 })
 
@@ -129,7 +129,7 @@ export async function POST(req) {
     let mValue = 0
     let mMax = 0
     let mDiscount = 0
-    if (validMemberId && !validVoucherId) {
+    if (validMemberId && !validVoucherId && !memberDiscountDisabled) {
       const memberData = await prisma.member.findUnique({ where: { id: validMemberId } })
       let promo = null
       // Tentukan sumber diskon: custom per-member atau global PromoSettings
