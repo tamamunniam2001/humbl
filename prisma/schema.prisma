@@ -55,6 +55,7 @@ model Product {
   ingredients      ProductIngredient[]
   createdAt        DateTime            @default(now())
   description      String?             @default("")
+  hppManual        Float?              // HPP manual (dipakai jika tidak ada bahan baku)
 
   @@index([isActive])
   @@index([categoryId])

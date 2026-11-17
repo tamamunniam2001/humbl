@@ -20,15 +20,17 @@ function toDateInput(v) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
-// Helper: Hitung HPP produk berdasarkan bahan baku resepnya
+// Helper: Hitung HPP produk — dari bahan baku jika ada, fallback ke hppManual
 function getProductHpp(product) {
-  if (!product?.ingredients || !product.ingredients.length) return 0
-  return product.ingredients.reduce((sum, item) => {
-    const ing = item.ingredient
-    if (!ing?.price || !ing?.packSize || !item.qty) return sum
-    const perUnit = Number(ing.price) / Number(ing.packSize)
-    return sum + (perUnit * Number(item.qty))
-  }, 0)
+  if (product?.ingredients?.length) {
+    const fromIng = product.ingredients.reduce((sum, item) => {
+      const ing = item.ingredient
+      if (!ing?.price || !ing?.packSize || !item.qty) return sum
+      return sum + (Number(ing.price) / Number(ing.packSize)) * Number(item.qty)
+    }, 0)
+    if (fromIng > 0) return fromIng
+  }
+  return Number(product?.hppManual || 0)
 }
 
 export default function VoucherSettingsPage() {
@@ -483,7 +485,10 @@ export default function VoucherSettingsPage() {
                                   </td>
                                   <td style={{ textAlign: 'right', fontSize: '12px' }}>
                                     {hppSatuan > 0 ? (
-                                      <span style={{ color: '#4F6EF7', fontWeight: '600' }}>{fmt(Math.round(hppSatuan))}</span>
+                                      <span style={{ color: '#4F6EF7', fontWeight: '600' }}>
+                                        {fmt(Math.round(hppSatuan))}
+                                        {!p.ingredients?.length && p.hppManual > 0 && <span style={{ fontSize: '10px', color: '#94A3B8', marginLeft: '3px' }}>(m)</span>}
+                                      </span>
                                     ) : (
                                       <span style={{ color: 'var(--muted)', fontSize: '11px' }}>—</span>
                                     )}
@@ -600,9 +605,9 @@ export default function VoucherSettingsPage() {
                                   <div className="bundle-prod-sell">{fmt(p.price)}</div>
                                   <div className="bundle-prod-hpp">
                                     {hpp > 0 ? (
-                                      <span>HPP: <b>{fmt(Math.round(hpp))}</b> {margin !== null && `(${margin.toFixed(0)}%)`}</span>
+                                      <span>HPP: <b>{fmt(Math.round(hpp))}</b>{!p.ingredients?.length && p.hppManual > 0 ? ' (manual)' : ''} {margin !== null && `(${margin.toFixed(0)}%)`}</span>
                                     ) : (
-                                      <span style={{ color: 'var(--muted)' }}>Resep belum ada</span>
+                                      <span style={{ color: 'var(--muted)' }}>HPP belum diisi</span>
                                     )}
                                   </div>
                                 </div>

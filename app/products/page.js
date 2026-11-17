@@ -4,7 +4,7 @@ import Sidebar from '@/components/Sidebar'
 import api from '@/lib/api'
 import * as XLSX from 'xlsx'
 
-const empty = { code: '', name: '', price: '', stock: '', categoryId: '', imageUrl: '' }
+const empty = { code: '', name: '', price: '', stock: '', categoryId: '', imageUrl: '', hppManual: '' }
 const emptyIng = { ingredientId: '', qty: '' }
 
 const fmtRp = (n) => Number(n).toLocaleString('id-ID')
@@ -192,7 +192,7 @@ export default function ProductsPage() {
 
   async function handleSubmit(e) {
     e.preventDefault()
-    const payload = { ...form, price: Number(form.price), stock: Number(form.stock) }
+    const payload = { ...form, price: Number(form.price), stock: Number(form.stock), hppManual: form.hppManual !== '' ? Number(form.hppManual) : null }
     let savedId = editId
     try {
       if (editId) {
@@ -215,7 +215,7 @@ export default function ProductsPage() {
   }
 
   function startEdit(p) {
-    setForm({ code: p.code || '', name: p.name, price: p.price, stock: p.stock, categoryId: p.categoryId, imageUrl: p.imageUrl || '' })
+    setForm({ code: p.code || '', name: p.name, price: p.price, stock: p.stock, categoryId: p.categoryId, imageUrl: p.imageUrl || '', hppManual: p.hppManual != null ? String(p.hppManual) : '' })
     setEditId(p.id); setShowForm(true)
     const mapped = (p.ingredients || []).map(item => ({ ingredientId: item.ingredientId, qty: item.qty }))
     setFormIngredients(mapped)
@@ -490,6 +490,45 @@ export default function ProductsPage() {
                   </div>
                 </div>
 
+                {/* HPP Manual */}
+                <div style={{ marginBottom: '20px' }}>
+                  <div className="divider" />
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <div>
+                      <div className="section-label" style={{ margin: 0 }}>HPP Manual</div>
+                      <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '2px' }}>Isi jika tidak menggunakan bahan baku. Jika bahan baku diisi, HPP bahan baku yang dipakai.</div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
+                    <div style={{ flex: 1 }}>
+                      <label className="label">Nominal HPP (Rp) <span style={{ color: '#94A3B8', fontWeight: '400' }}>(opsional)</span></label>
+                      <input
+                        className="input"
+                        type="number"
+                        min="0"
+                        placeholder="mis. 8000"
+                        value={form.hppManual}
+                        onChange={(e) => setForm({ ...form, hppManual: e.target.value })}
+                      />
+                    </div>
+                    {form.hppManual !== '' && Number(form.hppManual) > 0 && Number(form.price) > 0 && (() => {
+                      const hpp = Number(form.hppManual)
+                      const price = Number(form.price)
+                      const margin = ((price - hpp) / hpp) * 100
+                      const profit = price - hpp
+                      const color = margin >= 50 ? '#2A9D6E' : margin >= 20 ? '#C47D1A' : '#C95555'
+                      const bg = margin >= 50 ? '#E8F7F1' : margin >= 20 ? '#FDF4E3' : '#FEF2F2'
+                      const border = margin >= 50 ? '#A7DFC8' : margin >= 20 ? '#F0D090' : '#FECACA'
+                      return (
+                        <div style={{ padding: '10px 14px', background: bg, border: `1px solid ${border}`, borderRadius: '10px', whiteSpace: 'nowrap' }}>
+                          <div style={{ fontSize: '11px', color: '#64748B', marginBottom: '2px' }}>Margin · Profit</div>
+                          <div style={{ fontSize: '14px', fontWeight: '800', color }}>{margin.toFixed(1)}% · +Rp {fmtRp(Math.round(profit))}</div>
+                        </div>
+                      )
+                    })()}
+                  </div>
+                </div>
+
                 <div style={{ marginBottom: '20px' }}>
                     <div className="divider" />
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
@@ -584,11 +623,13 @@ export default function ProductsPage() {
               </thead>
               <tbody>
                 {filtered.map((p) => {
-                  const hpp = (p.ingredients || []).reduce((sum, item) => {
+                  const hppFromIng = (p.ingredients || []).reduce((sum, item) => {
                     const ing = item.ingredient
                     if (!ing?.price || !ing?.packSize) return sum
                     return sum + (ing.price / ing.packSize) * item.qty
                   }, 0)
+                  const hpp = hppFromIng > 0 ? hppFromIng : (p.hppManual || 0)
+                  const hppSource = hppFromIng > 0 ? 'bahan' : (p.hppManual ? 'manual' : null)
                   const pajak = Math.round(p.price * 0.005)
                   const profit = hpp > 0 ? Math.round(p.price - hpp - pajak) : null
                   const margin = hpp > 0 && p.price ? ((p.price - hpp) / hpp) * 100 : null
@@ -603,7 +644,10 @@ export default function ProductsPage() {
                     <td style={{ fontWeight: '700', color: '#0D1526' }}>Rp {p.price.toLocaleString('id-ID')}</td>
                     <td>
                       {hpp > 0
-                        ? <span style={{ fontSize: '12px', fontWeight: '700', color: '#4A7CC7' }}>Rp {fmtRp(Math.round(hpp))}</span>
+                        ? <span style={{ fontSize: '12px', fontWeight: '700', color: '#4A7CC7' }}>
+                            Rp {fmtRp(Math.round(hpp))}
+                            {hppSource === 'manual' && <span style={{ fontSize: '10px', fontWeight: '600', color: '#94A3B8', marginLeft: '4px' }}>(manual)</span>}
+                          </span>
                         : <span style={{ color: '#CBD5E1', fontSize: '12px' }}>—</span>}
                     </td>
                     <td>

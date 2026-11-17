@@ -9,8 +9,8 @@ export async function PUT(req, { params }) {
   if (denied) return denied
   const { id } = await params
   try {
-    const { code, name, price, stock, imageUrl, categoryId } = await req.json()
-    const product = await prisma.product.update({ where: { id }, data: { code: code || null, name, price, stock, imageUrl: imageUrl || null, categoryId } })
+    const { code, name, price, stock, imageUrl, categoryId, hppManual } = await req.json()
+    const product = await prisma.product.update({ where: { id }, data: { code: code || null, name, price, stock, imageUrl: imageUrl || null, categoryId, hppManual: hppManual != null ? Number(hppManual) : null } })
     return NextResponse.json(product)
   } catch (e) {
     if (e.code === 'P2002') return NextResponse.json({ message: 'Kode produk sudah digunakan' }, { status: 400 })

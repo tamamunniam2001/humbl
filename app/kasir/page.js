@@ -1859,7 +1859,7 @@ function CheckoutModal({ cart, total: totalProp, subtotal = totalProp, tax = 0, 
                 )}
                 {member && !memberEligible && promo?.memberDiscountActive && (
                   <div style={{ fontSize: '11px', color: 'var(--orange)', marginTop: '6px' }}>
-                    Kode voucher sudah aktif {promo?.memberDiscountMin ? `Rp ${fmt(promo.memberDiscountMin)}` : ''} — Promo diskon hanya bisa digunakan salah satu
+                    Kode voucher sudah aktif {promo?.memberDiscountMin ? `Rp ${fmt(promo.memberDiscountMin)}` : ''} — hapus untuk beralih ke diskon member
                   </div>
                 )}
               </div>
