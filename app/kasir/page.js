@@ -1494,12 +1494,11 @@ function CheckoutModal({ cart, total: totalProp, subtotal = totalProp, tax = 0, 
   const [member, setMember] = useState(null)
   const [memberList, setMemberList] = useState(null) // null = belum dimuat
   const [showMemberSuggest, setShowMemberSuggest] = useState(false)
+  const [memberDiscountEnabled, setMemberDiscountEnabled] = useState(true)
   const memberBase = Math.max(0, (subtotal || 0) - (discountAmount || 0))
   const memberEligible = !!member && !!promo?.memberDiscountActive && (promo?.memberDiscountValue || 0) > 0
-    && memberBase > 0 && memberBase >= (promo?.memberDiscountMin || 0) && !voucher
+    && memberBase > 0 && memberBase >= (promo?.memberDiscountMin || 0) && !voucher && memberDiscountEnabled
   let memberDiscountPreview = 0
-  // OTOMATIS: tanpa tombol di kasir. Member yang valid langsung dapat potongan
-  // selama promo aktif (diatur on/off dari halaman Voucher & Promo).
   if (memberEligible) {
     if (promo.memberDiscountType === 'NOMINAL') {
       memberDiscountPreview = Math.min(promo.memberDiscountValue || 0, memberBase)
@@ -1851,15 +1850,31 @@ function CheckoutModal({ cart, total: totalProp, subtotal = totalProp, tax = 0, 
                       style={{ background: 'none', border: 'none', color: '#7C3AED', cursor: 'pointer', fontSize: '13px', fontWeight: 800, padding: 0, lineHeight: 1 }} title="Lepas member">×</button>
                   </div>
                 )}
-                {/* Diskon member OTOMATIS — tanpa tombol. Aktif/nonaktif hanya dari halaman Voucher & Promo. */}
-                {member && memberDiscount > 0 && (
-                  <div style={{ marginTop: '8px', width: '100%', padding: '10px 12px', borderRadius: '10px', fontFamily: 'inherit', fontSize: '13px', fontWeight: '800', border: '1.5px solid #7C3AED', background: '#7C3AED', color: '#fff', textAlign: 'center' }}>
-                    Diskon Member Otomatis — hemat Rp {fmt(memberDiscount)}
+                {/* Toggle diskon member */}
+                {member && promo?.memberDiscountActive && (promo?.memberDiscountValue || 0) > 0 && !voucher && (
+                  <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <button
+                      type="button"
+                      onClick={() => setMemberDiscountEnabled(v => !v)}
+                      style={{ flex: 1, padding: '9px 12px', borderRadius: '10px', fontFamily: 'inherit', fontSize: '12px', fontWeight: '800', cursor: 'pointer', transition: 'all 0.15s',
+                        border: memberDiscountEnabled ? '1.5px solid #7C3AED' : '1.5px solid #E2E8F0',
+                        background: memberDiscountEnabled ? '#7C3AED' : '#F8FAFC',
+                        color: memberDiscountEnabled ? '#fff' : '#94A3B8',
+                      }}>
+                      {memberDiscountEnabled
+                        ? `✓ Diskon Member — hemat Rp ${fmt(memberDiscount)}`
+                        : '✗ Diskon Member (nonaktif)'}
+                    </button>
                   </div>
                 )}
-                {member && !memberEligible && promo?.memberDiscountActive && (
+                {member && !voucher && promo?.memberDiscountActive && memberBase > 0 && memberBase < (promo?.memberDiscountMin || 0) && (
                   <div style={{ fontSize: '11px', color: 'var(--orange)', marginTop: '6px' }}>
-                    Kode voucher sudah aktif {promo?.memberDiscountMin ? `Rp ${fmt(promo.memberDiscountMin)}` : ''} — hapus untuk beralih ke diskon member
+                    Min. belanja Rp {fmt(promo.memberDiscountMin)} untuk diskon member
+                  </div>
+                )}
+                {member && voucher && (
+                  <div style={{ fontSize: '11px', color: 'var(--orange)', marginTop: '6px' }}>
+                    Voucher aktif — diskon member tidak berlaku bersamaan
                   </div>
                 )}
               </div>
