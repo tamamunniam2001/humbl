@@ -63,6 +63,10 @@ export async function POST(req, { params }) {
 
   try {
     const result = await sendFonnte({ target, message })
+    // Update welcomeSentAt bila template ini adalah template welcome
+    if (template.isWelcome) {
+      await prisma.member.update({ where: { id: member.id }, data: { welcomeSentAt: new Date() } })
+    }
     return NextResponse.json({ success: true, target, template: template.name, message, result })
   } catch (e) {
     return NextResponse.json({ message: `Gagal mengirim pesan: ${e.message}` }, { status: 502 })

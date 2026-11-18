@@ -123,6 +123,7 @@ export default function MembersPage() {
         ...(waVoucherId ? { voucherId: waVoucherId } : {}),
       })
       setWaDone(res.data)
+      load() // refresh list agar welcomeSentAt terupdate
     } catch (err) {
       setWaError(err.response?.data?.message || 'Gagal mengirim pesan')
     } finally { setWaSending(false) }
