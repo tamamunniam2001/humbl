@@ -4,11 +4,441 @@ import { AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Cart
 import Sidebar from '@/components/Sidebar'
 import api from '@/lib/api'
 
+const MONTHS_FULL = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember']
+
 const fmt = n => 'Rp ' + Number(n || 0).toLocaleString('id-ID')
 const fmtK = n => fmt(n)
 const pct = n => (n === null || n === undefined) ? null : Number(n).toFixed(1)
 const MONTHS = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des']
 const COLORS = ['#6366F1','#10B981','#F59E0B','#EF4444','#8B5CF6','#06B6D4','#F97316','#84CC16','#EC4899','#14B8A6']
+
+// ── PDF Generator ──
+async function generatePDF(data, month, year, mode) {
+  const { jsPDF } = await import('jspdf')
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+  const W = 210, H = 297
+  const L = 14, R = W - 14
+  const fmtN = n => 'Rp ' + Number(n || 0).toLocaleString('id-ID')
+  const fmtNum = n => Number(n || 0).toLocaleString('id-ID')
+  const isMonthly = mode === 'monthly'
+  const periodLabel = isMonthly
+    ? `${MONTHS_FULL[month]} ${year}`
+    : `Tahun ${year}`
+
+  const { kpi, kas, monthlyChart, topProductsMonth, topProductsYear,
+    expCatMonth, expCatYear, payMethodMonth, payMethodYear,
+    salesCatMonth, ingredientAnalysis, waste, voucher, memberTx,
+    kasirPerformance, expenseDetails, period } = data
+
+  let y = 0
+
+  // ── helpers ──
+  function newPage() {
+    doc.addPage()
+    y = 0
+    drawPageHeader()
+  }
+
+  function checkY(need = 20) {
+    if (y + need > H - 16) newPage()
+  }
+
+  function drawPageHeader() {
+    doc.setFillColor(15, 23, 41)
+    doc.rect(0, 0, W, 10, 'F')
+    doc.setFontSize(7)
+    doc.setTextColor(136, 150, 179)
+    doc.text('LAPORAN ANALISIS BISNIS — HAMBL', L, 6.5)
+    doc.text(periodLabel, R, 6.5, { align: 'right' })
+    y = 16
+  }
+
+  function sectionTitle(title) {
+    checkY(14)
+    doc.setFillColor(99, 102, 241)
+    doc.rect(L, y, 3, 6, 'F')
+    doc.setFontSize(11)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(15, 23, 41)
+    doc.text(title, L + 6, y + 4.5)
+    y += 10
+  }
+
+  function kpiRow(items) {
+    checkY(22)
+    const colW = (R - L) / items.length
+    items.forEach((item, i) => {
+      const x = L + i * colW
+      doc.setFillColor(248, 250, 255)
+      doc.setDrawColor(226, 232, 248)
+      doc.roundedRect(x, y, colW - 3, 18, 2, 2, 'FD')
+      doc.setFontSize(7)
+      doc.setFont('helvetica', 'normal')
+      doc.setTextColor(136, 150, 179)
+      doc.text(item.label.toUpperCase(), x + 4, y + 5)
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(item.color || '#0F1729')
+      doc.text(String(item.value), x + 4, y + 12)
+      if (item.sub) {
+        doc.setFontSize(6.5)
+        doc.setFont('helvetica', 'normal')
+        doc.setTextColor(176, 188, 204)
+        doc.text(item.sub, x + 4, y + 16.5)
+      }
+    })
+    y += 22
+  }
+
+  function tableHeader(cols) {
+    doc.setFillColor(241, 245, 249)
+    doc.rect(L, y, R - L, 7, 'F')
+    doc.setFontSize(7.5)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(136, 150, 179)
+    cols.forEach(col => {
+      doc.text(col.label, col.align === 'right' ? col.x + col.w - 1 : col.x + 2, y + 4.8, { align: col.align || 'left' })
+    })
+    y += 7
+  }
+
+  function tableRow(cols, values, rowIdx) {
+    const rowH = 7
+    checkY(rowH + 2)
+    if (rowIdx % 2 === 1) {
+      doc.setFillColor(250, 251, 255)
+      doc.rect(L, y, R - L, rowH, 'F')
+    }
+    doc.setFontSize(8)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(55, 65, 81)
+    cols.forEach((col, ci) => {
+      const val = String(values[ci] ?? '')
+      if (col.align === 'right') {
+        doc.text(val, col.x + col.w - 1, y + 5, { align: 'right' })
+      } else {
+        const maxW = col.w - 3
+        const truncated = doc.getTextWidth(val) > maxW
+          ? val.slice(0, Math.floor(val.length * maxW / doc.getTextWidth(val)) - 1) + '…'
+          : val
+        doc.text(truncated, col.x + 2, y + 5)
+      }
+    })
+    doc.setDrawColor(241, 245, 249)
+    doc.line(L, y + rowH, R, y + rowH)
+    y += rowH
+  }
+
+  function barMini(label, value, maxVal, color, total) {
+    checkY(9)
+    const pct = maxVal > 0 ? value / maxVal : 0
+    const barW = (R - L - 60) * pct
+    doc.setFontSize(8)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(55, 65, 81)
+    doc.text(label, L, y + 4)
+    doc.setFillColor(241, 245, 249)
+    doc.roundedRect(L + 55, y + 1, R - L - 60, 4, 1, 1, 'F')
+    const rgb = hexToRgb(color)
+    if (rgb) doc.setFillColor(rgb.r, rgb.g, rgb.b)
+    if (barW > 0) doc.roundedRect(L + 55, y + 1, barW, 4, 1, 1, 'F')
+    doc.setFontSize(7)
+    doc.setTextColor(136, 150, 179)
+    const pctStr = total > 0 ? `${(value / total * 100).toFixed(1)}%` : ''
+    doc.text(`${fmtN(value)}  ${pctStr}`, R, y + 4.5, { align: 'right' })
+    y += 9
+  }
+
+  function hexToRgb(hex) {
+    const r = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+    return r ? { r: parseInt(r[1], 16), g: parseInt(r[2], 16), b: parseInt(r[3], 16) } : null
+  }
+
+  function divider() {
+    checkY(6)
+    doc.setDrawColor(226, 232, 248)
+    doc.line(L, y, R, y)
+    y += 5
+  }
+
+  // ══════════════════════════════════════════
+  // COVER PAGE
+  // ══════════════════════════════════════════
+  doc.setFillColor(15, 23, 41)
+  doc.rect(0, 0, W, H, 'F')
+
+  // accent bar
+  doc.setFillColor(99, 102, 241)
+  doc.rect(0, 0, 6, H, 'F')
+
+  // logo area
+  doc.setFillColor(30, 42, 59)
+  doc.roundedRect(L + 6, 40, 60, 20, 4, 4, 'F')
+  doc.setFontSize(16)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(99, 102, 241)
+  doc.text('HAMBL', L + 10, 53)
+
+  doc.setFontSize(22)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(255, 255, 255)
+  doc.text('Laporan Analisis Bisnis', L + 6, 82)
+
+  doc.setFontSize(13)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(136, 150, 179)
+  doc.text(isMonthly ? 'Laporan Bulanan' : 'Laporan Tahunan', L + 6, 92)
+
+  doc.setFontSize(18)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(99, 102, 241)
+  doc.text(periodLabel, L + 6, 106)
+
+  // KPI highlight on cover
+  const coverKpis = [
+    { label: 'Total Penjualan', value: fmtN(isMonthly ? kpi.revenue.month : kpi.revenue.year) },
+    { label: 'Total Pengeluaran', value: fmtN(isMonthly ? kpi.expense.month : kpi.expense.year) },
+    { label: 'Laba Bersih', value: fmtN(isMonthly ? kpi.laba.month : kpi.laba.year) },
+    { label: 'Total Transaksi', value: fmtNum(isMonthly ? kpi.transactions.month : kpi.transactions.year) },
+  ]
+  coverKpis.forEach((k, i) => {
+    const cx = L + 6 + (i % 2) * 88
+    const cy = 122 + Math.floor(i / 2) * 28
+    doc.setFillColor(30, 42, 59)
+    doc.roundedRect(cx, cy, 82, 22, 3, 3, 'F')
+    doc.setFontSize(7)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(136, 150, 179)
+    doc.text(k.label.toUpperCase(), cx + 4, cy + 7)
+    doc.setFontSize(11)
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(255, 255, 255)
+    doc.text(k.value, cx + 4, cy + 16)
+  })
+
+  // footer cover
+  doc.setFontSize(7)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(55, 65, 81)
+  doc.text(`Digenerate: ${new Date().toLocaleDateString('id-ID', { day:'2-digit', month:'long', year:'numeric' })}`, L + 6, H - 16)
+  doc.text('CONFIDENTIAL — Hanya untuk internal', R, H - 16, { align: 'right' })
+
+  // ══════════════════════════════════════════
+  // PAGE 2 — KPI & KAS
+  // ══════════════════════════════════════════
+  doc.addPage()
+  drawPageHeader()
+
+  sectionTitle('Ringkasan Kinerja Utama (KPI)')
+  kpiRow([
+    { label: 'Total Penjualan', value: fmtN(isMonthly ? kpi.revenue.month : kpi.revenue.year), sub: isMonthly ? `vs ${fmtN(kpi.revenue.prev)} bln lalu` : '', color: '#6366F1' },
+    { label: 'Total Pengeluaran', value: fmtN(isMonthly ? kpi.expense.month : kpi.expense.year), sub: isMonthly ? `vs ${fmtN(kpi.expense.prev)} bln lalu` : '', color: '#EF4444' },
+    { label: 'Laba Bersih', value: fmtN(isMonthly ? kpi.laba.month : kpi.laba.year), sub: `Net margin ${isMonthly ? kpi.netMarginMonth?.toFixed(1) : kpi.netMarginYear?.toFixed(1)}%`, color: (isMonthly ? kpi.laba.month : kpi.laba.year) >= 0 ? '#10B981' : '#EF4444' },
+    { label: 'Total Transaksi', value: fmtNum(isMonthly ? kpi.transactions.month : kpi.transactions.year), sub: `Avg ${fmtN(kpi.avgTxValue)}/tx`, color: '#F59E0B' },
+  ])
+  kpiRow([
+    { label: 'Rata-rata/Hari', value: fmtN(Math.round(kpi.avgDailySales)), sub: `${kpi.daysWithSales} hari aktif`, color: '#8B5CF6' },
+    { label: 'Kas Akhir Bulan', value: fmtN(kas.kasAkhir), sub: `Kas awal ${fmtN(kas.kasAwal)}`, color: kas.kasAkhir >= 0 ? '#10B981' : '#EF4444' },
+    { label: 'Transaksi Member', value: fmtNum(memberTx.count), sub: fmtN(memberTx.total), color: '#06B6D4' },
+    { label: 'Waste Bulan Ini', value: fmtN(waste.total), sub: `${waste.count} catatan`, color: '#F97316' },
+  ])
+
+  divider()
+  sectionTitle('Ringkasan Kas')
+  const kasRows = [
+    ['Kas Awal Bulan', fmtN(kas.kasAwal)],
+    ['Total Penjualan (Cash)', fmtN(kas.totalRevMonth)],
+    ['Total Pengeluaran', fmtN(kas.totalExpMonth)],
+    ['Kas Akhir Bulan', fmtN(kas.kasAkhir)],
+  ]
+  const kasCols = [
+    { label: 'Keterangan', x: L, w: 100 },
+    { label: 'Nominal', x: L + 100, w: R - L - 100, align: 'right' },
+  ]
+  tableHeader(kasCols)
+  kasRows.forEach((row, i) => {
+    const isBold = i === 3
+    if (isBold) {
+      doc.setFont('helvetica', 'bold')
+      doc.setTextColor(16, 185, 129)
+    }
+    tableRow(kasCols, row, i)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(55, 65, 81)
+  })
+
+  divider()
+  sectionTitle('Diskon & Promosi')
+  kpiRow([
+    { label: 'Total Diskon Manual', value: fmtN(kpi.discountTotal), color: '#F59E0B' },
+    { label: 'Diskon Voucher', value: fmtN(kpi.voucherDiscount), sub: `${voucher.count} transaksi`, color: '#8B5CF6' },
+    { label: 'Diskon Member', value: fmtN(kpi.memberDiscount), sub: `${memberTx.count} transaksi`, color: '#06B6D4' },
+  ])
+
+  // ══════════════════════════════════════════
+  // PAGE 3 — PENJUALAN
+  // ══════════════════════════════════════════
+  newPage()
+  sectionTitle('Metode Pembayaran')
+  const pmData = isMonthly ? payMethodMonth : payMethodYear
+  const pmTotal = pmData.reduce((s, p) => s + p.total, 0)
+  const pmColors = { CASH: '#10B981', QRIS: '#6366F1', TRANSFER: '#F59E0B', NONTUNAI: '#8B5CF6' }
+  pmData.forEach(p => barMini(p.method, p.total, pmTotal, pmColors[p.method] || '#6366F1', pmTotal))
+
+  divider()
+  sectionTitle('Penjualan per Kategori Produk')
+  const scData = isMonthly ? salesCatMonth : data.salesCatYear
+  const scTotal = scData.reduce((s, c) => s + c.total, 0)
+  const scColors = ['#6366F1','#10B981','#F59E0B','#EF4444','#8B5CF6','#06B6D4','#F97316','#84CC16']
+  scData.slice(0, 8).forEach((c, i) => barMini(c.category || 'Lainnya', c.total, scTotal, scColors[i % scColors.length], scTotal))
+
+  divider()
+  sectionTitle(`Top Produk Terlaris — ${isMonthly ? period.monthName + ' ' + year : 'Tahun ' + year}`)
+  const prodData = isMonthly ? topProductsMonth : topProductsYear
+  const prodCols = [
+    { label: '#', x: L, w: 10 },
+    { label: 'Produk', x: L + 10, w: 80 },
+    { label: 'Qty', x: L + 90, w: 25, align: 'right' },
+    { label: 'Pendapatan', x: L + 115, w: 45, align: 'right' },
+    { label: 'Kontribusi', x: L + 160, w: R - L - 160, align: 'right' },
+  ]
+  tableHeader(prodCols)
+  prodData.slice(0, 15).forEach((p, i) => {
+    const contrib = (isMonthly ? kpi.revenue.month : kpi.revenue.year) > 0
+      ? (p.revenue / (isMonthly ? kpi.revenue.month : kpi.revenue.year) * 100).toFixed(1) + '%'
+      : '0%'
+    tableRow(prodCols, [i + 1, p.name, fmtNum(p.qty), fmtN(p.revenue), contrib], i)
+  })
+  if (prodData.length === 0) {
+    doc.setFontSize(9); doc.setTextColor(176, 188, 204)
+    doc.text('Belum ada data produk', L, y + 6); y += 12
+  }
+
+  // ══════════════════════════════════════════
+  // PAGE 4 — PENGELUARAN
+  // ══════════════════════════════════════════
+  newPage()
+  sectionTitle('Pengeluaran per Kategori')
+  const ecData = isMonthly ? expCatMonth : expCatYear
+  const ecTotal = ecData.reduce((s, c) => s + c.total, 0)
+  ecData.forEach((c, i) => barMini(c.category || 'Lainnya', c.total, ecTotal, scColors[i % scColors.length], ecTotal))
+
+  divider()
+  sectionTitle('Detail Pengeluaran')
+  const allDetails = [...(expenseDetails.persediaan || []), ...(expenseDetails.lainnya || [])]
+  const detCols = [
+    { label: 'Item', x: L, w: 70 },
+    { label: 'Qty', x: L + 70, w: 25, align: 'right' },
+    { label: 'Satuan', x: L + 95, w: 25 },
+    { label: 'Kategori', x: L + 120, w: 35 },
+    { label: 'Total', x: L + 155, w: R - L - 155, align: 'right' },
+  ]
+  tableHeader(detCols)
+  allDetails.forEach((d, i) => {
+    const qtyStr = d.count > 1 ? `${d.qty ?? '-'} (${d.count}x)` : String(d.qty ?? '-')
+    tableRow(detCols, [d.name || '-', qtyStr, d.satuan || '-', d.category || '-', fmtN(d.subtotal)], i)
+  })
+  if (allDetails.length === 0) {
+    doc.setFontSize(9); doc.setTextColor(176, 188, 204)
+    doc.text('Tidak ada data pengeluaran', L, y + 6); y += 12
+  }
+  // Total row
+  checkY(10)
+  doc.setFillColor(241, 245, 249)
+  doc.rect(L, y, R - L, 8, 'F')
+  doc.setFontSize(8.5)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(15, 23, 41)
+  doc.text('TOTAL', L + 2, y + 5.5)
+  doc.setTextColor(239, 68, 68)
+  doc.text(fmtN(allDetails.reduce((s, d) => s + (d.subtotal || 0), 0)), R - 1, y + 5.5, { align: 'right' })
+  y += 12
+
+  // ══════════════════════════════════════════
+  // PAGE 5 — BAHAN BAKU
+  // ══════════════════════════════════════════
+  newPage()
+  sectionTitle('Analisis Bahan Baku')
+  const totalBeli = ingredientAnalysis.reduce((s, r) => s + r.totalSpent, 0)
+  const surplus = ingredientAnalysis.filter(r => r.selisih > 0).length
+  const defisit = ingredientAnalysis.filter(r => r.selisih < 0).length
+  kpiRow([
+    { label: 'Total Pembelian Bahan', value: fmtN(totalBeli), color: '#6366F1' },
+    { label: 'Surplus (Sisa Stok)', value: `${surplus} bahan`, color: '#F59E0B' },
+    { label: 'Defisit (Kurang Beli)', value: `${defisit} bahan`, color: '#EF4444' },
+  ])
+
+  const ingCols = [
+    { label: 'Bahan Baku', x: L, w: 55 },
+    { label: 'Satuan', x: L + 55, w: 20 },
+    { label: 'Dibeli', x: L + 75, w: 25, align: 'right' },
+    { label: 'Dipakai', x: L + 100, w: 25, align: 'right' },
+    { label: 'Selisih', x: L + 125, w: 25, align: 'right' },
+    { label: 'Est. Nilai', x: L + 150, w: R - L - 150, align: 'right' },
+  ]
+  tableHeader(ingCols)
+  ingredientAnalysis.forEach((r, i) => {
+    const selisihStr = (r.selisih > 0 ? '+' : '') + r.selisih.toLocaleString('id-ID', { maximumFractionDigits: 2 })
+    const nilaiStr = r.estimasiNilaiSelisih !== 0 ? fmtN(Math.abs(r.estimasiNilaiSelisih)) : '-'
+    tableRow(ingCols, [
+      r.name,
+      r.unit || '-',
+      r.totalBought > 0 ? r.totalBought.toLocaleString('id-ID', { maximumFractionDigits: 2 }) : '-',
+      r.totalUsed > 0 ? r.totalUsed.toLocaleString('id-ID', { maximumFractionDigits: 2 }) : '-',
+      selisihStr,
+      nilaiStr,
+    ], i)
+  })
+  if (ingredientAnalysis.length === 0) {
+    doc.setFontSize(9); doc.setTextColor(176, 188, 204)
+    doc.text('Belum ada data bahan baku', L, y + 6); y += 12
+  }
+
+  // ══════════════════════════════════════════
+  // PAGE 6 — OPERASIONAL
+  // ══════════════════════════════════════════
+  newPage()
+  sectionTitle('Performa Kasir')
+  const kpCols = [
+    { label: '#', x: L, w: 10 },
+    { label: 'Nama Kasir', x: L + 10, w: 80 },
+    { label: 'Transaksi', x: L + 90, w: 35, align: 'right' },
+    { label: 'Total Penjualan', x: L + 125, w: R - L - 125, align: 'right' },
+  ]
+  tableHeader(kpCols)
+  kasirPerformance.forEach((k, i) => tableRow(kpCols, [i + 1, k.name, fmtNum(k.count), fmtN(k.total)], i))
+  if (kasirPerformance.length === 0) {
+    doc.setFontSize(9); doc.setTextColor(176, 188, 204)
+    doc.text('Belum ada data kasir', L, y + 6); y += 12
+  }
+
+  divider()
+  sectionTitle('Perbandingan Bulanan — Penjualan vs Pengeluaran')
+  const mcCols = [
+    { label: 'Bulan', x: L, w: 30 },
+    { label: 'Penjualan', x: L + 30, w: 50, align: 'right' },
+    { label: 'Pengeluaran', x: L + 80, w: 50, align: 'right' },
+    { label: 'Laba', x: L + 130, w: R - L - 130, align: 'right' },
+  ]
+  tableHeader(mcCols)
+  monthlyChart.forEach((m, i) => tableRow(mcCols, [m.month, fmtN(m.revenue), fmtN(m.expense), fmtN(m.laba)], i))
+
+  // ── page numbers ──
+  const totalPages = doc.getNumberOfPages()
+  for (let p = 1; p <= totalPages; p++) {
+    doc.setPage(p)
+    if (p === 1) continue // cover no footer
+    doc.setFontSize(7)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(136, 150, 179)
+    doc.text(`Halaman ${p} dari ${totalPages}`, W / 2, H - 6, { align: 'center' })
+    doc.setDrawColor(226, 232, 248)
+    doc.line(L, H - 10, R, H - 10)
+  }
+
+  const filename = `Laporan_Analisis_${isMonthly ? MONTHS_FULL[month] : 'Tahunan'}_${year}.pdf`
+  doc.save(filename)
+}
 
 function GrowthBadge({ value }) {
   if (value === null || value === undefined) return null
@@ -179,6 +609,25 @@ export default function AnalisisPage() {
   const [tab, setTab] = useState('overview')
   const [sortBy, setSortBy] = useState('revenue')
   const [expCatFilter, setExpCatFilter] = useState(null)
+  const [pdfLoading, setPdfLoading] = useState(false)
+  const [pdfDropdown, setPdfDropdown] = useState(false)
+  const pdfRef = useRef(null)
+
+  useEffect(() => {
+    function handleClick(e) {
+      if (pdfRef.current && !pdfRef.current.contains(e.target)) setPdfDropdown(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  async function handleDownloadPDF(mode) {
+    setPdfDropdown(false)
+    setPdfLoading(true)
+    try { await generatePDF(data, month, year, mode) }
+    catch (e) { alert('Gagal generate PDF: ' + e.message) }
+    finally { setPdfLoading(false) }
+  }
 
   const load = useCallback((m, y) => {
     setLoading(true)
@@ -248,6 +697,45 @@ export default function AnalisisPage() {
               {MONTHS.map((m, i) => <option key={i} value={i}>{m} {year}</option>)}
             </select>
             {loading && <span style={{ fontSize:'11px', color:'#8896B3' }}>Memuat...</span>}
+            <div ref={pdfRef} style={{ position:'relative' }}>
+              <button
+                onClick={() => setPdfDropdown(v => !v)}
+                disabled={pdfLoading}
+                style={{ display:'flex', alignItems:'center', gap:'6px', padding:'6px 14px', borderRadius:'9px', border:'1.5px solid #6366F1', background: pdfLoading ? '#F1F5F9' : '#6366F1', color:'#fff', fontSize:'12px', fontWeight:'700', cursor: pdfLoading ? 'not-allowed' : 'pointer', fontFamily:'inherit', opacity: pdfLoading ? 0.7 : 1 }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                {pdfLoading ? 'Generating...' : 'Download PDF'}
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+              {pdfDropdown && (
+                <div style={{ position:'absolute', top:'calc(100% + 6px)', right:0, background:'#fff', border:'1.5px solid #E2E8F8', borderRadius:'12px', boxShadow:'0 8px 24px rgba(15,23,41,0.12)', zIndex:100, minWidth:'180px', overflow:'hidden' }}>
+                  <div style={{ padding:'8px 12px 6px', fontSize:'10px', fontWeight:'700', color:'#8896B3', letterSpacing:'0.4px', textTransform:'uppercase' }}>Pilih Periode</div>
+                  <button onClick={() => handleDownloadPDF('monthly')}
+                    style={{ display:'flex', alignItems:'center', gap:'10px', width:'100%', padding:'10px 14px', border:'none', background:'none', cursor:'pointer', fontFamily:'inherit', textAlign:'left' }}
+                    onMouseEnter={e => e.currentTarget.style.background='#F8FAFF'}
+                    onMouseLeave={e => e.currentTarget.style.background='none'}>
+                    <div style={{ width:'28px', height:'28px', borderRadius:'8px', background:'#EFF4FF', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6366F1" strokeWidth="2.5" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    </div>
+                    <div>
+                      <div style={{ fontSize:'12px', fontWeight:'700', color:'#0F1729' }}>Laporan Bulanan</div>
+                      <div style={{ fontSize:'10px', color:'#8896B3' }}>{MONTHS_FULL[month]} {year}</div>
+                    </div>
+                  </button>
+                  <button onClick={() => handleDownloadPDF('yearly')}
+                    style={{ display:'flex', alignItems:'center', gap:'10px', width:'100%', padding:'10px 14px', border:'none', background:'none', cursor:'pointer', fontFamily:'inherit', textAlign:'left', borderTop:'1px solid #F1F5F9' }}
+                    onMouseEnter={e => e.currentTarget.style.background='#F8FAFF'}
+                    onMouseLeave={e => e.currentTarget.style.background='none'}>
+                    <div style={{ width:'28px', height:'28px', borderRadius:'8px', background:'#ECFDF5', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="2.5" strokeLinecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h8M8 18h5"/></svg>
+                    </div>
+                    <div>
+                      <div style={{ fontSize:'12px', fontWeight:'700', color:'#0F1729' }}>Laporan Tahunan</div>
+                      <div style={{ fontSize:'10px', color:'#8896B3' }}>Tahun {year}</div>
+                    </div>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
