@@ -214,6 +214,57 @@ const pgStyles = (
   `}</style>
 )
 
+function EditItemNameInput({ value, items, onChange }) {
+  const [show, setShow] = useState(false)
+  const ref = useRef(null)
+
+  const suggestions = value.trim().length === 0
+    ? items.filter(i => !i.isManual).slice(0, 8)
+    : items.filter(i => !i.isManual && i.name.toLowerCase().includes(value.trim().toLowerCase())).slice(0, 8)
+
+  useEffect(() => {
+    function handleClick(e) {
+      if (ref.current && !ref.current.contains(e.target)) setShow(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  return (
+    <div ref={ref} style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+      <input
+        className="input"
+        placeholder="Nama item belanja"
+        value={value}
+        autoComplete="off"
+        onChange={e => { onChange(e.target.value, null); setShow(true) }}
+        onFocus={() => setShow(true)}
+        style={{ fontSize: '12.5px', width: '100%' }}
+      />
+      {show && suggestions.length > 0 && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '3px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: '10px', boxShadow: '0 8px 24px rgba(13,21,38,0.14)', zIndex: 50, maxHeight: '200px', overflowY: 'auto' }}>
+          {suggestions.map(item => (
+            <button
+              key={item.id}
+              type="button"
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => { onChange(item.name, item); setShow(false) }}
+              style={{ display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between', gap: '8px', padding: '8px 12px', background: 'none', border: 'none', borderBottom: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left' }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--surface2)'}
+              onMouseLeave={e => e.currentTarget.style.background = ''}
+            >
+              <span style={{ fontSize: '12.5px', fontWeight: '600', color: 'var(--text)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
+              {item.category && (
+                <span style={{ fontSize: '10px', fontWeight: '700', color: 'var(--accent)', background: 'var(--accent-light)', padding: '1px 7px', borderRadius: '20px', border: '1px solid rgba(74,124,199,0.2)', whiteSpace: 'nowrap', flexShrink: 0 }}>{item.category}</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function BelanjaPage() {
   const [activeTab, setActiveTab] = useState('FORM') // FORM, HISTORY
   const [saldo, setSaldo] = useState(0)
@@ -1201,9 +1252,14 @@ export default function BelanjaPage() {
                     {editForm.items.map((it, idx) => (
                       <div key={it.key} className="pg-edit-item">
                         <div className="pg-edit-item-head">
-                          <input className="input" placeholder="Nama item belanja" value={it.itemName}
-                            onChange={e => setEditItemField(idx, 'itemName', e.target.value)}
-                            style={{ fontSize: '12.5px' }} />
+                          <EditItemNameInput
+                            value={it.itemName}
+                            items={items}
+                            onChange={(name, item) => {
+                              setEditItemField(idx, 'itemName', name)
+                              if (item) setEditItemField(idx, 'itemId', item.id)
+                            }}
+                          />
                           <button type="button" onClick={() => removeEditItem(idx)} title="Hapus item"
                             style={{ width: '34px', height: '34px', borderRadius: '9px', border: '1px solid #FECACA', background: 'var(--red-light)', color: 'var(--red)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
