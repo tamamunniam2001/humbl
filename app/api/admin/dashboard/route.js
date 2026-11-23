@@ -62,18 +62,18 @@ export async function GET(req) {
     monthlyTxRaw, monthlyExpRaw,
     yearlyTxRaw, yearlyExpRaw,
   ] = await Promise.all([
-    prisma.orderItem.aggregate({ where: { transaction: { createdAt: { gte: today, lte: tomorrow }, status: 'COMPLETED', deletedAt: null } }, _sum: { subtotal: true }, _count: true }),
-    prisma.orderItem.aggregate({ where: { transaction: { createdAt: { gte: thisMonthStart, lte: thisMonthEnd }, status: 'COMPLETED', deletedAt: null } }, _sum: { subtotal: true }, _count: true }),
-    prisma.orderItem.aggregate({ where: { transaction: { createdAt: { gte: lastMonthStart, lte: lastMonthEnd }, status: 'COMPLETED', deletedAt: null } }, _sum: { subtotal: true }, _count: true }),
+    prisma.transaction.aggregate({ where: { createdAt: { gte: today, lte: tomorrow }, status: 'COMPLETED', deletedAt: null }, _sum: { total: true }, _count: true }),
+    prisma.transaction.aggregate({ where: { createdAt: { gte: thisMonthStart, lte: thisMonthEnd }, status: 'COMPLETED', deletedAt: null }, _sum: { total: true }, _count: true }),
+    prisma.transaction.aggregate({ where: { createdAt: { gte: lastMonthStart, lte: lastMonthEnd }, status: 'COMPLETED', deletedAt: null }, _sum: { total: true }, _count: true }),
     prisma.product.count({ where: { isActive: true } }),
     prisma.employee.count({ where: { isActive: true } }),
     prisma.transaction.findMany({ where: { status: 'COMPLETED', deletedAt: null }, take: 5, orderBy: { createdAt: 'desc' }, include: { cashier: { select: { name: true } } } }),
     prisma.orderItem.groupBy({ by: ['productId'], where: { transaction: { status: 'COMPLETED', deletedAt: null } }, _sum: { qty: true, subtotal: true }, orderBy: { _sum: { subtotal: 'desc' } }, take: 5 }),
     prisma.transaction.groupBy({ by: ['payMethod'], where: { createdAt: { gte: today, lte: tomorrow }, status: 'COMPLETED', deletedAt: null }, _sum: { total: true }, _count: true }),
     prisma.attendance.findMany({ where: { date: { gte: today, lte: tomorrow } }, include: { employee: { select: { name: true } } }, orderBy: { date: 'desc' } }),
-    prisma.orderItem.findMany({ where: { transaction: { createdAt: { gte: thisMonthStart, lte: thisMonthEnd }, status: 'COMPLETED', deletedAt: null } }, select: { subtotal: true, transaction: { select: { createdAt: true } } } }),
+    prisma.transaction.findMany({ where: { createdAt: { gte: thisMonthStart, lte: thisMonthEnd }, status: 'COMPLETED', deletedAt: null }, select: { total: true, createdAt: true } }),
     prisma.expense.findMany({ where: { date: { gte: thisMonthStart, lte: thisMonthEnd } }, select: { total: true, date: true } }),
-    prisma.orderItem.findMany({ where: { transaction: { createdAt: { gte: yearStart, lte: yearEnd }, status: 'COMPLETED', deletedAt: null } }, select: { subtotal: true, transaction: { select: { createdAt: true } } } }),
+    prisma.transaction.findMany({ where: { createdAt: { gte: yearStart, lte: yearEnd }, status: 'COMPLETED', deletedAt: null }, select: { total: true, createdAt: true } }),
     prisma.expense.findMany({ where: { date: { gte: yearStart, lte: yearEnd } }, select: { total: true, date: true } }),
   ])
 
@@ -89,9 +89,9 @@ export async function GET(req) {
 
   const dailyChart = daysList.map(({ key, label }) => {
     const rev = monthlyTxRaw.filter(t => {
-      const w = toWIB(t.transaction.createdAt)
+      const w = toWIB(t.createdAt)
       return `${w.getUTCFullYear()}-${pad(w.getUTCMonth() + 1)}-${pad(w.getUTCDate())}` === key
-    }).reduce((s, t) => s + t.subtotal, 0)
+    }).reduce((s, t) => s + t.total, 0)
 
     const exp = monthlyExpRaw.filter(e => {
       const w = toWIB(e.date)
@@ -110,9 +110,9 @@ export async function GET(req) {
     const endT = new Date(`${currCutoffYear}-${pad(currM)}-19T23:59:59.999+07:00`).getTime()
 
     const rev = yearlyTxRaw.filter(t => {
-      const time = new Date(t.transaction.createdAt).getTime()
+      const time = new Date(t.createdAt).getTime()
       return time >= startT && time <= endT
-    }).reduce((s, t) => s + t.subtotal, 0)
+    }).reduce((s, t) => s + t.total, 0)
 
     const exp = yearlyExpRaw.filter(e => {
       const time = new Date(e.date).getTime()
@@ -127,14 +127,14 @@ export async function GET(req) {
     ? await prisma.product.findMany({ where: { id: { in: productIds } }, select: { id: true, name: true } })
     : []
 
-  const monthRevenue = monthTx._sum.subtotal || 0
-  const lastMonthRevenue = lastMonthTx._sum.subtotal || 0
+  const monthRevenue = monthTx._sum.total || 0
+  const lastMonthRevenue = lastMonthTx._sum.total || 0
   const monthTrend = lastMonthRevenue > 0 ? Math.round(((monthRevenue - lastMonthRevenue) / lastMonthRevenue) * 100) : null
   const payMethods = { CASH: 0, QRIS: 0, TRANSFER: 0, NONTUNAI: 0 }
   payMethodToday.forEach(p => { payMethods[p.payMethod] = p._sum.total || 0 })
 
   return NextResponse.json({
-    today: { revenue: todayTx._sum.subtotal || 0, transactions: todayTx._count },
+    today: { revenue: todayTx._sum.total || 0, transactions: todayTx._count },
     month: { revenue: monthRevenue, transactions: monthTx._count, trend: monthTrend },
     totalProducts, totalEmployees,
     recentTransactions: recentTx,

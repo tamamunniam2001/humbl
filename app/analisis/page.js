@@ -297,10 +297,10 @@ async function generatePDF(data, month, year, mode) {
   const prodData = isMonthly ? topProductsMonth : topProductsYear
   const prodCols = [
     { label: '#', x: L, w: 10 },
-    { label: 'Produk', x: L + 10, w: 80 },
-    { label: 'Qty', x: L + 90, w: 25, align: 'right' },
-    { label: 'Pendapatan', x: L + 115, w: 45, align: 'right' },
-    { label: 'Kontribusi', x: L + 160, w: R - L - 160, align: 'right' },
+    { label: 'Produk', x: L + 10, w: 75 },
+    { label: 'Qty', x: L + 85, w: 22, align: 'right' },
+    { label: 'Pendapatan', x: L + 107, w: 48, align: 'right' },
+    { label: 'Kontribusi', x: L + 155, w: R - L - 155, align: 'right' },
   ]
   tableHeader(prodCols)
   prodData.slice(0, 15).forEach((p, i) => {
@@ -327,11 +327,11 @@ async function generatePDF(data, month, year, mode) {
   sectionTitle('Detail Pengeluaran')
   const allDetails = [...(expenseDetails.persediaan || []), ...(expenseDetails.lainnya || [])]
   const detCols = [
-    { label: 'Item', x: L, w: 70 },
-    { label: 'Qty', x: L + 70, w: 25, align: 'right' },
-    { label: 'Satuan', x: L + 95, w: 25 },
-    { label: 'Kategori', x: L + 120, w: 35 },
-    { label: 'Total', x: L + 155, w: R - L - 155, align: 'right' },
+    { label: 'Item', x: L, w: 65 },
+    { label: 'Qty', x: L + 65, w: 22, align: 'right' },
+    { label: 'Satuan', x: L + 87, w: 22 },
+    { label: 'Kategori', x: L + 109, w: 35 },
+    { label: 'Total', x: L + 144, w: R - L - 144, align: 'right' },
   ]
   tableHeader(detCols)
   allDetails.forEach((d, i) => {
@@ -369,12 +369,12 @@ async function generatePDF(data, month, year, mode) {
   ])
 
   const ingCols = [
-    { label: 'Bahan Baku', x: L, w: 55 },
-    { label: 'Satuan', x: L + 55, w: 20 },
-    { label: 'Dibeli', x: L + 75, w: 25, align: 'right' },
-    { label: 'Dipakai', x: L + 100, w: 25, align: 'right' },
-    { label: 'Selisih', x: L + 125, w: 25, align: 'right' },
-    { label: 'Est. Nilai', x: L + 150, w: R - L - 150, align: 'right' },
+    { label: 'Bahan Baku', x: L, w: 50 },
+    { label: 'Satuan', x: L + 50, w: 18 },
+    { label: 'Dibeli', x: L + 68, w: 28, align: 'right' },
+    { label: 'Dipakai', x: L + 96, w: 28, align: 'right' },
+    { label: 'Selisih', x: L + 124, w: 28, align: 'right' },
+    { label: 'Est. Nilai', x: L + 152, w: R - L - 152, align: 'right' },
   ]
   tableHeader(ingCols)
   ingredientAnalysis.forEach((r, i) => {
