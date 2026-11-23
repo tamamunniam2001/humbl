@@ -71,11 +71,11 @@ export async function GET(req) {
   if (searchParams.get('bykategori')) {
     const details = await prisma.expenseDetail.findMany({
       where: { expense: { ...(Object.keys(where).length ? where : {}) } },
-      select: { category: true, subtotal: true },
+      select: { category: true, subtotal: true, expenseItem: { select: { category: true } } },
     })
     const map = {}
     details.forEach(d => {
-      const cat = (d.category && d.category.trim()) ? d.category.trim() : '(Tanpa Kategori)'
+      const cat = (d.category && d.category.trim()) || (d.expenseItem?.category && d.expenseItem.category.trim()) || '(Tanpa Kategori)'
       map[cat] = (map[cat] || 0) + d.subtotal
     })
     const byKategori = Object.entries(map)
