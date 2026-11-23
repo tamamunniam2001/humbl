@@ -81,7 +81,7 @@ export async function GET(req) {
     prisma.orderItem.groupBy({ by: ['name'], where: { name: { not: null }, transaction: { createdAt: { gte: monthStart, lte: monthEnd }, status: 'COMPLETED', deletedAt: null } }, _sum: { qty: true, subtotal: true }, orderBy: { _sum: { subtotal: 'desc' } } }),
     prisma.orderItem.groupBy({ by: ['name'], where: { name: { not: null }, transaction: { createdAt: { gte: yearStart, lte: yearEnd }, status: 'COMPLETED', deletedAt: null } }, _sum: { qty: true, subtotal: true }, orderBy: { _sum: { subtotal: 'desc' } }, take: 10 }),
 
-    prisma.transaction.findMany({ where: { createdAt: { gte: monthStart, lte: monthEnd }, status: 'COMPLETED', deletedAt: null }, select: { total: true, createdAt: true, payMethod: true }, orderBy: { createdAt: 'asc' } }),
+    prisma.orderItem.findMany({ where: { transaction: { createdAt: { gte: monthStart, lte: monthEnd }, status: 'COMPLETED', deletedAt: null } }, select: { subtotal: true, transaction: { select: { createdAt: true } } }, orderBy: { transaction: { createdAt: 'asc' } } }),
 
     prisma.expenseDetail.groupBy({ by: ['category'], where: { expense: { date: { gte: monthStart, lte: monthEnd } } }, _sum: { subtotal: true }, orderBy: { _sum: { subtotal: 'desc' } } }),
     prisma.expenseDetail.groupBy({ by: ['category'], where: { expense: { date: { gte: yearStart, lte: yearEnd } } }, _sum: { subtotal: true }, orderBy: { _sum: { subtotal: 'desc' } } }),
@@ -124,6 +124,13 @@ export async function GET(req) {
       where: { transaction: { createdAt: { gte: monthStart, lte: monthEnd }, status: 'COMPLETED', deletedAt: null }, productId: { not: null } },
       select: { qty: true, product: { select: { ingredients: { select: { qty: true, ingredient: { select: { name: true, unit: true, packSize: true, price: true } } } } } } },
     }),
+
+    // Neraca
+    prisma.transaction.aggregate({ where: { status: 'PENDING', deletedAt: null }, _sum: { total: true }, _count: true }),
+    prisma.operationalSaldoLedger.findFirst({ where: { roleKey: 'operasional' }, orderBy: { createdAt: 'desc' }, select: { balanceAfter: true } }),
+    prisma.inventoryItem.findMany({ select: { name: true, qty: true, satuan: true, category: true } }),
+    prisma.expenseDetail.findMany({ where: { expense: { date: { gte: yearStart, lte: yearEnd } }, category: 'Persediaan' }, select: { name: true, qty: true, isi: true, harga: true, subtotal: true } }),
+    prisma.monthlyKas.findMany({ orderBy: [{ year: 'desc' }, { month: 'desc' }], take: 1 }),
   ])
 
   const kasirIds = kasirMonth.map(k => k.cashierId)
@@ -131,13 +138,13 @@ export async function GET(req) {
     ? await prisma.user.findMany({ where: { id: { in: kasirIds } }, select: { id: true, name: true } })
     : []
 
-  // Daily chart
+  // Daily chart — gunakan orderItem.subtotal agar konsisten dengan dashboard
   const dailyMap = {}
   allTxMonth.forEach(t => {
-    const wib = new Date(new Date(t.createdAt).getTime() + 7 * 60 * 60 * 1000)
+    const wib = new Date(new Date(t.transaction.createdAt).getTime() + 7 * 60 * 60 * 1000)
     const key = `${wib.getUTCFullYear()}-${pad(wib.getUTCMonth() + 1)}-${pad(wib.getUTCDate())}`
     if (!dailyMap[key]) dailyMap[key] = { revenue: 0, count: 0 }
-    dailyMap[key].revenue += t.total
+    dailyMap[key].revenue += t.subtotal
     dailyMap[key].count += 1
   })
 
