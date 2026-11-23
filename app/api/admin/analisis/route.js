@@ -81,7 +81,7 @@ export async function GET(req) {
     prisma.orderItem.groupBy({ by: ['name'], where: { name: { not: null }, transaction: { createdAt: { gte: monthStart, lte: monthEnd }, status: 'COMPLETED', deletedAt: null } }, _sum: { qty: true, subtotal: true }, orderBy: { _sum: { subtotal: 'desc' } } }),
     prisma.orderItem.groupBy({ by: ['name'], where: { name: { not: null }, transaction: { createdAt: { gte: yearStart, lte: yearEnd }, status: 'COMPLETED', deletedAt: null } }, _sum: { qty: true, subtotal: true }, orderBy: { _sum: { subtotal: 'desc' } }, take: 10 }),
 
-    prisma.orderItem.findMany({ where: { transaction: { createdAt: { gte: monthStart, lte: monthEnd }, status: 'COMPLETED', deletedAt: null } }, select: { subtotal: true, transaction: { select: { createdAt: true } } }, orderBy: { transaction: { createdAt: 'asc' } } }),
+    prisma.transaction.findMany({ where: { createdAt: { gte: monthStart, lte: monthEnd }, status: 'COMPLETED', deletedAt: null }, select: { total: true, createdAt: true }, orderBy: { createdAt: 'asc' } }),
 
     prisma.expenseDetail.groupBy({ by: ['category'], where: { expense: { date: { gte: monthStart, lte: monthEnd } } }, _sum: { subtotal: true }, orderBy: { _sum: { subtotal: 'desc' } } }),
     prisma.expenseDetail.groupBy({ by: ['category'], where: { expense: { date: { gte: yearStart, lte: yearEnd } } }, _sum: { subtotal: true }, orderBy: { _sum: { subtotal: 'desc' } } }),
@@ -94,14 +94,14 @@ export async function GET(req) {
     prisma.orderItem.groupBy({ by: ['category'], where: { transaction: { createdAt: { gte: monthStart, lte: monthEnd }, status: 'COMPLETED', deletedAt: null } }, _sum: { subtotal: true, qty: true }, orderBy: { _sum: { subtotal: 'desc' } } }),
     prisma.orderItem.groupBy({ by: ['category'], where: { transaction: { createdAt: { gte: yearStart, lte: yearEnd }, status: 'COMPLETED', deletedAt: null } }, _sum: { subtotal: true, qty: true }, orderBy: { _sum: { subtotal: 'desc' } } }),
 
-    prisma.orderItem.findMany({ where: { transaction: { createdAt: { gte: yearStart, lte: yearEnd }, status: 'COMPLETED', deletedAt: null } }, select: { subtotal: true, transaction: { select: { createdAt: true } } } }),
+    prisma.transaction.findMany({ where: { createdAt: { gte: yearStart, lte: yearEnd }, status: 'COMPLETED', deletedAt: null }, select: { total: true, createdAt: true } }),
     prisma.expense.findMany({ where: { date: { gte: yearStart, lte: yearEnd } }, select: { total: true, date: true } }),
 
     prisma.attendance.findMany({ where: { date: { gte: monthStart, lte: monthEnd } }, include: { employee: { select: { name: true } } }, orderBy: { date: 'desc' } }),
 
     prisma.wasteNote.aggregate({ where: { tanggal: { gte: monthStart, lte: monthEnd } }, _sum: { total: true }, _count: true }),
 
-    prisma.monthlyKas.findMany({ where: { year: reqYear } }),
+    prisma.monthlyKas.findMany({ where: { OR: [{ year: reqYear }, { year: prevMonthYear }] } }),
 
     prisma.transaction.aggregate({ where: { createdAt: { gte: monthStart, lte: monthEnd }, status: 'COMPLETED', deletedAt: null, voucherId: { not: null } }, _sum: { voucherDiscount: true }, _count: true }),
 
@@ -138,13 +138,13 @@ export async function GET(req) {
     ? await prisma.user.findMany({ where: { id: { in: kasirIds } }, select: { id: true, name: true } })
     : []
 
-  // Daily chart — gunakan orderItem.subtotal agar konsisten dengan dashboard
+  // Daily chart — pakai transaction.total agar konsisten dengan dashboard
   const dailyMap = {}
   allTxMonth.forEach(t => {
-    const wib = new Date(new Date(t.transaction.createdAt).getTime() + 7 * 60 * 60 * 1000)
+    const wib = new Date(new Date(t.createdAt).getTime() + 7 * 60 * 60 * 1000)
     const key = `${wib.getUTCFullYear()}-${pad(wib.getUTCMonth() + 1)}-${pad(wib.getUTCDate())}`
     if (!dailyMap[key]) dailyMap[key] = { revenue: 0, count: 0 }
-    dailyMap[key].revenue += t.subtotal
+    dailyMap[key].revenue += t.total
     dailyMap[key].count += 1
   })
 
@@ -160,7 +160,7 @@ export async function GET(req) {
   // Monthly chart
   const monthlyChart = Array.from({ length: 12 }, (_, m) => {
     const { start: s, end: e } = getCutoff(reqYear, m)
-    const rev = allTxYear.filter(t => { const time = new Date(t.transaction.createdAt).getTime(); return time >= s.getTime() && time <= e.getTime() }).reduce((sum, t) => sum + t.subtotal, 0)
+    const rev = allTxYear.filter(t => { const time = new Date(t.createdAt).getTime(); return time >= s.getTime() && time <= e.getTime() }).reduce((sum, t) => sum + t.total, 0)
     const exp = allExpYear.filter(t => { const time = new Date(t.date).getTime(); return time >= s.getTime() && time <= e.getTime() }).reduce((sum, t) => sum + t.total, 0)
     return { month: MONTHS[m], revenue: rev, expense: exp, laba: rev - exp }
   })
@@ -176,7 +176,19 @@ export async function GET(req) {
   const labaYear = totalRevYear - totalExpYear
 
   const daysWithSales = Object.values(dailyMap).filter(d => d.revenue > 0).length
-  const kasAwal = kasData.find(k => k.month === reqMonth)?.kasAwal || 0
+  const kasAwalRecord = kasData.find(k => k.month === reqMonth)
+  let kasAwal = kasAwalRecord?.kasAwal ?? null
+  if (kasAwal === null) {
+    // Tidak ada record manual → hitung otomatis dari kasAkhir bulan lalu
+    const prevKasRecord = kasData.find(k => k.month === prevMonthIdx && k.year === prevMonthYear)
+    const prevKasAwal = prevKasRecord?.kasAwal || 0
+    const { start: prevS, end: prevE } = getCutoff(prevMonthYear, prevMonthIdx)
+    const [prevRevAgg, prevExpAgg] = await Promise.all([
+      prisma.transaction.aggregate({ where: { createdAt: { gte: prevS, lte: prevE }, status: 'COMPLETED', deletedAt: null }, _sum: { total: true } }),
+      prisma.expense.aggregate({ where: { date: { gte: prevS, lte: prevE } }, _sum: { total: true } }),
+    ])
+    kasAwal = prevKasAwal + (prevRevAgg._sum.total || 0) - (prevExpAgg._sum.total || 0)
+  }
 
   // Absensi per karyawan
   const absensiSummary = {}
