@@ -100,11 +100,12 @@ export async function GET(req) {
   }
   if (isTanpaKategori) where['items'] = {
     some: {
-      category: '',
-      OR: [
-        { expenseItemId: null },
-        { expenseItem: null },
-        { expenseItem: { category: '' } },
+      AND: [
+        { OR: [{ category: null }, { category: '' }] },
+        { OR: [
+          { expenseItemId: null },
+          { expenseItem: { OR: [{ category: null }, { category: '' }] } },
+        ]},
       ]
     }
   }
@@ -128,7 +129,7 @@ export async function GET(req) {
     e.items
       .filter(item => {
         if (!kategori) return true
-        if (isTanpaKategori) return itemCategory(item) === ''
+        if (isTanpaKategori) return itemCategory(item) === '' || itemCategory(item) === null
         return itemCategory(item) === kategori
       })
       .filter(item => expenseLevelHit
