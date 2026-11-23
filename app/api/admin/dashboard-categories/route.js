@@ -58,9 +58,9 @@ export async function GET(req) {
     }),
     prisma.monthlyKas.findMany({ where: { OR: [{ year }, { year: year - 1 }] } }),
     // Untuk auto-hitung kas awal dari kas akhir bulan sebelumnya
-    mode === 'month' ? prisma.orderItem.aggregate({
-      where: { transaction: { status: 'COMPLETED', deletedAt: null, createdAt: { gte: prevRangeStart, lte: prevRangeEnd } } },
-      _sum: { subtotal: true },
+    mode === 'month' ? prisma.transaction.aggregate({
+      where: { status: 'COMPLETED', deletedAt: null, createdAt: { gte: prevRangeStart, lte: prevRangeEnd } },
+      _sum: { total: true },
     }) : Promise.resolve(null),
     mode === 'month' ? prisma.expense.aggregate({
       where: { date: { gte: prevRangeStart, lte: prevRangeEnd } },
@@ -144,18 +144,17 @@ export async function GET(req) {
     kasAwal = kasData.reduce((s, k) => s + k.kasAwal, 0)
   } else {
     const savedKas = kasData.find(k => k.month === month && k.year === year)
-    if (savedKas && savedKas.kasAwal > 0) {
+    if (savedKas != null) {
       kasAwal = savedKas.kasAwal
     } else {
-      // Auto: cari kas akhir bulan sebelumnya
+      // Auto: hitung dari kasAkhir bulan sebelumnya
       const prevMonthIdx = month === 0 ? 11 : month - 1
       const prevMonthYear = month === 0 ? year - 1 : year
       const prevKasRow = kasData.find(k => k.month === prevMonthIdx && k.year === prevMonthYear)
-      const prevKasAwal = prevKasRow?.kasAwal || 0
-      const prevSalesTotal = prevMonthSales?._sum?.subtotal || 0
+      const prevKasAwal = prevKasRow?.kasAwal ?? 0
+      const prevSalesTotal = prevMonthSales?._sum?.total || 0
       const prevExpTotal = prevMonthExp?._sum?.total || 0
       kasAwal = prevKasAwal + prevSalesTotal - prevExpTotal
-      if (kasAwal < 0) kasAwal = 0
     }
   }
 

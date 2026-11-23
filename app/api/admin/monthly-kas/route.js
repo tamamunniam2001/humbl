@@ -14,7 +14,7 @@ export async function GET(req) {
   // Return array index 0-11
   const result = Array.from({ length: 12 }, (_, m) => {
     const row = rows.find(r => r.month === m)
-    return { month: m, year, kasAwal: row?.kasAwal || 0, id: row?.id || null }
+    return { month: m, year, kasAwal: row?.kasAwal ?? null, id: row?.id || null }
   })
   return NextResponse.json(result)
 }

@@ -65,8 +65,8 @@ function RekapTable({ catData, filterMonth, filterMode, onChangeMonth, onChangeM
   async function saveKas() {
     setSavingKas(true)
     try {
-      await api.put('/admin/monthly-kas', { year, month: filterMonth, kasAwal: Number(kasInput.replace(/\D/g, '')) })
-      catData.kasAwal = Number(kasInput.replace(/\D/g, ''))
+      await api.put('/admin/monthly-kas', { year, month: filterMonth, kasAwal: Number(kasInput) })
+      catData.kasAwal = Number(kasInput)
       setEditKas(false)
     } catch { alert('Gagal menyimpan') }
     finally { setSavingKas(false) }
@@ -277,7 +277,7 @@ function RekapTable({ catData, filterMonth, filterMode, onChangeMonth, onChangeM
                 </div>
               </td>
               {colKeys.map(k => <td key={k} style={tdBase} />)}
-              <td style={{ ...tdBase, fontWeight: '700', color: '#10B981', background: '#ECFDF5' }}>{kasAwal > 0 ? fmt(kasAwal) : <span style={{ color: '#CBD5E1' }}>-</span>}</td>
+              <td style={{ ...tdBase, fontWeight: '700', color: kasAwal < 0 ? '#EF4444' : '#10B981', background: kasAwal < 0 ? '#FEF2F2' : '#ECFDF5' }}>{fmt(kasAwal)}</td>
             </tr>
             <tr style={{ background: '#F0FDF4' }}>
               <td style={{ ...tdCat, fontWeight: '700', color: '#0F1729' }}>Total Penjualan</td>

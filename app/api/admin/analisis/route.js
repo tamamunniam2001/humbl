@@ -176,18 +176,18 @@ export async function GET(req) {
   const labaYear = totalRevYear - totalExpYear
 
   const daysWithSales = Object.values(dailyMap).filter(d => d.revenue > 0).length
-  const kasAwalRecord = kasData.find(k => k.month === reqMonth)
-  let kasAwal = kasAwalRecord?.kasAwal ?? null
-  if (kasAwal === null) {
-    // Tidak ada record manual → hitung otomatis dari kasAkhir bulan lalu
-    const prevKasRecord = kasData.find(k => k.month === prevMonthIdx && k.year === prevMonthYear)
-    const prevKasAwal = prevKasRecord?.kasAwal || 0
-    const { start: prevS, end: prevE } = getCutoff(prevMonthYear, prevMonthIdx)
-    const [prevRevAgg, prevExpAgg] = await Promise.all([
-      prisma.transaction.aggregate({ where: { createdAt: { gte: prevS, lte: prevE }, status: 'COMPLETED', deletedAt: null }, _sum: { total: true } }),
-      prisma.expense.aggregate({ where: { date: { gte: prevS, lte: prevE } }, _sum: { total: true } }),
-    ])
-    kasAwal = prevKasAwal + (prevRevAgg._sum.total || 0) - (prevExpAgg._sum.total || 0)
+
+  // Kas awal: pakai record manual jika ada, fallback ke kasAkhir bulan lalu
+  const kasAwalRecord = kasData.find(k => k.year === reqYear && k.month === reqMonth)
+  let kasAwal
+  if (kasAwalRecord != null) {
+    kasAwal = kasAwalRecord.kasAwal
+  } else {
+    const prevKasRecord = kasData.find(k => k.year === prevMonthYear && k.month === prevMonthIdx)
+    const prevKasAwal = prevKasRecord?.kasAwal ?? 0
+    const prevRevTotal = txPrev._sum.total || 0
+    const prevExpTotal = expPrev._sum.total || 0
+    kasAwal = prevKasAwal + prevRevTotal - prevExpTotal
   }
 
   // Absensi per karyawan
