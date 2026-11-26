@@ -26,7 +26,7 @@ export async function POST(req) {
   const expense = await prisma.expense.create({
     data: {
       total, catatan: catatan || '', cashierId: user.id,
-      ...(date ? { date: new Date(date) } : {}),
+      ...(date ? { date: new Date(`${date}T00:00:00+07:00`) } : {}),
       items: { create: details },
     },
     include: { items: true, cashier: { select: { name: true } } },

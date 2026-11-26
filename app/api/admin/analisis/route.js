@@ -58,7 +58,7 @@ export async function GET(req) {
     expDetailMonth,
     payMethodMonth, payMethodYear,
     salesCatMonth, salesCatYear,
-    allTxYear, allExpYear,
+    monthlyChartRaw, _unusedAllExpYear,
     absensiMonth,
     wasteMonth,
     kasData,
@@ -83,8 +83,8 @@ export async function GET(req) {
 
     prisma.transaction.findMany({ where: { createdAt: { gte: monthStart, lte: monthEnd }, status: 'COMPLETED', deletedAt: null }, select: { total: true, createdAt: true }, orderBy: { createdAt: 'asc' } }),
 
-    prisma.expenseDetail.groupBy({ by: ['category'], where: { expense: { date: { gte: monthStart, lte: monthEnd } } }, _sum: { subtotal: true }, orderBy: { _sum: { subtotal: 'desc' } } }),
-    prisma.expenseDetail.groupBy({ by: ['category'], where: { expense: { date: { gte: yearStart, lte: yearEnd } } }, _sum: { subtotal: true }, orderBy: { _sum: { subtotal: 'desc' } } }),
+    prisma.expenseDetail.findMany({ where: { expense: { date: { gte: monthStart, lte: monthEnd } } }, select: { category: true, subtotal: true, expenseItem: { select: { category: true } } } }),
+    prisma.expenseDetail.findMany({ where: { expense: { date: { gte: yearStart, lte: yearEnd } } }, select: { category: true, subtotal: true, expenseItem: { select: { category: true } } } }),
 
     prisma.expenseDetail.findMany({ where: { expense: { date: { gte: monthStart, lte: monthEnd } } }, select: { name: true, qty: true, satuan: true, subtotal: true, category: true, expenseItem: { select: { category: true } }, expense: { select: { date: true } } }, orderBy: { expense: { date: 'asc' } } }),
 
@@ -94,8 +94,15 @@ export async function GET(req) {
     prisma.orderItem.groupBy({ by: ['category'], where: { transaction: { createdAt: { gte: monthStart, lte: monthEnd }, status: 'COMPLETED', deletedAt: null } }, _sum: { subtotal: true, qty: true }, orderBy: { _sum: { subtotal: 'desc' } } }),
     prisma.orderItem.groupBy({ by: ['category'], where: { transaction: { createdAt: { gte: yearStart, lte: yearEnd }, status: 'COMPLETED', deletedAt: null } }, _sum: { subtotal: true, qty: true }, orderBy: { _sum: { subtotal: 'desc' } } }),
 
-    prisma.transaction.findMany({ where: { createdAt: { gte: yearStart, lte: yearEnd }, status: 'COMPLETED', deletedAt: null }, select: { total: true, createdAt: true } }),
-    prisma.expense.findMany({ where: { date: { gte: yearStart, lte: yearEnd } }, select: { total: true, date: true } }),
+    // monthly chart: aggregate per bulan langsung dari Prisma
+    Promise.all(Array.from({ length: 12 }, (_, m) => {
+      const { start: s, end: e } = getCutoff(reqYear, m)
+      return Promise.all([
+        prisma.transaction.aggregate({ where: { createdAt: { gte: s, lte: e }, status: 'COMPLETED', deletedAt: null }, _sum: { total: true } }),
+        prisma.expense.aggregate({ where: { date: { gte: s, lte: e } }, _sum: { total: true } }),
+      ]).then(([tx, exp]) => ({ month: MONTHS[m], revenue: tx._sum.total || 0, expense: exp._sum.total || 0, laba: (tx._sum.total || 0) - (exp._sum.total || 0) }))
+    })),
+    Promise.resolve([]), // placeholder allExpYear (tidak dipakai lagi)
 
     prisma.attendance.findMany({ where: { date: { gte: monthStart, lte: monthEnd } }, include: { employee: { select: { name: true } } }, orderBy: { date: 'desc' } }),
 
@@ -157,13 +164,8 @@ export async function GET(req) {
     cur.setTime(cur.getTime() + 24 * 60 * 60 * 1000)
   }
 
-  // Monthly chart
-  const monthlyChart = Array.from({ length: 12 }, (_, m) => {
-    const { start: s, end: e } = getCutoff(reqYear, m)
-    const rev = allTxYear.filter(t => { const time = new Date(t.createdAt).getTime(); return time >= s.getTime() && time <= e.getTime() }).reduce((sum, t) => sum + t.total, 0)
-    const exp = allExpYear.filter(t => { const time = new Date(t.date).getTime(); return time >= s.getTime() && time <= e.getTime() }).reduce((sum, t) => sum + t.total, 0)
-    return { month: MONTHS[m], revenue: rev, expense: exp, laba: rev - exp }
-  })
+  // Monthly chart sudah dihitung langsung dari Prisma per bulan
+  const monthlyChart = monthlyChartRaw
 
   const totalRevMonth = txMonth._sum.total || 0
   const totalRevPrev = txPrev._sum.total || 0
@@ -241,21 +243,32 @@ export async function GET(req) {
   }).sort((a, b) => Math.abs(b.selisih) - Math.abs(a.selisih))
 
   // Merge kategori null → 'Lainnya'
-  const mergeCat = (arr) => Object.values(
-    arr.reduce((acc, c) => {
-      const k = (c.category && c.category.trim()) ? c.category.trim() : 'Lainnya'
-      acc[k] = { category: k, total: (acc[k]?.total || 0) + (c._sum.subtotal || 0) }
-      return acc
-    }, {})
-  ).sort((a, b) => b.total - a.total)
-
-  // Detail pengeluaran: untuk Persediaan, ringkas per nama item
-  const detailRaw = expDetailMonth.map(d => {
+  // Konsisten dengan rekap pengeluaran: category di detail diutamakan,
+  // fallback ke expenseItem.category, fallback ke 'Lainnya'
+  const resolveCategory = (d) => {
     const cat = (d.category && d.category.trim()) ? d.category.trim()
       : (d.expenseItem?.category && d.expenseItem.category.trim()) ? d.expenseItem.category.trim()
       : 'Lainnya'
-    return { name: d.name, qty: d.qty, satuan: d.satuan, subtotal: d.subtotal, category: cat, date: d.expense.date }
-  })
+    return cat
+  }
+
+  // Aggregate kategori dari raw detail rows (bukan groupBy) agar fallback expenseItem.category ikut
+  const mergeCatRaw = (rows) => {
+    const acc = {}
+    rows.forEach(d => {
+      const k = resolveCategory(d)
+      acc[k] = (acc[k] || 0) + (d.subtotal || 0)
+    })
+    return Object.entries(acc).map(([category, total]) => ({ category, total })).sort((a, b) => b.total - a.total)
+  }
+
+  const mergeCat = mergeCatRaw // alias untuk kompatibilitas
+
+  // Detail pengeluaran: untuk Persediaan, ringkas per nama item
+  const detailRaw = expDetailMonth.map(d => ({
+    name: d.name, qty: d.qty, satuan: d.satuan, subtotal: d.subtotal,
+    category: resolveCategory(d), date: d.expense.date,
+  }))
 
   const persediaanMap = {}
   const nonPersediaan = []

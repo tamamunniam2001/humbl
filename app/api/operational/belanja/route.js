@@ -51,7 +51,7 @@ export async function POST(req) {
       return acc + h * q
     }, 0)
 
-    const dateVal = tanggal ? new Date(tanggal) : new Date()
+    const dateVal = tanggal ? new Date(`${String(tanggal).slice(0,10)}T00:00:00+07:00`) : new Date()
 
     const belanja = await prisma.operationalBelanja.create({
       data: {
