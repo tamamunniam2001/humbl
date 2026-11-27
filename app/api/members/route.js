@@ -4,6 +4,7 @@ import { verifyAuth, adminOnly, canUseKasir, pageAccessOnly } from '@/lib/auth'
 import { sendFonnte } from '@/lib/fonnte'
 import { phoneCandidates } from '@/lib/wa-bot'
 import { renderTemplate } from '@/lib/wa-templates'
+import { getMonthlyCutoffRange } from '@/lib/wib'
 
 // Normalisasi nomor telepon: buang spasi/tanda hubung agar konsisten.
 function normPhone(v) {
@@ -30,6 +31,14 @@ export async function GET(req) {
   const { searchParams } = new URL(req.url)
   const search = (searchParams.get('search') || '').trim()
   const activeOnly = searchParams.get('active') === '1'
+  const yearParam = searchParams.get('year')
+  const monthParam = searchParams.get('month')
+
+  // Tentukan range cutoff bila filter bulan diberikan
+  let cutoff = null
+  if (yearParam && monthParam) {
+    cutoff = getMonthlyCutoffRange(Number(yearParam), Number(monthParam))
+  }
 
   const where = {
     ...(activeOnly ? { isActive: true } : {}),
@@ -47,41 +56,60 @@ export async function GET(req) {
     select: {
       id: true, name: true, phone: true, isActive: true, createdAt: true, welcomeSentAt: true,
       useCustomDiscount: true, customDiscountType: true, customDiscountValue: true, customDiscountMax: true,
-      // Jumlah transaksi lunas per member (Prisma hanya mendukung _count berfilter
-      // di level relasi; total & terakhir belanja dihitung terpisah via groupBy).
       _count: {
         select: { transactions: { where: { status: 'COMPLETED', deletedAt: null } } },
       },
     },
   })
 
-  // Agregat total belanja + pembelian terakhir per member (groupBy top-level)
-  let aggMap = new Map()
+  // Agregat ALL-TIME (selalu dihitung untuk kolom total keseluruhan)
+  let aggAllMap = new Map()
+  // Agregat PERIODE (hanya bila filter bulan aktif)
+  let aggPeriodMap = new Map()
+
   if (members.length) {
-    const agg = await prisma.transaction.groupBy({
-      by: ['memberId'],
-      where: {
-        memberId: { in: members.map(m => m.id) },
-        status: 'COMPLETED',
-        deletedAt: null,
-      },
-      _sum: { total: true },
-      _max: { createdAt: true },
-    })
-    aggMap = new Map(agg.map(g => [g.memberId, g]))
+    const ids = members.map(m => m.id)
+    const baseWhere = { memberId: { in: ids }, status: 'COMPLETED', deletedAt: null }
+
+    const [aggAll, aggPeriod] = await Promise.all([
+      prisma.transaction.groupBy({
+        by: ['memberId'],
+        where: baseWhere,
+        _sum: { total: true, discountAmount: true, voucherDiscount: true },
+        _max: { createdAt: true },
+        _count: { id: true },
+      }),
+      cutoff ? prisma.transaction.groupBy({
+        by: ['memberId'],
+        where: { ...baseWhere, createdAt: { gte: cutoff.gte, lte: cutoff.lte } },
+        _sum: { total: true, discountAmount: true, voucherDiscount: true },
+        _max: { createdAt: true },
+        _count: { id: true },
+      }) : Promise.resolve([]),
+    ])
+
+    aggAllMap = new Map(aggAll.map(g => [g.memberId, g]))
+    aggPeriodMap = new Map(aggPeriod.map(g => [g.memberId, g]))
   }
 
   return NextResponse.json(members.map(m => {
-    const a = aggMap.get(m.id)
+    const all = aggAllMap.get(m.id)
+    const period = cutoff ? (aggPeriodMap.get(m.id) || null) : null
+    // Bila filter bulan aktif, purchaseCount/totalSpent/lastPurchase = data periode
+    const src = period ?? all
     return {
       id: m.id,
       name: m.name,
       phone: m.phone,
       isActive: m.isActive,
       createdAt: m.createdAt,
-      purchaseCount: m._count.transactions,
-      totalSpent: a?._sum.total || 0,
-      lastPurchase: a?._max.createdAt || null,
+      purchaseCount: src?._count?.id || 0,
+      totalSpent: src?._sum?.total || 0,
+      totalDiscount: (src?._sum?.discountAmount || 0) + (src?._sum?.voucherDiscount || 0),
+      lastPurchase: src?._max?.createdAt || null,
+      // All-time selalu tersedia untuk referensi
+      allTimePurchaseCount: all?._count?.id || 0,
+      allTimeTotalSpent: all?._sum?.total || 0,
       welcomeSentAt: m.welcomeSentAt || null,
       useCustomDiscount: m.useCustomDiscount,
       customDiscountType: m.customDiscountType,

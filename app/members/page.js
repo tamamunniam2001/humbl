@@ -10,13 +10,31 @@ const fmt = (n) => 'Rp ' + Number(n || 0).toLocaleString('id-ID')
 const fmtDate = (d) => new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
 const fmtDateTime = (d) => new Date(d).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
 
+const MONTHS = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember']
+
+function getDefaultPeriod() {
+  const wib = new Date(Date.now() + 7 * 3600000)
+  const day = wib.getUTCDate()
+  let month = wib.getUTCMonth() + 1
+  let year = wib.getUTCFullYear()
+  if (day > 20) {
+    if (month === 12) { month = 1; year++ } else { month++ }
+  }
+  return { year, month }
+}
+
 export default function MembersPage() {
   const [members, setMembers] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all') // all | active | inactive
-  const [detail, setDetail] = useState(null) // { member, transactions, totalSpent }
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [detail, setDetail] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
+
+  const def = getDefaultPeriod()
+  const [filterAll, setFilterAll] = useState(true)
+  const [filterYear, setFilterYear] = useState(def.year)
+  const [filterMonth, setFilterMonth] = useState(def.month)
 
   // Kirim pesan WhatsApp (admin) — popup pilih template dari Pengaturan Pesan WhatsApp
   const [waMember, setWaMember] = useState(null)   // member tujuan (null = popup tertutup)
@@ -47,18 +65,20 @@ export default function MembersPage() {
   async function load() {
     setLoading(true)
     try {
-      const res = await api.get('/members')
+      const params = filterAll ? {} : { year: filterYear, month: filterMonth }
+      const res = await api.get('/members', { params })
       setMembers(res.data)
     } catch { } finally { setLoading(false) }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [filterAll, filterYear, filterMonth])
 
   async function openDetail(m) {
     setDetail(null)
     setDetailLoading(true)
     try {
-      const res = await api.get(`/members/${m.id}/transactions`)
+      const params = filterAll ? {} : { year: filterYear, month: filterMonth }
+      const res = await api.get(`/members/${m.id}/transactions`, { params })
       setDetail(res.data)
     } catch (err) {
       alert(err.response?.data?.message || 'Gagal memuat pembelian member')
@@ -195,8 +215,17 @@ export default function MembersPage() {
     .filter(m => !q || m.name.toLowerCase().includes(q) || m.phone.includes(search.trim()))
 
   const activeCount = members.filter(m => m.isActive).length
-  const totalPurchase = members.reduce((s, m) => s + (m.purchaseCount || 0), 0)
-  const totalSpent = members.reduce((s, m) => s + (m.totalSpent || 0), 0)
+  const totalPurchase = filtered.reduce((s, m) => s + (m.purchaseCount || 0), 0)
+  const totalSpent = filtered.reduce((s, m) => s + (m.totalSpent || 0), 0)
+  const totalDiscount = filtered.reduce((s, m) => s + (m.totalDiscount || 0), 0)
+  const avgSpent = totalPurchase > 0 ? Math.round(totalSpent / totalPurchase) : 0
+  const newMemberCount = filterAll ? null : (() => {
+    const prevMonth = filterMonth === 1 ? 12 : filterMonth - 1
+    const prevYear = filterMonth === 1 ? filterYear - 1 : filterYear
+    const from = new Date(`${prevYear}-${String(prevMonth).padStart(2,'0')}-20T00:00:00+07:00`)
+    const to = new Date(`${filterYear}-${String(filterMonth).padStart(2,'0')}-20T23:59:59+07:00`)
+    return members.filter(m => { const d = new Date(m.createdAt); return d >= from && d <= to }).length
+  })()
   const memberCount = filtered.length
 
 
@@ -208,7 +237,9 @@ export default function MembersPage() {
         <div className="topbar">
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="topbar-title">Daftar Member</div>
-            <div className="topbar-sub">Monitor member aktif beserta riwayat pembeliannya</div>
+            <div className="topbar-sub">
+              {filterAll ? 'Semua waktu' : `Periode ${MONTHS[filterMonth - 1]} ${filterYear} (cutoff 20)`}
+            </div>
           </div>
           {isAdmin && (
             <Link href="/member-settings" className="btn" style={{ textDecoration: 'none' }}>
@@ -228,32 +259,57 @@ export default function MembersPage() {
             {[
               { label: 'Total Member', value: members.length, color: '#4A7CC7', bg: '#EBF1FB', border: '#C0D0E8' },
               { label: 'Member Aktif', value: activeCount, color: '#2A9D6E', bg: '#E8F7F1', border: '#A7DFC8' },
-              { label: 'Total Pembelian', value: loading ? '…' : `${totalPurchase}×`, color: '#7C3AED', bg: '#F3EEFF', border: '#DDD0FB' },
-              { label: 'Total Belanja', value: loading ? '…' : fmt(totalSpent), color: '#B4770B', bg: '#FDF4E3', border: '#EBD9A8' },
+              { label: filterAll ? 'Total Pembelian' : 'Pembelian Periode', value: loading ? '…' : `${totalPurchase}×`, color: '#7C3AED', bg: '#F3EEFF', border: '#DDD0FB' },
+              { label: filterAll ? 'Total Belanja' : 'Belanja Periode', value: loading ? '…' : fmt(totalSpent), color: '#B4770B', bg: '#FDF4E3', border: '#EBD9A8' },
+              { label: 'Rata-rata / Transaksi', value: loading ? '…' : fmt(avgSpent), color: '#0EA472', bg: '#ECFDF5', border: '#A7DFC8' },
+              { label: 'Total Diskon Diberikan', value: loading ? '…' : fmt(totalDiscount), color: '#C95555', bg: '#FEF2F2', border: '#FECACA' },
+              ...(newMemberCount !== null ? [{ label: 'Member Baru Periode', value: newMemberCount, color: '#4A7CC7', bg: '#EBF1FB', border: '#C0D0E8' }] : []),
             ].map(s => (
               <div key={s.label} style={{ background: s.bg, border: `1px solid ${s.border}`, borderRadius: '10px', padding: '12px 14px' }}>
                 <div style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '3px' }}>{s.label}</div>
-                <div style={{ fontSize: '20px', fontWeight: 800, color: s.color }}>{loading && s.value === undefined ? '…' : s.value}</div>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: s.color }}>{s.value}</div>
               </div>
             ))}
           </div>
 
-          {/* Filter + pencarian */}
+          {/* Filter bulan + status + pencarian */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', marginBottom: '12px' }}>
+            {/* Toggle semua waktu vs per bulan */}
+            <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <button className="btn" onClick={() => setFilterAll(true)}
+                style={{ padding: '5px 12px', fontSize: '12px', background: filterAll ? '#4A7CC7' : 'var(--surface2)', color: filterAll ? '#fff' : 'var(--text2)', border: `1px solid ${filterAll ? '#4A7CC7' : 'var(--border)'}` }}>
+                Semua Waktu
+              </button>
+              <button className="btn" onClick={() => setFilterAll(false)}
+                style={{ padding: '5px 12px', fontSize: '12px', background: !filterAll ? '#4A7CC7' : 'var(--surface2)', color: !filterAll ? '#fff' : 'var(--text2)', border: `1px solid ${!filterAll ? '#4A7CC7' : 'var(--border)'}` }}>
+                Per Bulan
+              </button>
+            </div>
+            {/* Pilih bulan & tahun */}
+            {!filterAll && (
+              <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                <select className="input" style={{ width: 'auto', padding: '5px 8px', fontSize: '12px' }}
+                  value={filterMonth} onChange={e => setFilterMonth(Number(e.target.value))}>
+                  {MONTHS.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
+                </select>
+                <select className="input" style={{ width: 'auto', padding: '5px 8px', fontSize: '12px' }}
+                  value={filterYear} onChange={e => setFilterYear(Number(e.target.value))}>
+                  {Array.from({ length: 4 }, (_, i) => new Date().getFullYear() - 1 + i).map(y => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {/* Filter status */}
             <div style={{ display: 'flex', gap: '6px' }}>
               {[['all', 'Semua'], ['active', 'Aktif'], ['inactive', 'Nonaktif']].map(([v, label]) => (
                 <button key={v} className="btn" onClick={() => setStatusFilter(v)}
-                  style={{
-                    padding: '5px 12px', fontSize: '12px',
-                    background: statusFilter === v ? '#4A7CC7' : 'var(--surface2)',
-                    color: statusFilter === v ? '#fff' : 'var(--text2)',
-                    border: `1px solid ${statusFilter === v ? '#4A7CC7' : 'var(--border)'}`,
-                  }}>
+                  style={{ padding: '5px 12px', fontSize: '12px', background: statusFilter === v ? '#7C3AED' : 'var(--surface2)', color: statusFilter === v ? '#fff' : 'var(--text2)', border: `1px solid ${statusFilter === v ? '#7C3AED' : 'var(--border)'}` }}>
                   {label}
                 </button>
               ))}
             </div>
-            <input className="input" style={{ maxWidth: '300px' }} placeholder="Cari nama atau nomor telepon…"
+            <input className="input" style={{ maxWidth: '260px' }} placeholder="Cari nama atau nomor telepon…"
               value={search} onChange={e => setSearch(e.target.value)} />
             <span style={{ fontSize: '12px', color: 'var(--muted)' }}>{memberCount} member</span>
           </div>
@@ -277,7 +333,7 @@ export default function MembersPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                   <thead>
                     <tr style={{ background: 'var(--surface2)', borderBottom: '1px solid var(--border)' }}>
-                      {['Nama', 'Nomor Telepon', 'Status', 'Pesan Welcome', 'Pembelian', 'Total Belanja', 'Terakhir Beli', ''].map((h, i) => (
+                      {['Nama', 'Nomor Telepon', 'Status', 'Pesan Welcome', 'Pembelian', 'Total Belanja', 'Diskon', 'Terakhir Beli', ''].map((h, i) => (
                         <th key={i} style={{ padding: '10px 14px', textAlign: i >= 4 ? 'right' : 'left', fontSize: '11px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.4px' }}>{h}</th>
                       ))}
                     </tr>
@@ -304,6 +360,9 @@ export default function MembersPage() {
                         </td>
                         <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700 }}>{m.purchaseCount}×</td>
                         <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 800, color: '#2A9D6E' }}>{fmt(m.totalSpent)}</td>
+                        <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 700, color: '#C95555', fontSize: '12px' }}>
+                          {m.totalDiscount > 0 ? fmt(m.totalDiscount) : <span style={{ color: 'var(--muted)' }}>—</span>}
+                        </td>
                         <td style={{ padding: '10px 14px', textAlign: 'right', color: 'var(--muted)', fontSize: '12px' }}>
                           {m.lastPurchase ? fmtDate(m.lastPurchase) : '—'}
                         </td>
@@ -354,7 +413,7 @@ export default function MembersPage() {
                     </div>
 
                     {/* Ringkasan */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', padding: '14px 20px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', padding: '14px 20px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
                       <div style={{ background: '#F3EEFF', border: '1px solid #DDD0FB', borderRadius: '10px', padding: '10px 12px' }}>
                         <div style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '2px' }}>Jumlah Pembelian</div>
                         <div style={{ fontSize: '18px', fontWeight: 800, color: '#7C3AED' }}>{detail.transactions.length}×</div>
@@ -363,7 +422,16 @@ export default function MembersPage() {
                         <div style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '2px' }}>Total Belanja</div>
                         <div style={{ fontSize: '18px', fontWeight: 800, color: '#2A9D6E' }}>{fmt(detail.totalSpent)}</div>
                       </div>
+                      <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '10px', padding: '10px 12px' }}>
+                        <div style={{ fontSize: '11px', color: 'var(--muted)', marginBottom: '2px' }}>Total Diskon</div>
+                        <div style={{ fontSize: '18px', fontWeight: 800, color: '#C95555' }}>{fmt(detail.totalDiscount || 0)}</div>
+                      </div>
                     </div>
+                    {!filterAll && (
+                      <div style={{ padding: '8px 20px', background: '#EBF1FB', borderBottom: '1px solid var(--border)', fontSize: '12px', color: '#4A7CC7', fontWeight: 600 }}>
+                        📅 Periode {MONTHS[filterMonth - 1]} {filterYear} (cutoff 20)
+                      </div>
+                    )}
 
                     {/* Riwayat pembelian */}
                     <div style={{ overflowY: 'auto', padding: '14px 20px' }}>

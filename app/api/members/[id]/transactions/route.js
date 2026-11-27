@@ -1,13 +1,22 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth'
+import { getMonthlyCutoffRange } from '@/lib/wib'
 
 // GET /api/members/[id]/transactions — riwayat pembelian satu member
-// (dipakai popup detail di halaman Daftar Member).
+// Query params: year, month (opsional, filter cutoff 20-19)
 export async function GET(req, { params }) {
   const { error } = verifyAuth(req)
   if (error) return error
   const { id } = await params
+
+  const { searchParams } = new URL(req.url)
+  const yearParam = searchParams.get('year')
+  const monthParam = searchParams.get('month')
+  let cutoff = null
+  if (yearParam && monthParam) {
+    cutoff = getMonthlyCutoffRange(Number(yearParam), Number(monthParam))
+  }
 
   const member = await prisma.member.findUnique({
     where: { id },
@@ -15,8 +24,13 @@ export async function GET(req, { params }) {
   })
   if (!member) return NextResponse.json({ message: 'Member tidak ditemukan' }, { status: 404 })
 
+  const txWhere = {
+    memberId: id, status: 'COMPLETED', deletedAt: null,
+    ...(cutoff ? { createdAt: { gte: cutoff.gte, lte: cutoff.lte } } : {}),
+  }
+
   const transactions = await prisma.transaction.findMany({
-    where: { memberId: id, status: 'COMPLETED', deletedAt: null },
+    where: txWhere,
     orderBy: { createdAt: 'desc' },
     select: {
       id: true, invoiceNo: true, total: true, payMethod: true, createdAt: true,
@@ -29,6 +43,7 @@ export async function GET(req, { params }) {
   })
 
   const totalSpent = transactions.reduce((s, t) => s + (t.total || 0), 0)
+  const totalDiscount = transactions.reduce((s, t) => s + (t.discountAmount || 0) + (t.voucherDiscount || 0), 0)
 
-  return NextResponse.json({ member, transactions, totalSpent })
+  return NextResponse.json({ member, transactions, totalSpent, totalDiscount })
 }
