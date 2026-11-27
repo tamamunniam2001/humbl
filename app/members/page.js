@@ -40,6 +40,12 @@ export default function MembersPage() {
   const [sortKey, setSortKey] = useState('name')
   const [sortDir, setSortDir] = useState('asc')
 
+  // Reset viewMode saat toggle filter
+  function switchFilterAll(val) {
+    setFilterAll(val)
+    setViewMode(val ? 'all' : 'active')
+  }
+
   // Kirim pesan WhatsApp (admin) — popup pilih template dari Pengaturan Pesan WhatsApp
   const [waMember, setWaMember] = useState(null)   // member tujuan (null = popup tertutup)
   const [waTemplates, setWaTemplates] = useState([])
@@ -319,11 +325,11 @@ export default function MembersPage() {
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', marginBottom: '12px' }}>
             {/* Toggle semua waktu vs per bulan */}
             <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-              <button className="btn" onClick={() => { setFilterAll(true); setViewMode('all') }}
+              <button className="btn" onClick={() => switchFilterAll(true)}
                 style={{ padding: '5px 12px', fontSize: '12px', background: filterAll ? '#4A7CC7' : 'var(--surface2)', color: filterAll ? '#fff' : 'var(--text2)', border: `1px solid ${filterAll ? '#4A7CC7' : 'var(--border)'}` }}>
                 Semua Waktu
               </button>
-              <button className="btn" onClick={() => setFilterAll(false)}
+              <button className="btn" onClick={() => switchFilterAll(false)}
                 style={{ padding: '5px 12px', fontSize: '12px', background: !filterAll ? '#4A7CC7' : 'var(--surface2)', color: !filterAll ? '#fff' : 'var(--text2)', border: `1px solid ${!filterAll ? '#4A7CC7' : 'var(--border)'}` }}>
                 Per Bulan
               </button>
