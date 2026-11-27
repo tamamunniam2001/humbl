@@ -56,6 +56,7 @@ export default function MembersPage() {
   const [waSending, setWaSending] = useState(false)
   const [waError, setWaError] = useState('')
   const [waDone, setWaDone] = useState(null)         // hasil kirim terakhir
+  const [waSentIds, setWaSentIds] = useState(new Set()) // cooldown per member
 
   // Broadcast
   const [bcOpen, setBcOpen] = useState(false)
@@ -153,6 +154,8 @@ export default function MembersPage() {
         ...(waVoucherId ? { voucherId: waVoucherId } : {}),
       })
       setWaDone(res.data)
+      setWaSentIds(prev => { const s = new Set(prev); s.add(waMember.id); return s })
+      setTimeout(() => setWaSentIds(prev => { const s = new Set(prev); s.delete(waMember.id); return s }), 60000)
       load() // refresh list agar welcomeSentAt terupdate
     } catch (err) {
       setWaError(err.response?.data?.message || 'Gagal mengirim pesan')
@@ -450,9 +453,10 @@ export default function MembersPage() {
                         <td style={{ padding: '10px 14px', textAlign: 'right' }}>
                           <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                             {canSendMsg && (
-                              <button className="btn" style={{ padding: '4px 12px', fontSize: '11px', background: '#ECFDF5', color: '#0EA472', border: '1px solid #A7DFC8' }}
+                              <button className="btn" style={{ padding: '4px 12px', fontSize: '11px', background: waSentIds.has(m.id) ? 'var(--surface2)' : '#ECFDF5', color: waSentIds.has(m.id) ? 'var(--muted)' : '#0EA472', border: `1px solid ${waSentIds.has(m.id) ? 'var(--border)' : '#A7DFC8'}`, opacity: waSentIds.has(m.id) ? 0.6 : 1 }}
+                                disabled={waSentIds.has(m.id)}
                                 onClick={() => openWa(m)}>
-                                ✈️ Kirim Pesan
+                                {waSentIds.has(m.id) ? '✅ Terkirim' : '✈️ Kirim Pesan'}
                               </button>
                             )}
                             <button className="btn" style={{ padding: '4px 12px', fontSize: '11px' }} onClick={() => openDetail(m)}>
