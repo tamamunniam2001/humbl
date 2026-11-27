@@ -4,7 +4,21 @@ import { verifyAuth, adminOnly, canUseKasir, pageAccessOnly } from '@/lib/auth'
 import { sendFonnte } from '@/lib/fonnte'
 import { phoneCandidates } from '@/lib/wa-bot'
 import { renderTemplate } from '@/lib/wa-templates'
-import { getMonthlyCutoffRange } from '@/lib/wib'
+
+const pad = n => String(n).padStart(2, '0')
+
+// Cutoff sama persis dengan analisis/route.js:
+// month = 0-indexed (0=Jan..11=Des)
+// range: 20 bulan-ini s/d 19 bulan-depan
+function getCutoff(year, month) {
+  const prevMonth = month === 0 ? 12 : month
+  const prevYear = month === 0 ? year - 1 : year
+  const currMonth = month + 1
+  return {
+    gte: new Date(`${prevYear}-${pad(prevMonth)}-20T00:00:00+07:00`),
+    lte: new Date(`${year}-${pad(currMonth)}-19T23:59:59.999+07:00`),
+  }
+}
 
 // Normalisasi nomor telepon: buang spasi/tanda hubung agar konsisten.
 function normPhone(v) {
@@ -34,10 +48,10 @@ export async function GET(req) {
   const yearParam = searchParams.get('year')
   const monthParam = searchParams.get('month')
 
-  // Tentukan range cutoff bila filter bulan diberikan
+  // month param = 0-indexed (sama dengan analisis/route.js)
   let cutoff = null
-  if (yearParam && monthParam) {
-    cutoff = getMonthlyCutoffRange(Number(yearParam), Number(monthParam))
+  if (yearParam && monthParam !== null) {
+    cutoff = getCutoff(Number(yearParam), Number(monthParam))
   }
 
   const where = {

@@ -69,7 +69,7 @@ export default function MembersPage() {
   async function load() {
     setLoading(true)
     try {
-      const params = filterAll ? {} : { year: filterYear, month: filterMonth }
+      const params = filterAll ? {} : { year: filterYear, month: filterMonth - 1 }
       const res = await api.get('/members', { params })
       setMembers(res.data)
     } catch { } finally { setLoading(false) }
@@ -81,7 +81,7 @@ export default function MembersPage() {
     setDetail(null)
     setDetailLoading(true)
     try {
-      const params = filterAll ? {} : { year: filterYear, month: filterMonth }
+      const params = filterAll ? {} : { year: filterYear, month: filterMonth - 1 }
       const res = await api.get(`/members/${m.id}/transactions`, { params })
       setDetail(res.data)
     } catch (err) {
@@ -215,14 +215,19 @@ export default function MembersPage() {
 
   const q = search.trim().toLowerCase()
 
-  // Hitung range cutoff untuk filter member baru
+  // Cutoff sama dengan analisis: 20 bulan-ini s/d 19 bulan-depan
+  // filterMonth = 1-indexed, konversi ke 0-indexed untuk hitung boundary
   const cutoffFrom = filterAll ? null : (() => {
-    const prevMonth = filterMonth === 1 ? 12 : filterMonth - 1
-    const prevYear = filterMonth === 1 ? filterYear - 1 : filterYear
+    const m0 = filterMonth - 1 // 0-indexed
+    const prevMonth = m0 === 0 ? 12 : m0
+    const prevYear = m0 === 0 ? filterYear - 1 : filterYear
     return new Date(`${prevYear}-${String(prevMonth).padStart(2,'0')}-20T00:00:00+07:00`)
   })()
-  const cutoffTo = filterAll ? null :
-    new Date(`${filterYear}-${String(filterMonth).padStart(2,'0')}-20T23:59:59+07:00`)
+  const cutoffTo = filterAll ? null : (() => {
+    const m0 = filterMonth - 1
+    const nextMonth = m0 + 1
+    return new Date(`${filterYear}-${String(nextMonth).padStart(2,'0')}-19T23:59:59+07:00`)
+  })()
 
   const isNewMember = (m) => {
     if (!cutoffFrom) return false

@@ -1,10 +1,20 @@
 import { NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
 import { verifyAuth } from '@/lib/auth'
-import { getMonthlyCutoffRange } from '@/lib/wib'
 
-// GET /api/members/[id]/transactions — riwayat pembelian satu member
-// Query params: year, month (opsional, filter cutoff 20-19)
+const pad = n => String(n).padStart(2, '0')
+function getCutoff(year, month) {
+  const prevMonth = month === 0 ? 12 : month
+  const prevYear = month === 0 ? year - 1 : year
+  const currMonth = month + 1
+  return {
+    gte: new Date(`${prevYear}-${pad(prevMonth)}-20T00:00:00+07:00`),
+    lte: new Date(`${year}-${pad(currMonth)}-19T23:59:59.999+07:00`),
+  }
+}
+
+// GET /api/members/[id]/transactions
+// Query params: year, month (0-indexed, opsional)
 export async function GET(req, { params }) {
   const { error } = verifyAuth(req)
   if (error) return error
@@ -14,8 +24,8 @@ export async function GET(req, { params }) {
   const yearParam = searchParams.get('year')
   const monthParam = searchParams.get('month')
   let cutoff = null
-  if (yearParam && monthParam) {
-    cutoff = getMonthlyCutoffRange(Number(yearParam), Number(monthParam))
+  if (yearParam && monthParam !== null) {
+    cutoff = getCutoff(Number(yearParam), Number(monthParam))
   }
 
   const member = await prisma.member.findUnique({
