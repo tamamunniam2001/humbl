@@ -46,14 +46,14 @@ export async function GET(req, { params }) {
       id: true, invoiceNo: true, total: true, payMethod: true, createdAt: true,
       customerName: true, note: true,
       discount: true, discountAmount: true, tax: true, taxAmount: true,
-      voucherCode: true, voucherDiscount: true,
+      voucherCode: true, voucherDiscount: true, memberDiscount: true,
       cashier: { select: { name: true } },
       items: { select: { name: true, qty: true, price: true, subtotal: true } },
     },
   })
 
   const totalSpent = transactions.reduce((s, t) => s + (t.total || 0), 0)
-  const totalDiscount = transactions.reduce((s, t) => s + (t.discountAmount || 0) + (t.voucherDiscount || 0), 0)
+  const totalDiscount = transactions.reduce((s, t) => s + (t.discountAmount || 0) + (t.voucherDiscount || 0) + (t.memberDiscount || 0), 0)
 
   return NextResponse.json({ member, transactions, totalSpent, totalDiscount })
 }
