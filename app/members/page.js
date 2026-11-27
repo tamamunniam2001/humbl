@@ -43,7 +43,7 @@ export default function MembersPage() {
   // Reset viewMode saat toggle filter
   function switchFilterAll(val) {
     setFilterAll(val)
-    setViewMode(val ? 'all' : 'active')
+    setViewMode('all')
   }
 
   // Kirim pesan WhatsApp (admin) — popup pilih template dari Pengaturan Pesan WhatsApp
@@ -246,7 +246,7 @@ export default function MembersPage() {
     .filter(m => !q || m.name.toLowerCase().includes(q) || m.phone.includes(search.trim()))
     .filter(m => {
       if (viewMode === 'new') return isNewMember(m)
-      if (viewMode === 'active') return (m.purchaseCount || 0) > 0
+      if (viewMode === 'active' || (!filterAll && viewMode === 'all')) return (m.purchaseCount || 0) > 0
       return true
     })
 
@@ -352,7 +352,7 @@ export default function MembersPage() {
             {/* Tab view mode — hanya tampil saat filter bulan aktif */}
             {!filterAll && (
               <div style={{ display: 'flex', gap: '4px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '8px', padding: '3px' }}>
-                {[['all', 'Semua'], ['new', `Baru (${newMemberCount ?? '…'})`], ['active', 'Ada Pembelian']].map(([v, label]) => (
+                {[['all', 'Ada Pembelian'], ['new', `Baru (${newMemberCount ?? '…'})`]].map(([v, label]) => (
                   <button key={v} onClick={() => setViewMode(v)}
                     style={{ padding: '4px 10px', fontSize: '11px', fontWeight: 600, borderRadius: '6px', border: 'none', cursor: 'pointer', background: viewMode === v ? '#4A7CC7' : 'transparent', color: viewMode === v ? '#fff' : 'var(--text2)' }}>
                     {label}
