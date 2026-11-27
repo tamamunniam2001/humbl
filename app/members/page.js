@@ -436,8 +436,6 @@ export default function MembersPage() {
                         <td style={{ padding: '10px 14px', textAlign: 'right', color: 'var(--muted)', fontSize: '12px' }}>
                           {m.lastPurchase ? fmtDate(m.lastPurchase) : '—'}
                         </td>
-                          {m.lastPurchase ? fmtDate(m.lastPurchase) : '—'}
-                        </td>
                         <td style={{ padding: '10px 14px', textAlign: 'right' }}>
                           <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                             {canSendMsg && (
