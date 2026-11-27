@@ -50,7 +50,7 @@ export async function GET(req) {
 
   // month param = 0-indexed (sama dengan analisis/route.js)
   let cutoff = null
-  if (yearParam && monthParam !== null) {
+  if (yearParam !== null && monthParam !== null) {
     cutoff = getCutoff(Number(yearParam), Number(monthParam))
   }
 
@@ -108,29 +108,27 @@ export async function GET(req) {
 
   return NextResponse.json(members.map(m => {
     const all = aggAllMap.get(m.id)
-    const period = cutoff ? (aggPeriodMap.get(m.id) || null) : null
-    // Bila filter bulan aktif, purchaseCount/totalSpent/lastPurchase = data periode
-    const src = period ?? all
+    const period = cutoff ? (aggPeriodMap.get(m.id) ?? null) : null
+    const src = cutoff ? period : all
     return {
       id: m.id,
       name: m.name,
       phone: m.phone,
       isActive: m.isActive,
       createdAt: m.createdAt,
-      purchaseCount: src?._count?.id || 0,
-      totalSpent: src?._sum?.total || 0,
-      totalDiscount: (src?._sum?.discountAmount || 0) + (src?._sum?.voucherDiscount || 0),
-      lastPurchase: src?._max?.createdAt || null,
-      // All-time selalu tersedia untuk referensi
-      allTimePurchaseCount: all?._count?.id || 0,
-      allTimeTotalSpent: all?._sum?.total || 0,
-      welcomeSentAt: m.welcomeSentAt || null,
+      purchaseCount: src?._count?.id ?? 0,
+      totalSpent: src?._sum?.total ?? 0,
+      totalDiscount: (src?._sum?.discountAmount ?? 0) + (src?._sum?.voucherDiscount ?? 0),
+      lastPurchase: src?._max?.createdAt ?? null,
+      allTimePurchaseCount: all?._count?.id ?? 0,
+      allTimeTotalSpent: all?._sum?.total ?? 0,
+      welcomeSentAt: m.welcomeSentAt ?? null,
       useCustomDiscount: m.useCustomDiscount,
       customDiscountType: m.customDiscountType,
       customDiscountValue: m.customDiscountValue,
       customDiscountMax: m.customDiscountMax,
     }
-  }))
+  }), { headers: { 'Cache-Control': 'no-store' } })
 }
 
 // POST /api/members — tambah member baru (admin, kasir, atau custom role dengan akses /member-settings)

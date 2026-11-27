@@ -24,7 +24,7 @@ export async function GET(req, { params }) {
   const yearParam = searchParams.get('year')
   const monthParam = searchParams.get('month')
   let cutoff = null
-  if (yearParam && monthParam !== null) {
+  if (yearParam !== null && monthParam !== null) {
     cutoff = getCutoff(Number(yearParam), Number(monthParam))
   }
 
