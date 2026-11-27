@@ -35,6 +35,10 @@ export default function MembersPage() {
   const [filterAll, setFilterAll] = useState(true)
   const [filterYear, setFilterYear] = useState(def.year)
   const [filterMonth, setFilterMonth] = useState(def.month)
+  // viewMode: 'all' | 'new' (member baru periode) | 'active' (punya pembelian di periode)
+  const [viewMode, setViewMode] = useState('all')
+  const [sortKey, setSortKey] = useState('name')
+  const [sortDir, setSortDir] = useState('asc')
 
   // Kirim pesan WhatsApp (admin) — popup pilih template dari Pengaturan Pesan WhatsApp
   const [waMember, setWaMember] = useState(null)   // member tujuan (null = popup tertutup)
@@ -210,22 +214,56 @@ export default function MembersPage() {
     : ''
 
   const q = search.trim().toLowerCase()
+
+  // Hitung range cutoff untuk filter member baru
+  const cutoffFrom = filterAll ? null : (() => {
+    const prevMonth = filterMonth === 1 ? 12 : filterMonth - 1
+    const prevYear = filterMonth === 1 ? filterYear - 1 : filterYear
+    return new Date(`${prevYear}-${String(prevMonth).padStart(2,'0')}-20T00:00:00+07:00`)
+  })()
+  const cutoffTo = filterAll ? null :
+    new Date(`${filterYear}-${String(filterMonth).padStart(2,'0')}-20T23:59:59+07:00`)
+
+  const isNewMember = (m) => {
+    if (!cutoffFrom) return false
+    const d = new Date(m.createdAt)
+    return d >= cutoffFrom && d <= cutoffTo
+  }
+
   const filtered = members
     .filter(m => statusFilter === 'all' || (statusFilter === 'active' ? m.isActive : !m.isActive))
     .filter(m => !q || m.name.toLowerCase().includes(q) || m.phone.includes(search.trim()))
+    .filter(m => {
+      if (viewMode === 'new') return isNewMember(m)
+      if (viewMode === 'active') return (m.purchaseCount || 0) > 0
+      return true
+    })
+
+  function toggleSort(key) {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(key); setSortDir(key === 'name' ? 'asc' : 'desc') }
+  }
+
+  const sorted = [...filtered].sort((a, b) => {
+    let va, vb
+    if (sortKey === 'name') { va = a.name.toLowerCase(); vb = b.name.toLowerCase() }
+    else if (sortKey === 'purchaseCount') { va = a.purchaseCount || 0; vb = b.purchaseCount || 0 }
+    else if (sortKey === 'totalSpent') { va = a.totalSpent || 0; vb = b.totalSpent || 0 }
+    else if (sortKey === 'totalDiscount') { va = a.totalDiscount || 0; vb = b.totalDiscount || 0 }
+    else if (sortKey === 'lastPurchase') { va = a.lastPurchase ? new Date(a.lastPurchase).getTime() : 0; vb = b.lastPurchase ? new Date(b.lastPurchase).getTime() : 0 }
+    else if (sortKey === 'createdAt') { va = new Date(a.createdAt).getTime(); vb = new Date(b.createdAt).getTime() }
+    else { va = 0; vb = 0 }
+    if (va < vb) return sortDir === 'asc' ? -1 : 1
+    if (va > vb) return sortDir === 'asc' ? 1 : -1
+    return 0
+  })
 
   const activeCount = members.filter(m => m.isActive).length
   const totalPurchase = filtered.reduce((s, m) => s + (m.purchaseCount || 0), 0)
   const totalSpent = filtered.reduce((s, m) => s + (m.totalSpent || 0), 0)
   const totalDiscount = filtered.reduce((s, m) => s + (m.totalDiscount || 0), 0)
   const avgSpent = totalPurchase > 0 ? Math.round(totalSpent / totalPurchase) : 0
-  const newMemberCount = filterAll ? null : (() => {
-    const prevMonth = filterMonth === 1 ? 12 : filterMonth - 1
-    const prevYear = filterMonth === 1 ? filterYear - 1 : filterYear
-    const from = new Date(`${prevYear}-${String(prevMonth).padStart(2,'0')}-20T00:00:00+07:00`)
-    const to = new Date(`${filterYear}-${String(filterMonth).padStart(2,'0')}-20T23:59:59+07:00`)
-    return members.filter(m => { const d = new Date(m.createdAt); return d >= from && d <= to }).length
-  })()
+  const newMemberCount = filterAll ? null : members.filter(isNewMember).length
   const memberCount = filtered.length
 
 
@@ -276,7 +314,7 @@ export default function MembersPage() {
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center', marginBottom: '12px' }}>
             {/* Toggle semua waktu vs per bulan */}
             <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-              <button className="btn" onClick={() => setFilterAll(true)}
+              <button className="btn" onClick={() => { setFilterAll(true); setViewMode('all') }}
                 style={{ padding: '5px 12px', fontSize: '12px', background: filterAll ? '#4A7CC7' : 'var(--surface2)', color: filterAll ? '#fff' : 'var(--text2)', border: `1px solid ${filterAll ? '#4A7CC7' : 'var(--border)'}` }}>
                 Semua Waktu
               </button>
@@ -298,6 +336,17 @@ export default function MembersPage() {
                     <option key={y} value={y}>{y}</option>
                   ))}
                 </select>
+              </div>
+            )}
+            {/* Tab view mode — hanya tampil saat filter bulan aktif */}
+            {!filterAll && (
+              <div style={{ display: 'flex', gap: '4px', background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: '8px', padding: '3px' }}>
+                {[['all', 'Semua'], ['new', `Baru (${newMemberCount ?? '…'})`], ['active', 'Ada Pembelian']].map(([v, label]) => (
+                  <button key={v} onClick={() => setViewMode(v)}
+                    style={{ padding: '4px 10px', fontSize: '11px', fontWeight: 600, borderRadius: '6px', border: 'none', cursor: 'pointer', background: viewMode === v ? '#4A7CC7' : 'transparent', color: viewMode === v ? '#fff' : 'var(--text2)' }}>
+                    {label}
+                  </button>
+                ))}
               </div>
             )}
             {/* Filter status */}
@@ -333,21 +382,42 @@ export default function MembersPage() {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                   <thead>
                     <tr style={{ background: 'var(--surface2)', borderBottom: '1px solid var(--border)' }}>
-                      {['Nama', 'Nomor Telepon', 'Status', 'Pesan Welcome', 'Pembelian', 'Total Belanja', 'Diskon', 'Terakhir Beli', ''].map((h, i) => (
-                        <th key={i} style={{ padding: '10px 14px', textAlign: i >= 4 ? 'right' : 'left', fontSize: '11px', fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.4px' }}>{h}</th>
+                      {[
+                        { key: 'name', label: 'Nama', right: false },
+                        { key: null, label: 'Nomor Telepon', right: false },
+                        { key: null, label: 'Status', right: false },
+                        { key: 'createdAt', label: 'Tgl Daftar', right: false },
+                        { key: null, label: 'Pesan Welcome', right: false },
+                        { key: 'purchaseCount', label: 'Pembelian', right: true },
+                        { key: 'totalSpent', label: 'Total Belanja', right: true },
+                        { key: 'totalDiscount', label: 'Diskon', right: true },
+                        { key: 'lastPurchase', label: 'Terakhir Beli', right: true },
+                        { key: null, label: '', right: false },
+                      ].map(({ key, label, right }, i) => (
+                        <th key={i}
+                          onClick={key ? () => toggleSort(key) : undefined}
+                          style={{ padding: '10px 14px', textAlign: right ? 'right' : 'left', fontSize: '11px', fontWeight: 700, color: sortKey === key ? 'var(--accent)' : 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.4px', cursor: key ? 'pointer' : 'default', userSelect: 'none', whiteSpace: 'nowrap' }}>
+                          {label}{key && sortKey === key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : key ? ' ▽' : ''}
+                        </th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.map(m => (
+                    {sorted.map(m => (
                       <tr key={m.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                        <td style={{ padding: '10px 14px', fontWeight: 700, color: 'var(--text)' }}>{m.name}</td>
+                        <td style={{ padding: '10px 14px', fontWeight: 700, color: 'var(--text)' }}>
+                          {m.name}
+                          {!filterAll && isNewMember(m) && (
+                            <span style={{ marginLeft: '6px', fontSize: '10px', fontWeight: 700, color: '#4A7CC7', background: '#EBF1FB', border: '1px solid #C0D0E8', borderRadius: '20px', padding: '1px 6px' }}>BARU</span>
+                          )}
+                        </td>
                         <td style={{ padding: '10px 14px', fontFamily: 'monospace', color: 'var(--text2)' }}>{m.phone}</td>
                         <td style={{ padding: '10px 14px' }}>
                           <span className={`badge ${m.isActive ? 'badge-green' : 'badge-gray'}`}>
                             {m.isActive ? 'Aktif' : 'Nonaktif'}
                           </span>
                         </td>
+                        <td style={{ padding: '10px 14px', fontSize: '12px', color: 'var(--muted)' }}>{fmtDate(m.createdAt)}</td>
                         <td style={{ padding: '10px 14px' }}>
                           {m.welcomeSentAt ? (
                             <span title={`Terkirim ${fmtDateTime(m.welcomeSentAt)}`}
@@ -364,6 +434,8 @@ export default function MembersPage() {
                           {m.totalDiscount > 0 ? fmt(m.totalDiscount) : <span style={{ color: 'var(--muted)' }}>—</span>}
                         </td>
                         <td style={{ padding: '10px 14px', textAlign: 'right', color: 'var(--muted)', fontSize: '12px' }}>
+                          {m.lastPurchase ? fmtDate(m.lastPurchase) : '—'}
+                        </td>
                           {m.lastPurchase ? fmtDate(m.lastPurchase) : '—'}
                         </td>
                         <td style={{ padding: '10px 14px', textAlign: 'right' }}>
